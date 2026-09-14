@@ -140,3 +140,75 @@ pub fn create_user_account(
     send(svm, &ixs, user, &[]);
     (user_account, user_token_account)
 }
+
+/// Builds the `VerifyPubkeyValidity` + `configure_treasury_account`
+/// sequence. Returns the instructions alongside the treasury token account
+/// address the caller will likely want to assert against.
+pub fn build_configure_treasury_account_ixs(
+    admin: &Keypair,
+    vault: Address,
+    mint: Address,
+    token_program: Address,
+    associated_token_program: Address,
+    keys: &ConfidentialKeys,
+) -> (Vec<Instruction>, Address) {
+    let treasury_token_account =
+        anchor_spl::associated_token::get_associated_token_address_with_program_id(
+            &to_anchor_pubkey(vault),
+            &to_anchor_pubkey(mint),
+            &to_anchor_pubkey(token_program),
+        );
+    let treasury_token_account = to_address(treasury_token_account);
+
+    let accounts = vault::accounts::ConfigureTreasuryAccount {
+        admin: to_anchor_pubkey(admin.pubkey()),
+        vault: to_anchor_pubkey(vault),
+        mint: to_anchor_pubkey(mint),
+        treasury_token_account: to_anchor_pubkey(treasury_token_account),
+        instructions_sysvar: to_anchor_pubkey(solana_instructions_sysvar::ID),
+        associated_token_program: to_anchor_pubkey(associated_token_program),
+        token_program: to_anchor_pubkey(token_program),
+        system_program: anchor_lang::prelude::Pubkey::default(),
+    }
+    .to_account_metas(None);
+
+    let configure_treasury_account_ix = Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::ConfigureTreasuryAccount {
+            elgamal_pubkey: keys.elgamal_pubkey_bytes(),
+            decryptable_zero_balance: keys.decryptable_zero_balance(),
+        }
+        .data(),
+    };
+
+    let ixs = vec![
+        keys.verify_pubkey_validity_instruction(),
+        configure_treasury_account_ix,
+    ];
+
+    (ixs, treasury_token_account)
+}
+
+/// Sends the `VerifyPubkeyValidity` + `configure_treasury_account` sequence
+/// and returns the treasury token account address.
+pub fn configure_treasury_account(
+    svm: &mut LiteSVM,
+    admin: &Keypair,
+    vault: Address,
+    mint: Address,
+    token_program: Address,
+    associated_token_program: Address,
+    keys: &ConfidentialKeys,
+) -> Address {
+    let (ixs, treasury_token_account) = build_configure_treasury_account_ixs(
+        admin,
+        vault,
+        mint,
+        token_program,
+        associated_token_program,
+        keys,
+    );
+    send(svm, &ixs, admin, &[]);
+    treasury_token_account
+}

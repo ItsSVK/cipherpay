@@ -33,6 +33,9 @@ impl<'info> Initialize<'info> {
             auditor_elgamal_pubkey: None,
             bump: bumps.vault,
             paused: false,
+            treasury_token_account: Pubkey::default(),
+            treasury_elgamal_pubkey: Pubkey::default(),
+            treasury_configured: false,
         });
         Ok(())
     }

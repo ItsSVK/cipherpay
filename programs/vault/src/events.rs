@@ -6,3 +6,9 @@ pub struct InitializeEvent {
     pub admin: Pubkey,
     pub mint: Pubkey,
 }
+
+#[event]
+pub struct ConfigureTreasuryAccountEvent {
+    pub vault: Pubkey,
+    pub treasury_token_account: Pubkey,
+}

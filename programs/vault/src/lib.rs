@@ -34,4 +34,16 @@ pub mod vault {
             decryptable_zero_balance,
         )
     }
+
+    pub fn configure_treasury_account(
+        ctx: Context<ConfigureTreasuryAccount>,
+        elgamal_pubkey: [u8; 32],
+        decryptable_zero_balance: [u8; 36],
+    ) -> Result<()> {
+        crate::instructions::configure_treasury_account::handle_configure_treasury_account(
+            ctx,
+            elgamal_pubkey,
+            decryptable_zero_balance,
+        )
+    }
 }

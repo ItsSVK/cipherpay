@@ -8,4 +8,8 @@ pub enum VaultError {
     MintMissingConfidentialTransfer,
     #[msg("ElGamal pubkey does not match the preceding pubkey validity proof")]
     ElgamalPubkeyMismatch,
+    #[msg("Only the vault's authority can perform this action")]
+    Unauthorized,
+    #[msg("The vault's treasury account has already been configured")]
+    TreasuryAlreadyConfigured,
 }
