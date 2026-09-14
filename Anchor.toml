@@ -14,6 +14,9 @@ cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "cargo test"
+# litesvm's bundled BPF loader doesn't yet support the SBPFv3 ISA that
+# `anchor build`/`cargo build-sbf` emit by default, so the litesvm test
+# suite needs the program rebuilt for the older v1 architecture first.
+test = "cargo build-sbf --arch v1 --manifest-path programs/vault/Cargo.toml && cargo test"
 
 [hooks]
