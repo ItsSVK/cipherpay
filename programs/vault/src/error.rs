@@ -6,4 +6,6 @@ pub enum VaultError {
     InvalidMintData,
     #[msg("Mint does not have the ConfidentialTransferMint extension enabled")]
     MintMissingConfidentialTransfer,
+    #[msg("ElGamal pubkey does not match the preceding pubkey validity proof")]
+    ElgamalPubkeyMismatch,
 }

@@ -22,4 +22,16 @@ pub mod vault {
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         crate::instructions::initialize::handle_initialize(ctx)
     }
+
+    pub fn create_user_account(
+        ctx: Context<CreateUserAccount>,
+        elgamal_pubkey: [u8; 32],
+        decryptable_zero_balance: [u8; 36],
+    ) -> Result<()> {
+        crate::instructions::create_user_account::handle_create_user_account(
+            ctx,
+            elgamal_pubkey,
+            decryptable_zero_balance,
+        )
+    }
 }
