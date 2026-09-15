@@ -46,4 +46,24 @@ pub mod vault {
             decryptable_zero_balance,
         )
     }
+
+    pub fn fund_treasury(ctx: Context<FundTreasury>, amount: u64) -> Result<()> {
+        crate::instructions::fund_treasury::handle_fund_treasury(ctx, amount)
+    }
+
+    pub fn deposit_confidential(ctx: Context<DepositConfidential>, amount: u64) -> Result<()> {
+        crate::instructions::deposit_confidential::handle_deposit_confidential(ctx, amount)
+    }
+
+    pub fn apply_treasury_pending(
+        ctx: Context<ApplyTreasuryPending>,
+        expected_pending_balance_credit_counter: u64,
+        new_decryptable_available_balance: [u8; 36],
+    ) -> Result<()> {
+        crate::instructions::apply_treasury_pending::handle_apply_treasury_pending(
+            ctx,
+            expected_pending_balance_credit_counter,
+            new_decryptable_available_balance,
+        )
+    }
 }

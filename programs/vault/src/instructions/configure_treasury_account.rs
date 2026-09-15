@@ -66,15 +66,6 @@ pub struct ConfigureTreasuryAccount<'info> {
 }
 
 impl<'info> ConfigureTreasuryAccount<'info> {
-    fn vault_signer_seeds(&self) -> [Vec<u8>; 4] {
-        [
-            VAULT_SEED.to_vec(),
-            self.vault.authority.to_bytes().to_vec(),
-            self.vault.mint.to_bytes().to_vec(),
-            vec![self.vault.bump],
-        ]
-    }
-
     fn record_treasury_account(&mut self, elgamal_pubkey: [u8; 32]) -> Result<()> {
         self.vault.treasury_token_account = self.treasury_token_account.key();
         self.vault.treasury_elgamal_pubkey = Pubkey::new_from_array(elgamal_pubkey);
@@ -116,7 +107,7 @@ impl<'info> ConfigureTreasuryAccount<'info> {
             &[ExtensionType::ConfidentialTransferAccount],
         )?;
 
-        let seeds = self.vault_signer_seeds();
+        let seeds = self.vault.signer_seeds();
         let seed_refs: Vec<&[u8]> = seeds.iter().map(Vec::as_slice).collect();
 
         invoke_signed(
@@ -160,7 +151,7 @@ impl<'info> ConfigureTreasuryAccount<'info> {
             ProofLocation::InstructionOffset(NonZeroI8::new(-1).unwrap(), &unused_proof_data),
         )?;
 
-        let seeds = self.vault_signer_seeds();
+        let seeds = self.vault.signer_seeds();
         let seed_refs: Vec<&[u8]> = seeds.iter().map(Vec::as_slice).collect();
 
         invoke_signed(

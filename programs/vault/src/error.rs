@@ -12,4 +12,6 @@ pub enum VaultError {
     Unauthorized,
     #[msg("The vault's treasury account has already been configured")]
     TreasuryAlreadyConfigured,
+    #[msg("The vault's treasury account has not been configured yet")]
+    TreasuryNotConfigured,
 }

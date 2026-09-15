@@ -34,14 +34,38 @@ pub fn to_anchor_pubkey(address: Address) -> AnchorPubkey {
 const VAULT_PROGRAM_SO: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/deploy/vault.so");
 
+/// litesvm 0.10.0 bundles `spl_token_2022-10.0.0.so` as its default
+/// Token-2022 program. That build predates Token-2022 adding a `decimals`
+/// check to the confidential-transfer `Deposit` instruction, so it rejects
+/// the modern (and only) instruction encoding `spl-token-2022-interface`
+/// 3.x produces -- with `InvalidInstructionData`, even though the encoding
+/// is exactly correct for any current/real Token-2022 deployment. Overriding
+/// it with a locally-built v11.0.0 binary (matching the interface crate
+/// version this program actually depends on) fixes that mismatch in tests
+/// without changing anything about the real, on-chain-correct instruction
+/// our program sends. Rebuild via:
+///   cd /tmp && cp -r ~/.cargo/registry/src/*/spl-token-2022-11.0.0 stok22 \
+///     && cd stok22 && cargo build-sbf --arch v1
+/// then copy target/deploy/spl_token_2022.so over this fixture.
+const TOKEN_2022_PROGRAM_SO: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/spl_token_2022-11.0.0.so"
+);
+
 /// Spins up a LiteSVM instance with the default SPL programs (System,
 /// Token, Token-2022, Associated Token Account, the ZK ElGamal Proof
 /// program) plus our own compiled `vault` program loaded at its real
-/// on-chain address.
+/// on-chain address. Overrides litesvm's bundled Token-2022 binary with a
+/// newer one -- see [`TOKEN_2022_PROGRAM_SO`].
 pub fn setup_svm() -> LiteSVM {
     let mut svm = LiteSVM::new();
+
+    svm.add_program_from_file(spl_token_2022_interface::ID, TOKEN_2022_PROGRAM_SO)
+        .expect("failed to load tests/fixtures/spl_token_2022-11.0.0.so");
+
     svm.add_program_from_file(to_address(vault::ID), VAULT_PROGRAM_SO)
         .expect("failed to load target/deploy/vault.so -- run `anchor build` first");
+
     svm
 }
 

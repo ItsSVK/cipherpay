@@ -212,3 +212,152 @@ pub fn configure_treasury_account(
     send(svm, &ixs, admin, &[]);
     treasury_token_account
 }
+
+/// Builds the `fund_treasury` instruction: a plain public-balance transfer
+/// from `funder_token_account` into the treasury.
+pub fn build_fund_treasury_ix(
+    funder: &Keypair,
+    funder_token_account: Address,
+    vault: Address,
+    mint: Address,
+    treasury_token_account: Address,
+    token_program: Address,
+    amount: u64,
+) -> Instruction {
+    let accounts = vault::accounts::FundTreasury {
+        funder: to_anchor_pubkey(funder.pubkey()),
+        funder_token_account: to_anchor_pubkey(funder_token_account),
+        vault: to_anchor_pubkey(vault),
+        mint: to_anchor_pubkey(mint),
+        treasury_token_account: to_anchor_pubkey(treasury_token_account),
+        token_program: to_anchor_pubkey(token_program),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::FundTreasury { amount }.data(),
+    }
+}
+
+/// Sends `fund_treasury`.
+#[allow(clippy::too_many_arguments)]
+pub fn fund_treasury(
+    svm: &mut LiteSVM,
+    funder: &Keypair,
+    funder_token_account: Address,
+    vault: Address,
+    mint: Address,
+    treasury_token_account: Address,
+    token_program: Address,
+    amount: u64,
+) {
+    let ix = build_fund_treasury_ix(
+        funder,
+        funder_token_account,
+        vault,
+        mint,
+        treasury_token_account,
+        token_program,
+        amount,
+    );
+    send(svm, &[ix], funder, &[]);
+}
+
+/// Builds the `deposit_confidential` instruction: moves `amount` from the
+/// treasury's public balance into its pending confidential balance.
+pub fn build_deposit_confidential_ix(
+    admin: &Keypair,
+    vault: Address,
+    mint: Address,
+    treasury_token_account: Address,
+    token_program: Address,
+    amount: u64,
+) -> Instruction {
+    let accounts = vault::accounts::DepositConfidential {
+        admin: to_anchor_pubkey(admin.pubkey()),
+        vault: to_anchor_pubkey(vault),
+        mint: to_anchor_pubkey(mint),
+        treasury_token_account: to_anchor_pubkey(treasury_token_account),
+        token_program: to_anchor_pubkey(token_program),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::DepositConfidential { amount }.data(),
+    }
+}
+
+/// Sends `deposit_confidential`.
+pub fn deposit_confidential(
+    svm: &mut LiteSVM,
+    admin: &Keypair,
+    vault: Address,
+    mint: Address,
+    treasury_token_account: Address,
+    token_program: Address,
+    amount: u64,
+) {
+    let ix = build_deposit_confidential_ix(
+        admin,
+        vault,
+        mint,
+        treasury_token_account,
+        token_program,
+        amount,
+    );
+    send(svm, &[ix], admin, &[]);
+}
+
+/// Builds the `apply_treasury_pending` instruction: folds the treasury's
+/// pending confidential balance into its available balance.
+pub fn build_apply_treasury_pending_ix(
+    admin: &Keypair,
+    vault: Address,
+    treasury_token_account: Address,
+    token_program: Address,
+    expected_pending_balance_credit_counter: u64,
+    new_decryptable_available_balance: [u8; 36],
+) -> Instruction {
+    let accounts = vault::accounts::ApplyTreasuryPending {
+        admin: to_anchor_pubkey(admin.pubkey()),
+        vault: to_anchor_pubkey(vault),
+        treasury_token_account: to_anchor_pubkey(treasury_token_account),
+        token_program: to_anchor_pubkey(token_program),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::ApplyTreasuryPending {
+            expected_pending_balance_credit_counter,
+            new_decryptable_available_balance,
+        }
+        .data(),
+    }
+}
+
+/// Sends `apply_treasury_pending`.
+pub fn apply_treasury_pending(
+    svm: &mut LiteSVM,
+    admin: &Keypair,
+    vault: Address,
+    treasury_token_account: Address,
+    token_program: Address,
+    expected_pending_balance_credit_counter: u64,
+    new_decryptable_available_balance: [u8; 36],
+) {
+    let ix = build_apply_treasury_pending_ix(
+        admin,
+        vault,
+        treasury_token_account,
+        token_program,
+        expected_pending_balance_credit_counter,
+        new_decryptable_available_balance,
+    );
+    send(svm, &[ix], admin, &[]);
+}
