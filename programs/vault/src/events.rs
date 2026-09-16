@@ -63,3 +63,14 @@ pub struct UnwrapConfidentialEvent {
     pub wrapped_mint: Pubkey,
     pub amount: u64,
 }
+
+/// Emitted by `transfer_confidential`. Deliberately has no amount field --
+/// that's the entire point of a confidential transfer. No `vault` field
+/// either, same reasoning as `CreateConfidentialAccountEvent`.
+#[event]
+pub struct TransferConfidentialEvent {
+    pub sender: Pubkey,
+    pub mint: Pubkey,
+    pub source_token_account: Pubkey,
+    pub destination_token_account: Pubkey,
+}

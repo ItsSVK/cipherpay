@@ -83,6 +83,24 @@ pub mod vault {
         crate::instructions::unwrap_confidential::handle_unwrap_confidential(ctx, amount)
     }
 
+    /// The actual P2P confidential send. See `instructions/transfer_confidential.rs`
+    /// for why this only accepts context-state-account proofs, not the
+    /// same-transaction instruction-offset form used elsewhere in this
+    /// program.
+    pub fn transfer_confidential(
+        ctx: Context<TransferConfidential>,
+        new_source_decryptable_available_balance: [u8; 36],
+        transfer_amount_auditor_ciphertext_lo: [u8; 64],
+        transfer_amount_auditor_ciphertext_hi: [u8; 64],
+    ) -> Result<()> {
+        crate::instructions::transfer_confidential::handle_transfer_confidential(
+            ctx,
+            new_source_decryptable_available_balance,
+            transfer_amount_auditor_ciphertext_lo,
+            transfer_amount_auditor_ciphertext_hi,
+        )
+    }
+
     pub fn apply_treasury_pending(
         ctx: Context<ApplyTreasuryPending>,
         expected_pending_balance_credit_counter: u64,

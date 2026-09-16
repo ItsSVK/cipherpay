@@ -20,4 +20,5 @@ pub mod mint;
 pub mod pda;
 pub mod token_state;
 pub mod token_wrap;
+pub mod transfer_proof;
 pub mod zk;
