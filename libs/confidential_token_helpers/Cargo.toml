@@ -1,0 +1,24 @@
+[package]
+name = "confidential-token-helpers"
+version = "0.1.0"
+description = "Internal, Anchor-flavored helpers for setting up Token-2022 confidential-transfer accounts -- shared between vault's create_user_account/configure_treasury_account and any future confidential P2P transfer instructions. Not published; scoped to this workspace's own reuse, not external consumption."
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "confidential_token_helpers"
+path = "src/lib.rs"
+
+[dependencies]
+anchor-lang = "1.2.0"
+anchor-spl = "1.2.0"
+bytemuck = "1.25"
+solana-zk-elgamal-proof-interface = "0.1.2"
+solana-zk-sdk-pod = "0.1.1"
+spl-token-2022-interface = "3.0.0"
+spl-token-confidential-transfer-proof-extraction = "0.6.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(target_os, values("solana"))',
+] }

@@ -7,6 +7,11 @@ rust-version.workspace = true
 
 [features]
 no-entrypoint = []
+# Satisfies `anchor build`'s workspace-wide IDL-generation pass, which
+# expects every `programs/*` member to declare this feature -- even though
+# this crate has nothing to do with Anchor. Empty on purpose: there's no
+# anchor-lang dependency here for it to enable.
+idl-build = []
 
 [lib]
 name = "token_wrap_compliance"
