@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "round-trip": "tsx src/roundTrip.ts"
+    "round-trip": "tsx src/roundTrip.ts",
+    "bootstrap-wusdc": "tsx src/bootstrapDevnetWusdc.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

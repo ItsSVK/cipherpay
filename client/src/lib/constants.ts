@@ -31,3 +31,20 @@ export const COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES = new Uint8Array([
   222, 190, 234, 244, 211, 116, 20, 149, 13, 226, 163, 56, 213, 99, 66, 118,
   14, 22, 25, 233, 104, 118, 24, 71, 176, 183, 206, 180, 240, 123, 133, 105,
 ]);
+
+/** Circle's official devnet USDC mint (classic SPL Token program). */
+export const DEVNET_USDC_MINT = new PublicKey(
+  "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+);
+
+/**
+ * The canonical confidential-transfer-capable wrapped mint for
+ * DEVNET_USDC_MINT, bootstrapped once via `bootstrapDevnetWusdc.ts`. A PDA
+ * of TOKEN_WRAP_COMPLIANCE_PROGRAM_ID derived from
+ * (DEVNET_USDC_MINT, TOKEN_2022_PROGRAM_ID) -- see
+ * programs/vault/src/constants.rs's matching constant for why this is one
+ * shared mint, not something created per user.
+ */
+export const DEVNET_WUSDC_MINT = new PublicKey(
+  "3Qj6ZeyMdytvoTXdRTygJrWAWLaiNEpiYMEVLejY6oPf",
+);
