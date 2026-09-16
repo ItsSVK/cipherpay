@@ -45,6 +45,26 @@ use spl_token_confidential_transfer_proof_generation::{
 
 use crate::common::ix::send;
 
+/// The auditor ElGamal pubkey `token_wrap_compliance`'s
+/// `ComplianceMintCustomizer` registers on every wrapped mint it creates
+/// (`native_programs/token_wrap_compliance/src/mint_customizer/compliance.rs`'s
+/// `AUDITOR_ELGAMAL_PUBKEY_B64`, base64 `3r7q9NN0FJUN4qM41WNCdg4WGelodhhHsLfOtPB7hWk=`,
+/// decoded to raw bytes here rather than depending on that crate directly
+/// -- same cross-version-Pubkey reasoning as `token_wrap.rs`). A proof
+/// built for a wrapped-mint transfer with the wrong (or no) auditor pubkey
+/// fails Token-2022's own check with "ElGamal public key mismatch", not a
+/// silent success -- see `setup_transfer_proof_contexts`'s doc comment.
+pub const COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES: [u8; 32] = [
+    222, 190, 234, 244, 211, 116, 20, 149, 13, 226, 163, 56, 213, 99, 66, 118, 14, 22, 25, 233,
+    104, 118, 24, 71, 176, 183, 206, 180, 240, 123, 133, 105,
+];
+
+/// Parses [`COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES`] into an `ElGamalPubkey`.
+pub fn compliance_auditor_elgamal_pubkey() -> ElGamalPubkey {
+    ElGamalPubkey::try_from(COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES.as_slice())
+        .expect("compliance auditor pubkey bytes should be a valid ElGamalPubkey")
+}
+
 /// Everything `transfer_confidential` needs, once the three transactions
 /// built by [`setup_transfer_proof_contexts`] have all landed.
 pub struct TransferProofContexts {
@@ -101,8 +121,16 @@ where
 /// whose current confidential state is `current_available_balance`
 /// (ElGamal-encrypted, 64 bytes) / `current_decryptable_available_balance`
 /// (AES-encrypted, 36 bytes), and submits one transaction per proof to
-/// create and populate its context-state account. No auditor (matches
-/// `mint::create_confidential_mint`'s "no auditor" mint setup).
+/// create and populate its context-state account.
+///
+/// `auditor_elgamal_pubkey` must match whatever auditor (if any) is
+/// actually registered on the mint -- pass `None` for a mint created via
+/// `mint::create_confidential_mint` (no auditor), or the auditor's real
+/// pubkey for a mint that has one configured (e.g. a wrapped mint created
+/// through `token_wrap_compliance`'s `ComplianceMintCustomizer`). Getting
+/// this wrong doesn't silently succeed -- Token-2022 rejects the transfer
+/// with "ElGamal public key mismatch" if the ciphertext-validity proof's
+/// auditor ciphertext doesn't match the mint's registered auditor key.
 #[allow(clippy::too_many_arguments)]
 pub fn setup_transfer_proof_contexts(
     svm: &mut LiteSVM,
@@ -113,6 +141,7 @@ pub fn setup_transfer_proof_contexts(
     source_elgamal: &ElGamalKeypair,
     source_ae_key: &AeKey,
     destination_elgamal_pubkey: &ElGamalPubkey,
+    auditor_elgamal_pubkey: Option<&ElGamalPubkey>,
 ) -> TransferProofContexts {
     let current_available_balance_ciphertext =
         ElGamalCiphertext::from_bytes(&current_available_balance)
@@ -136,7 +165,7 @@ pub fn setup_transfer_proof_contexts(
         source_elgamal,
         source_ae_key,
         destination_elgamal_pubkey,
-        None,
+        auditor_elgamal_pubkey,
     )
     .expect("failed to generate transfer proof data");
 

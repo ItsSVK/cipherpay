@@ -115,6 +115,7 @@ fn transfer_confidential_moves_value_between_two_p2p_accounts() {
         &sender_keys.elgamal,
         &sender_keys.ae_key,
         recipient_keys.elgamal.pubkey(),
+        None,
     );
 
     ix::transfer_confidential(

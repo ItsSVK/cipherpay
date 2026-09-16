@@ -1,0 +1,1484 @@
+{
+  "address": "ELChxVFAiE5jv1SV3v3gprWeWxmbgX7ATWingW5VcB48",
+  "metadata": {
+    "name": "vault",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "apply_treasury_pending",
+      "discriminator": [
+        38,
+        137,
+        204,
+        53,
+        216,
+        172,
+        139,
+        194
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.authority",
+                "account": "Vault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.mint",
+                "account": "Vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "treasury_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "expected_pending_balance_credit_counter",
+          "type": "u64"
+        },
+        {
+          "name": "new_decryptable_available_balance",
+          "type": {
+            "array": [
+              "u8",
+              36
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "configure_treasury_account",
+      "discriminator": [
+        13,
+        34,
+        28,
+        153,
+        29,
+        119,
+        81,
+        10
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.authority",
+                "account": "Vault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.mint",
+                "account": "Vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "treasury_token_account",
+          "docs": [
+            "same reason as `create_user_account`'s `user_token_account`. Owned by",
+            "the vault PDA (not the admin) so `pay_employee`/`batch_pay` can move",
+            "funds out of it via `invoke_signed` without a human co-signing every",
+            "payment."
+          ],
+          "writable": true
+        },
+        {
+          "name": "instructions_sysvar",
+          "docs": [
+            "`elgamal_pubkey` precedes this instruction in the same transaction."
+          ],
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "elgamal_pubkey",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "decryptable_zero_balance",
+          "type": {
+            "array": [
+              "u8",
+              36
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "create_confidential_account",
+      "docs": [
+        "Confidential P2P transfer primitive: sets up a confidential",
+        "Token-2022 account for the caller's own wallet, on any",
+        "confidential-transfer-enabled mint. No `Vault` involved -- see",
+        "`PRODUCT.md` §1/§11 for why this instruction exists separately from",
+        "`create_user_account` below rather than reusing it."
+      ],
+      "discriminator": [
+        66,
+        126,
+        211,
+        203,
+        95,
+        183,
+        138,
+        161
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "token_account",
+          "docs": [
+            "because Anchor's `init` sugar for token accounts can't allocate",
+            "Token-2022 extension space (see `ConfidentialAccountSetup`)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "instructions_sysvar",
+          "docs": [
+            "`elgamal_pubkey` precedes this instruction in the same transaction."
+          ],
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "elgamal_pubkey",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "decryptable_zero_balance",
+          "type": {
+            "array": [
+              "u8",
+              36
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "create_user_account",
+      "discriminator": [
+        146,
+        68,
+        100,
+        69,
+        63,
+        46,
+        182,
+        199
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.authority",
+                "account": "Vault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.mint",
+                "account": "Vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "user_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  115,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault"
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account",
+          "docs": [
+            "because Anchor's `init` sugar for token accounts can't allocate",
+            "Token-2022 extension space (see `ConfidentialAccountSetup`)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "instructions_sysvar",
+          "docs": [
+            "`elgamal_pubkey` precedes this instruction in the same transaction."
+          ],
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "token_program"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "elgamal_pubkey",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "decryptable_zero_balance",
+          "type": {
+            "array": [
+              "u8",
+              36
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "deposit_confidential",
+      "discriminator": [
+        18,
+        249,
+        175,
+        149,
+        79,
+        130,
+        151,
+        119
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.authority",
+                "account": "Vault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.mint",
+                "account": "Vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "treasury_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "fund_treasury",
+      "discriminator": [
+        71,
+        154,
+        45,
+        220,
+        206,
+        32,
+        174,
+        239
+      ],
+      "accounts": [
+        {
+          "name": "funder",
+          "signer": true
+        },
+        {
+          "name": "funder_token_account",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.authority",
+                "account": "Vault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.mint",
+                "account": "Vault"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "treasury_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize",
+      "discriminator": [
+        175,
+        175,
+        109,
+        31,
+        13,
+        152,
+        155,
+        237
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "admin"
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "transfer_confidential",
+      "docs": [
+        "The actual P2P confidential send. See `instructions/transfer_confidential.rs`",
+        "for why this only accepts context-state-account proofs, not the",
+        "same-transaction instruction-offset form used elsewhere in this",
+        "program."
+      ],
+      "discriminator": [
+        215,
+        121,
+        88,
+        79,
+        4,
+        130,
+        130,
+        58
+      ],
+      "accounts": [
+        {
+          "name": "sender",
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "source_token_account",
+          "writable": true
+        },
+        {
+          "name": "destination_token_account",
+          "writable": true
+        },
+        {
+          "name": "equality_proof_context",
+          "docs": [
+            "account -- Token-2022 checks its ownership (must belong to the ZK",
+            "ElGamal Proof program) and contents when the CPI below runs."
+          ]
+        },
+        {
+          "name": "ciphertext_validity_proof_context",
+          "docs": [
+            "context-state account. See `equality_proof_context`."
+          ]
+        },
+        {
+          "name": "range_proof_context",
+          "docs": [
+            "account. See `equality_proof_context`."
+          ]
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_source_decryptable_available_balance",
+          "type": {
+            "array": [
+              "u8",
+              36
+            ]
+          }
+        },
+        {
+          "name": "transfer_amount_auditor_ciphertext_lo",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "transfer_amount_auditor_ciphertext_hi",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "unwrap_confidential",
+      "docs": [
+        "Reverses `wrap_confidential`. No `Vault` involved."
+      ],
+      "discriminator": [
+        75,
+        85,
+        143,
+        88,
+        8,
+        20,
+        119,
+        246
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "unwrapped_mint",
+          "docs": [
+            "The real asset's mint (e.g. USDC)."
+          ]
+        },
+        {
+          "name": "owner_unwrapped_token_account",
+          "docs": [
+            "by `amount`. Created idempotently below if this is the caller's",
+            "first time holding this mint."
+          ],
+          "writable": true
+        },
+        {
+          "name": "wrapped_mint",
+          "docs": [
+            "(seeds `[\"mint\", unwrapped_mint, wrapped_token_program]`); its supply",
+            "is mutated (burned) by the CPI below."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "unwrapped_mint"
+              },
+              {
+                "kind": "account",
+                "path": "wrapped_token_program"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "token_wrap_program"
+            }
+          }
+        },
+        {
+          "name": "wrapped_mint_authority",
+          "docs": [
+            "(seeds `[\"authority\", wrapped_mint]`) -- owner of `escrow`. Never a",
+            "signer here; the program signs for it internally."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wrapped_mint"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "token_wrap_program"
+            }
+          }
+        },
+        {
+          "name": "escrow",
+          "docs": [
+            "caller."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner_wrapped_token_account",
+          "writable": true
+        },
+        {
+          "name": "token_wrap_program",
+          "address": "9tbZBdds8EuGX2Yb1yBYWtnA9UyhgxjfVCmgmfV5LPwV"
+        },
+        {
+          "name": "unwrapped_token_program"
+        },
+        {
+          "name": "wrapped_token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_confidential",
+      "docs": [
+        "Moves `amount` from a confidential available balance back into the",
+        "public balance. `amount` is a plain, public argument -- the",
+        "deliberate disclosure point in this design (see",
+        "`instructions/withdraw_confidential.rs`)."
+      ],
+      "discriminator": [
+        208,
+        38,
+        109,
+        113,
+        74,
+        96,
+        71,
+        241
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "token_account",
+          "writable": true
+        },
+        {
+          "name": "equality_proof_context",
+          "docs": [
+            "account -- Token-2022 checks its ownership (must belong to the ZK",
+            "ElGamal Proof program) and contents when the CPI below runs."
+          ]
+        },
+        {
+          "name": "range_proof_context",
+          "docs": [
+            "account. See `equality_proof_context`."
+          ]
+        },
+        {
+          "name": "token_program"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "new_decryptable_available_balance",
+          "type": {
+            "array": [
+              "u8",
+              36
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "wrap_confidential",
+      "docs": [
+        "Moves a real asset (e.g. USDC) into its wrapped, confidential-",
+        "transfer-capable Token-2022 representation via CPI into",
+        "`native_programs/token_wrap_compliance`. No `Vault` involved -- see",
+        "`PRODUCT.md` §1/§11."
+      ],
+      "discriminator": [
+        128,
+        133,
+        83,
+        244,
+        96,
+        224,
+        133,
+        65
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "unwrapped_mint",
+          "docs": [
+            "The real asset's mint (e.g. USDC). Either classic SPL Token or",
+            "Token-2022 -- `token_wrap_compliance` supports both as the unwrapped",
+            "side."
+          ]
+        },
+        {
+          "name": "owner_unwrapped_token_account",
+          "writable": true
+        },
+        {
+          "name": "wrapped_mint",
+          "docs": [
+            "(seeds `[\"mint\", unwrapped_mint, wrapped_token_program]`); its supply",
+            "is mutated by the CPI below."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "unwrapped_mint"
+              },
+              {
+                "kind": "account",
+                "path": "wrapped_token_program"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "token_wrap_program"
+            }
+          }
+        },
+        {
+          "name": "wrapped_mint_authority",
+          "docs": [
+            "(seeds `[\"authority\", wrapped_mint]`) -- mint authority for",
+            "`wrapped_mint` and owner of `escrow`. Never a signer here; the",
+            "program signs for it internally via its own `invoke_signed`."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "wrapped_mint"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "token_wrap_program"
+            }
+          }
+        },
+        {
+          "name": "escrow",
+          "docs": [
+            "supply. Created idempotently below if this is the first wrap for",
+            "this mint pair."
+          ],
+          "writable": true
+        },
+        {
+          "name": "owner_wrapped_token_account",
+          "docs": [
+            "`amount`. Created idempotently below if this is the caller's first",
+            "wrap."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_wrap_program",
+          "address": "9tbZBdds8EuGX2Yb1yBYWtnA9UyhgxjfVCmgmfV5LPwV"
+        },
+        {
+          "name": "unwrapped_token_program"
+        },
+        {
+          "name": "wrapped_token_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "UserAccount",
+      "discriminator": [
+        211,
+        33,
+        136,
+        16,
+        186,
+        110,
+        242,
+        127
+      ]
+    },
+    {
+      "name": "Vault",
+      "discriminator": [
+        211,
+        8,
+        232,
+        43,
+        2,
+        152,
+        117,
+        119
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ApplyTreasuryPendingEvent",
+      "discriminator": [
+        106,
+        202,
+        138,
+        222,
+        144,
+        58,
+        63,
+        165
+      ]
+    },
+    {
+      "name": "ConfigureTreasuryAccountEvent",
+      "discriminator": [
+        235,
+        130,
+        203,
+        34,
+        41,
+        176,
+        82,
+        168
+      ]
+    },
+    {
+      "name": "CreateConfidentialAccountEvent",
+      "discriminator": [
+        71,
+        252,
+        169,
+        242,
+        138,
+        47,
+        74,
+        211
+      ]
+    },
+    {
+      "name": "DepositConfidentialEvent",
+      "discriminator": [
+        203,
+        117,
+        159,
+        128,
+        150,
+        145,
+        28,
+        71
+      ]
+    },
+    {
+      "name": "FundTreasuryEvent",
+      "discriminator": [
+        82,
+        215,
+        15,
+        113,
+        234,
+        242,
+        196,
+        212
+      ]
+    },
+    {
+      "name": "InitializeEvent",
+      "discriminator": [
+        206,
+        175,
+        169,
+        208,
+        241,
+        210,
+        35,
+        221
+      ]
+    },
+    {
+      "name": "TransferConfidentialEvent",
+      "discriminator": [
+        177,
+        207,
+        43,
+        96,
+        232,
+        199,
+        128,
+        183
+      ]
+    },
+    {
+      "name": "UnwrapConfidentialEvent",
+      "discriminator": [
+        12,
+        35,
+        252,
+        253,
+        192,
+        240,
+        27,
+        113
+      ]
+    },
+    {
+      "name": "WithdrawConfidentialEvent",
+      "discriminator": [
+        207,
+        99,
+        72,
+        95,
+        186,
+        134,
+        217,
+        229
+      ]
+    },
+    {
+      "name": "WrapConfidentialEvent",
+      "discriminator": [
+        20,
+        62,
+        207,
+        123,
+        186,
+        80,
+        202,
+        123
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Only the vault's authority can perform this action"
+    },
+    {
+      "code": 6001,
+      "name": "TreasuryAlreadyConfigured",
+      "msg": "The vault's treasury account has already been configured"
+    },
+    {
+      "code": 6002,
+      "name": "TreasuryNotConfigured",
+      "msg": "The vault's treasury account has not been configured yet"
+    }
+  ],
+  "types": [
+    {
+      "name": "ApplyTreasuryPendingEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigureTreasuryAccountEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_token_account",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CreateConfidentialAccountEvent",
+      "docs": [
+        "Emitted by `create_confidential_account` -- deliberately has no `vault`",
+        "field, unlike every event above it. This is the P2P-transfer primitive",
+        "(`PRODUCT.md` §1/§11): a wallet setting up its own confidential account",
+        "for a mint, with no vault/treasury/employee relationship involved at all."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_account",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DepositConfidentialEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FundTreasuryEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "funder",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TransferConfidentialEvent",
+      "docs": [
+        "Emitted by `transfer_confidential`. Deliberately has no amount field --",
+        "that's the entire point of a confidential transfer. No `vault` field",
+        "either, same reasoning as `CreateConfidentialAccountEvent`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "sender",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "source_token_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "destination_token_account",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UnwrapConfidentialEvent",
+      "docs": [
+        "Emitted by `unwrap_confidential`. See `WrapConfidentialEvent` for why",
+        "there's no `vault` field."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "unwrapped_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wrapped_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "UserAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "elgamal_pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "active",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Vault",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "auditor_elgamal_pubkey",
+            "type": {
+              "option": {
+                "array": [
+                  "u8",
+                  32
+                ]
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "paused",
+            "type": "bool"
+          },
+          {
+            "name": "treasury_token_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_elgamal_pubkey",
+            "type": "pubkey"
+          },
+          {
+            "name": "treasury_configured",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WithdrawConfidentialEvent",
+      "docs": [
+        "Emitted by `withdraw_confidential`. Unlike `TransferConfidentialEvent`,",
+        "`amount` is included here on purpose -- Withdraw is the deliberate",
+        "disclosure point in this design (`PRODUCT.md` §4.4), not something to",
+        "obscure."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "token_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "WrapConfidentialEvent",
+      "docs": [
+        "Emitted by `wrap_confidential`. `wrapped_mint`/`wrapped_token_account`",
+        "are `token_wrap_compliance`'s accounts, not `vault`'s -- recorded here",
+        "only for indexers, since `vault` itself keeps no bookkeeping state for",
+        "wrapping (same no-vault-state posture as `CreateConfidentialAccountEvent`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "unwrapped_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "wrapped_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "VAULT_SEED",
+      "type": "bytes",
+      "value": "[118, 97, 117, 108, 116]"
+    }
+  ]
+}
