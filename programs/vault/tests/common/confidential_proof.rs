@@ -1,16 +1,16 @@
 //! Client-side proof generation and context-state-account bootstrap for
 //! `transfer_confidential`'s three proofs (equality, ciphertext-validity,
-//! range).
+//! range) and `withdraw_confidential`'s two (equality, range).
 //!
 //! Unlike the single small `VerifyPubkeyValidity` proof used elsewhere in
 //! this suite (embedded in the same transaction via
-//! `ProofLocation::InstructionOffset`), these three proofs are too large to
-//! fit alongside the transfer instruction itself -- see `CLAUDE.md`. Each
-//! instead gets its own **context-state account**: a fresh, plain
+//! `ProofLocation::InstructionOffset`), these proofs are too large to fit
+//! alongside the transfer/withdraw instruction itself -- see `CLAUDE.md`.
+//! Each instead gets its own **context-state account**: a fresh, plain
 //! (non-PDA) account the client creates and funds directly, then populates
 //! by submitting a `VerifyProof` instruction against the ZK ElGamal Proof
-//! program in its own transaction. `transfer_confidential` then references
-//! all three by address (`ProofLocation::ContextStateAccount`).
+//! program in its own transaction. The consuming instruction then
+//! references them by address (`ProofLocation::ContextStateAccount`).
 //!
 //! The proof math itself (splitting the amount into lo/hi components,
 //! building the Pedersen commitments and sigma/range proofs) is not
@@ -39,7 +39,9 @@ use solana_zk_sdk::{
         state::ProofContextState,
     },
 };
-use spl_token_confidential_transfer_proof_generation::transfer::transfer_split_proof_data;
+use spl_token_confidential_transfer_proof_generation::{
+    transfer::transfer_split_proof_data, withdraw::withdraw_proof_data,
+};
 
 use crate::common::ix::send;
 
@@ -186,5 +188,73 @@ pub fn setup_transfer_proof_contexts(
         new_source_decryptable_available_balance,
         transfer_amount_auditor_ciphertext_lo,
         transfer_amount_auditor_ciphertext_hi,
+    }
+}
+
+/// Everything `withdraw_confidential` needs, once the two transactions
+/// built by [`setup_withdraw_proof_contexts`] have all landed.
+pub struct WithdrawProofContexts {
+    pub equality_context: Address,
+    pub range_context: Address,
+    pub new_decryptable_available_balance: [u8; 36],
+}
+
+/// Generates the two proofs for withdrawing `amount` from an account whose
+/// current confidential state is `current_available_balance`
+/// (ElGamal-encrypted, 64 bytes) / `current_decryptable_available_balance`
+/// (AES-encrypted, 36 bytes), and submits one transaction per proof to
+/// create and populate its context-state account.
+pub fn setup_withdraw_proof_contexts(
+    svm: &mut LiteSVM,
+    payer: &Keypair,
+    current_available_balance: [u8; 64],
+    current_decryptable_available_balance: [u8; 36],
+    amount: u64,
+    elgamal: &ElGamalKeypair,
+    ae_key: &AeKey,
+) -> WithdrawProofContexts {
+    let current_available_balance_ciphertext =
+        ElGamalCiphertext::from_bytes(&current_available_balance)
+            .expect("failed to parse current available balance ciphertext");
+    let current_decryptable_balance_ciphertext =
+        AeCiphertext::from_bytes(&current_decryptable_available_balance)
+            .expect("failed to parse current decryptable available balance");
+
+    let current_balance = current_decryptable_balance_ciphertext
+        .decrypt(ae_key)
+        .expect("failed to decrypt current available balance");
+    let new_balance = current_balance
+        .checked_sub(amount)
+        .expect("withdraw amount exceeds current available balance");
+    let new_decryptable_available_balance = ae_key.encrypt(new_balance).to_bytes();
+
+    let proof_data = withdraw_proof_data(
+        &current_available_balance_ciphertext,
+        current_balance,
+        amount,
+        elgamal,
+    )
+    .expect("failed to generate withdraw proof data");
+
+    let equality_context = create_proof_context_account(
+        svm,
+        payer,
+        ProofInstruction::VerifyCiphertextCommitmentEquality,
+        &proof_data.equality_proof_data,
+        std::mem::size_of::<ProofContextState<CiphertextCommitmentEqualityProofContext>>(),
+    );
+
+    let range_context = create_proof_context_account(
+        svm,
+        payer,
+        ProofInstruction::VerifyBatchedRangeProofU64,
+        &proof_data.range_proof_data,
+        std::mem::size_of::<ProofContextState<BatchedRangeProofContext>>(),
+    );
+
+    WithdrawProofContexts {
+        equality_context,
+        range_context,
+        new_decryptable_available_balance,
     }
 }

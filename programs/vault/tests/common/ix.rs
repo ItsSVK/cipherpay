@@ -638,6 +638,66 @@ pub fn transfer_confidential(
     send(svm, &[ix], sender, &[]);
 }
 
+/// Builds the `withdraw_confidential` instruction, referencing two
+/// already-populated proof context-state accounts (see
+/// `confidential_proof::setup_withdraw_proof_contexts`).
+pub fn build_withdraw_confidential_ix(
+    owner: &Keypair,
+    mint: Address,
+    token_account: Address,
+    equality_proof_context: Address,
+    range_proof_context: Address,
+    token_program: Address,
+    amount: u64,
+    new_decryptable_available_balance: [u8; 36],
+) -> Instruction {
+    let accounts = vault::accounts::WithdrawConfidential {
+        owner: to_anchor_pubkey(owner.pubkey()),
+        mint: to_anchor_pubkey(mint),
+        token_account: to_anchor_pubkey(token_account),
+        equality_proof_context: to_anchor_pubkey(equality_proof_context),
+        range_proof_context: to_anchor_pubkey(range_proof_context),
+        token_program: to_anchor_pubkey(token_program),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::WithdrawConfidential {
+            amount,
+            new_decryptable_available_balance,
+        }
+        .data(),
+    }
+}
+
+/// Sends `withdraw_confidential`.
+#[allow(clippy::too_many_arguments)]
+pub fn withdraw_confidential(
+    svm: &mut LiteSVM,
+    owner: &Keypair,
+    mint: Address,
+    token_account: Address,
+    equality_proof_context: Address,
+    range_proof_context: Address,
+    token_program: Address,
+    amount: u64,
+    new_decryptable_available_balance: [u8; 36],
+) {
+    let ix = build_withdraw_confidential_ix(
+        owner,
+        mint,
+        token_account,
+        equality_proof_context,
+        range_proof_context,
+        token_program,
+        amount,
+        new_decryptable_available_balance,
+    );
+    send(svm, &[ix], owner, &[]);
+}
+
 /// Sends `unwrap_confidential`. Returns the caller's own unwrapped-mint
 /// token account address.
 #[allow(clippy::too_many_arguments)]

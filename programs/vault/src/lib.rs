@@ -101,6 +101,22 @@ pub mod vault {
         )
     }
 
+    /// Moves `amount` from a confidential available balance back into the
+    /// public balance. `amount` is a plain, public argument -- the
+    /// deliberate disclosure point in this design (see
+    /// `instructions/withdraw_confidential.rs`).
+    pub fn withdraw_confidential(
+        ctx: Context<WithdrawConfidential>,
+        amount: u64,
+        new_decryptable_available_balance: [u8; 36],
+    ) -> Result<()> {
+        crate::instructions::withdraw_confidential::handle_withdraw_confidential(
+            ctx,
+            amount,
+            new_decryptable_available_balance,
+        )
+    }
+
     pub fn apply_treasury_pending(
         ctx: Context<ApplyTreasuryPending>,
         expected_pending_balance_credit_counter: u64,

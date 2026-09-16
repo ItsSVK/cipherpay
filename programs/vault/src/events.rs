@@ -74,3 +74,15 @@ pub struct TransferConfidentialEvent {
     pub source_token_account: Pubkey,
     pub destination_token_account: Pubkey,
 }
+
+/// Emitted by `withdraw_confidential`. Unlike `TransferConfidentialEvent`,
+/// `amount` is included here on purpose -- Withdraw is the deliberate
+/// disclosure point in this design (`PRODUCT.md` §4.4), not something to
+/// obscure.
+#[event]
+pub struct WithdrawConfidentialEvent {
+    pub owner: Pubkey,
+    pub mint: Pubkey,
+    pub token_account: Pubkey,
+    pub amount: u64,
+}

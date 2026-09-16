@@ -14,11 +14,11 @@
 //! silenced here rather than papering over them per-function.
 #![allow(dead_code)]
 
+pub mod confidential_proof;
 pub mod env;
 pub mod ix;
 pub mod mint;
 pub mod pda;
 pub mod token_state;
 pub mod token_wrap;
-pub mod transfer_proof;
 pub mod zk;

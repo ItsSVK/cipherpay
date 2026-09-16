@@ -7,6 +7,7 @@ pub mod fund_treasury;
 pub mod initialize;
 pub mod transfer_confidential;
 pub mod unwrap_confidential;
+pub mod withdraw_confidential;
 pub mod wrap_confidential;
 
 pub use apply_treasury_pending::*;
@@ -18,4 +19,5 @@ pub use fund_treasury::*;
 pub use initialize::*;
 pub use transfer_confidential::*;
 pub use unwrap_confidential::*;
+pub use withdraw_confidential::*;
 pub use wrap_confidential::*;

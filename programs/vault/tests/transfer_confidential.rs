@@ -1,10 +1,10 @@
 mod common;
 
 use common::{
+    confidential_proof::setup_transfer_proof_contexts,
     env::{funded_keypair, setup_svm, to_address},
     ix, mint,
     token_state::{available_balance, decryptable_available_balance},
-    transfer_proof::setup_transfer_proof_contexts,
     zk::ConfidentialKeys,
 };
 use solana_keypair::Keypair;
