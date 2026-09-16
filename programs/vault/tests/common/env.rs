@@ -52,11 +52,24 @@ const TOKEN_2022_PROGRAM_SO: &str = concat!(
     "/tests/fixtures/spl_token_2022-11.0.0.so"
 );
 
+/// Our fork of spl-token-wrap (`native_programs/token_wrap_compliance`),
+/// exercised by `wrap_confidential`/`unwrap_confidential`'s tests. Not built
+/// by `anchor build` (it lives outside `programs/`, deliberately -- see
+/// `CLAUDE.md`), so rebuild and re-copy this fixture manually if that
+/// program's source changes:
+///   cargo build-sbf --arch v1 --manifest-path native_programs/token_wrap_compliance/Cargo.toml
+///   cp target/deploy/token_wrap_compliance.so programs/vault/tests/fixtures/
+const TOKEN_WRAP_COMPLIANCE_PROGRAM_SO: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/token_wrap_compliance.so"
+);
+
 /// Spins up a LiteSVM instance with the default SPL programs (System,
 /// Token, Token-2022, Associated Token Account, the ZK ElGamal Proof
 /// program) plus our own compiled `vault` program loaded at its real
 /// on-chain address. Overrides litesvm's bundled Token-2022 binary with a
-/// newer one -- see [`TOKEN_2022_PROGRAM_SO`].
+/// newer one -- see [`TOKEN_2022_PROGRAM_SO`]. Also loads our
+/// `token_wrap_compliance` fork -- see [`TOKEN_WRAP_COMPLIANCE_PROGRAM_SO`].
 pub fn setup_svm() -> LiteSVM {
     let mut svm = LiteSVM::new();
 
@@ -65,6 +78,12 @@ pub fn setup_svm() -> LiteSVM {
 
     svm.add_program_from_file(to_address(vault::ID), VAULT_PROGRAM_SO)
         .expect("failed to load target/deploy/vault.so -- run `anchor build` first");
+
+    svm.add_program_from_file(
+        to_address(vault::TOKEN_WRAP_COMPLIANCE_PROGRAM_ID),
+        TOKEN_WRAP_COMPLIANCE_PROGRAM_SO,
+    )
+    .expect("failed to load tests/fixtures/token_wrap_compliance.so");
 
     svm
 }

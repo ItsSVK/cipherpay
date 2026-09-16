@@ -76,6 +76,53 @@ pub fn create_confidential_mint(
     mint.pubkey()
 }
 
+/// Creates a plain Token-2022 mint with no confidential-transfer extension
+/// -- stands in for a real asset like USDC in `wrap_confidential`/
+/// `unwrap_confidential` tests, where the *unwrapped* side is never
+/// confidential (only the wrapped representation is).
+pub fn create_plain_mint(
+    svm: &mut LiteSVM,
+    payer: &Keypair,
+    mint: &Keypair,
+    decimals: u8,
+    mint_authority: Address,
+) -> Address {
+    let mint_len = ExtensionType::try_calculate_account_len::<TokenMintState>(&[])
+        .expect("failed to calculate mint account length");
+    let lamports = svm.minimum_balance_for_rent_exemption(mint_len);
+
+    let create_account_ix = system_instruction::create_account(
+        &payer.pubkey(),
+        &mint.pubkey(),
+        lamports,
+        mint_len as u64,
+        &TOKEN_2022_PROGRAM_ID,
+    );
+
+    let init_mint_ix = initialize_mint2(
+        &TOKEN_2022_PROGRAM_ID,
+        &mint.pubkey(),
+        &mint_authority,
+        None,
+        decimals,
+    )
+    .expect("failed to build InitializeMint2 instruction");
+
+    let blockhash = svm.latest_blockhash();
+    let message = Message::new_with_blockhash(
+        &[create_account_ix, init_mint_ix],
+        Some(&payer.pubkey()),
+        &blockhash,
+    );
+    let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(message), &[payer, mint])
+        .expect("failed to sign mint creation transaction");
+
+    svm.send_transaction(tx)
+        .expect("failed to create plain mint");
+
+    mint.pubkey()
+}
+
 /// Creates a plain (no confidential-transfer extension) Token-2022 account
 /// for `mint`, owned by `owner`, and mints `amount` into it. Represents an
 /// ordinary depositor's existing public balance -- the kind `fund_treasury`
@@ -135,4 +182,63 @@ pub fn create_and_fund_token_account(
         .expect("failed to create and fund token account");
 
     token_account.pubkey()
+}
+
+/// Creates `owner`'s associated token account for `mint` (via the
+/// associated-token-account program's idempotent `Create`, since ATA
+/// addresses are PDAs -- `owner` can't sign for them the way
+/// [`create_and_fund_token_account`] signs for an arbitrary keypair
+/// address) and mints `amount` into it. Needed for `wrap_confidential`/
+/// `unwrap_confidential` tests, whose accounts are always the canonical ATA
+/// address, never an arbitrary one.
+pub fn create_and_fund_associated_token_account(
+    svm: &mut LiteSVM,
+    payer: &Keypair,
+    mint: Address,
+    mint_authority: &Keypair,
+    owner: Address,
+    token_program: Address,
+    amount: u64,
+) -> Address {
+    let create_ata_ix =
+        anchor_spl::associated_token::spl_associated_token_account::instruction::create_associated_token_account_idempotent(
+            &payer.pubkey(),
+            &owner,
+            &mint,
+            &token_program,
+        );
+
+    let associated_token_account =
+        anchor_spl::associated_token::get_associated_token_address_with_program_id(
+            &owner,
+            &mint,
+            &token_program,
+        );
+
+    let mint_to_ix = mint_to(
+        &token_program,
+        &mint,
+        &associated_token_account,
+        &mint_authority.pubkey(),
+        &[],
+        amount,
+    )
+    .expect("failed to build MintTo instruction");
+
+    let blockhash = svm.latest_blockhash();
+    let message = Message::new_with_blockhash(
+        &[create_ata_ix, mint_to_ix],
+        Some(&payer.pubkey()),
+        &blockhash,
+    );
+    let tx = VersionedTransaction::try_new(
+        VersionedMessage::Legacy(message),
+        &[payer, mint_authority],
+    )
+    .expect("failed to sign ATA creation transaction");
+
+    svm.send_transaction(tx)
+        .expect("failed to create and fund associated token account");
+
+    associated_token_account
 }

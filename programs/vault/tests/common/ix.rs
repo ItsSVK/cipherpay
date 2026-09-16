@@ -11,7 +11,7 @@ use solana_transaction::versioned::VersionedTransaction;
 
 use crate::common::{
     env::{to_address, to_anchor_pubkey},
-    pda::{user_account_pda, vault_pda},
+    pda::{escrow_address, user_account_pda, vault_pda, wrapped_mint_authority_pda, wrapped_mint_pda},
     zk::ConfidentialKeys,
 };
 
@@ -430,4 +430,167 @@ pub fn apply_treasury_pending(
         new_decryptable_available_balance,
     );
     send(svm, &[ix], admin, &[]);
+}
+
+/// Builds the `wrap_confidential` instruction: moves `amount` of a real
+/// asset into its wrapped Token-2022 representation via CPI into
+/// `token_wrap_compliance`. No `Vault`/`UserAccount` involved.
+#[allow(clippy::too_many_arguments)]
+pub fn build_wrap_confidential_ix(
+    owner: &Keypair,
+    unwrapped_mint: Address,
+    unwrapped_token_program: Address,
+    wrapped_token_program: Address,
+    associated_token_program: Address,
+    amount: u64,
+) -> Instruction {
+    let owner_address = owner.pubkey();
+    let (wrapped_mint, _bump) = wrapped_mint_pda(unwrapped_mint, wrapped_token_program);
+    let (wrapped_mint_authority, _bump) = wrapped_mint_authority_pda(wrapped_mint);
+    let escrow = escrow_address(unwrapped_mint, unwrapped_token_program, wrapped_token_program);
+
+    let owner_unwrapped_token_account =
+        anchor_spl::associated_token::get_associated_token_address_with_program_id(
+            &to_anchor_pubkey(owner_address),
+            &to_anchor_pubkey(unwrapped_mint),
+            &to_anchor_pubkey(unwrapped_token_program),
+        );
+    let owner_wrapped_token_account =
+        anchor_spl::associated_token::get_associated_token_address_with_program_id(
+            &to_anchor_pubkey(owner_address),
+            &to_anchor_pubkey(wrapped_mint),
+            &to_anchor_pubkey(wrapped_token_program),
+        );
+
+    let accounts = vault::accounts::WrapConfidential {
+        owner: to_anchor_pubkey(owner_address),
+        unwrapped_mint: to_anchor_pubkey(unwrapped_mint),
+        owner_unwrapped_token_account,
+        wrapped_mint: to_anchor_pubkey(wrapped_mint),
+        wrapped_mint_authority: to_anchor_pubkey(wrapped_mint_authority),
+        escrow: to_anchor_pubkey(escrow),
+        owner_wrapped_token_account,
+        token_wrap_program: vault::TOKEN_WRAP_COMPLIANCE_PROGRAM_ID,
+        unwrapped_token_program: to_anchor_pubkey(unwrapped_token_program),
+        wrapped_token_program: to_anchor_pubkey(wrapped_token_program),
+        associated_token_program: to_anchor_pubkey(associated_token_program),
+        system_program: anchor_lang::prelude::Pubkey::default(),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::WrapConfidential { amount }.data(),
+    }
+}
+
+/// Sends `wrap_confidential`. Returns the caller's own wrapped-mint token
+/// account address.
+#[allow(clippy::too_many_arguments)]
+pub fn wrap_confidential(
+    svm: &mut LiteSVM,
+    owner: &Keypair,
+    unwrapped_mint: Address,
+    unwrapped_token_program: Address,
+    wrapped_token_program: Address,
+    associated_token_program: Address,
+    amount: u64,
+) -> Address {
+    let ix = build_wrap_confidential_ix(
+        owner,
+        unwrapped_mint,
+        unwrapped_token_program,
+        wrapped_token_program,
+        associated_token_program,
+        amount,
+    );
+    send(svm, &[ix], owner, &[]);
+
+    let (wrapped_mint, _bump) = wrapped_mint_pda(unwrapped_mint, wrapped_token_program);
+    to_address(anchor_spl::associated_token::get_associated_token_address_with_program_id(
+        &to_anchor_pubkey(owner.pubkey()),
+        &to_anchor_pubkey(wrapped_mint),
+        &to_anchor_pubkey(wrapped_token_program),
+    ))
+}
+
+/// Builds the `unwrap_confidential` instruction: reverses `wrap_confidential`.
+#[allow(clippy::too_many_arguments)]
+pub fn build_unwrap_confidential_ix(
+    owner: &Keypair,
+    unwrapped_mint: Address,
+    unwrapped_token_program: Address,
+    wrapped_token_program: Address,
+    associated_token_program: Address,
+    amount: u64,
+) -> Instruction {
+    let owner_address = owner.pubkey();
+    let (wrapped_mint, _bump) = wrapped_mint_pda(unwrapped_mint, wrapped_token_program);
+    let (wrapped_mint_authority, _bump) = wrapped_mint_authority_pda(wrapped_mint);
+    let escrow = escrow_address(unwrapped_mint, unwrapped_token_program, wrapped_token_program);
+
+    let owner_unwrapped_token_account =
+        anchor_spl::associated_token::get_associated_token_address_with_program_id(
+            &to_anchor_pubkey(owner_address),
+            &to_anchor_pubkey(unwrapped_mint),
+            &to_anchor_pubkey(unwrapped_token_program),
+        );
+    let owner_wrapped_token_account =
+        anchor_spl::associated_token::get_associated_token_address_with_program_id(
+            &to_anchor_pubkey(owner_address),
+            &to_anchor_pubkey(wrapped_mint),
+            &to_anchor_pubkey(wrapped_token_program),
+        );
+
+    let accounts = vault::accounts::UnwrapConfidential {
+        owner: to_anchor_pubkey(owner_address),
+        unwrapped_mint: to_anchor_pubkey(unwrapped_mint),
+        owner_unwrapped_token_account,
+        wrapped_mint: to_anchor_pubkey(wrapped_mint),
+        wrapped_mint_authority: to_anchor_pubkey(wrapped_mint_authority),
+        escrow: to_anchor_pubkey(escrow),
+        owner_wrapped_token_account,
+        token_wrap_program: vault::TOKEN_WRAP_COMPLIANCE_PROGRAM_ID,
+        unwrapped_token_program: to_anchor_pubkey(unwrapped_token_program),
+        wrapped_token_program: to_anchor_pubkey(wrapped_token_program),
+        associated_token_program: to_anchor_pubkey(associated_token_program),
+        system_program: anchor_lang::prelude::Pubkey::default(),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::UnwrapConfidential { amount }.data(),
+    }
+}
+
+/// Sends `unwrap_confidential`. Returns the caller's own unwrapped-mint
+/// token account address.
+#[allow(clippy::too_many_arguments)]
+pub fn unwrap_confidential(
+    svm: &mut LiteSVM,
+    owner: &Keypair,
+    unwrapped_mint: Address,
+    unwrapped_token_program: Address,
+    wrapped_token_program: Address,
+    associated_token_program: Address,
+    amount: u64,
+) -> Address {
+    let ix = build_unwrap_confidential_ix(
+        owner,
+        unwrapped_mint,
+        unwrapped_token_program,
+        wrapped_token_program,
+        associated_token_program,
+        amount,
+    );
+    send(svm, &[ix], owner, &[]);
+
+    to_address(anchor_spl::associated_token::get_associated_token_address_with_program_id(
+        &to_anchor_pubkey(owner.pubkey()),
+        &to_anchor_pubkey(unwrapped_mint),
+        &to_anchor_pubkey(unwrapped_token_program),
+    ))
 }

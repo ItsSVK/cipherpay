@@ -41,3 +41,25 @@ pub struct CreateConfidentialAccountEvent {
     pub mint: Pubkey,
     pub token_account: Pubkey,
 }
+
+/// Emitted by `wrap_confidential`. `wrapped_mint`/`wrapped_token_account`
+/// are `token_wrap_compliance`'s accounts, not `vault`'s -- recorded here
+/// only for indexers, since `vault` itself keeps no bookkeeping state for
+/// wrapping (same no-vault-state posture as `CreateConfidentialAccountEvent`).
+#[event]
+pub struct WrapConfidentialEvent {
+    pub owner: Pubkey,
+    pub unwrapped_mint: Pubkey,
+    pub wrapped_mint: Pubkey,
+    pub amount: u64,
+}
+
+/// Emitted by `unwrap_confidential`. See `WrapConfidentialEvent` for why
+/// there's no `vault` field.
+#[event]
+pub struct UnwrapConfidentialEvent {
+    pub owner: Pubkey,
+    pub unwrapped_mint: Pubkey,
+    pub wrapped_mint: Pubkey,
+    pub amount: u64,
+}

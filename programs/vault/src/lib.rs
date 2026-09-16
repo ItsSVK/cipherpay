@@ -70,6 +70,19 @@ pub mod vault {
         crate::instructions::deposit_confidential::handle_deposit_confidential(ctx, amount)
     }
 
+    /// Moves a real asset (e.g. USDC) into its wrapped, confidential-
+    /// transfer-capable Token-2022 representation via CPI into
+    /// `native_programs/token_wrap_compliance`. No `Vault` involved -- see
+    /// `PRODUCT.md` §1/§11.
+    pub fn wrap_confidential(ctx: Context<WrapConfidential>, amount: u64) -> Result<()> {
+        crate::instructions::wrap_confidential::handle_wrap_confidential(ctx, amount)
+    }
+
+    /// Reverses `wrap_confidential`. No `Vault` involved.
+    pub fn unwrap_confidential(ctx: Context<UnwrapConfidential>, amount: u64) -> Result<()> {
+        crate::instructions::unwrap_confidential::handle_unwrap_confidential(ctx, amount)
+    }
+
     pub fn apply_treasury_pending(
         ctx: Context<ApplyTreasuryPending>,
         expected_pending_balance_credit_counter: u64,
