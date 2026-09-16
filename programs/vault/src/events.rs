@@ -30,3 +30,14 @@ pub struct DepositConfidentialEvent {
 pub struct ApplyTreasuryPendingEvent {
     pub vault: Pubkey,
 }
+
+/// Emitted by `create_confidential_account` -- deliberately has no `vault`
+/// field, unlike every event above it. This is the P2P-transfer primitive
+/// (`PRODUCT.md` §1/§11): a wallet setting up its own confidential account
+/// for a mint, with no vault/treasury/employee relationship involved at all.
+#[event]
+pub struct CreateConfidentialAccountEvent {
+    pub owner: Pubkey,
+    pub mint: Pubkey,
+    pub token_account: Pubkey,
+}

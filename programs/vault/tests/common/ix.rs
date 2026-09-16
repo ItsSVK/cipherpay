@@ -141,6 +141,76 @@ pub fn create_user_account(
     (user_account, user_token_account)
 }
 
+/// Builds the two-instruction sequence `create_confidential_account` needs
+/// -- the P2P-transfer primitive: no `Vault`, no `UserAccount`, just
+/// `owner`'s own confidential token account for `mint`. Returns the
+/// instructions alongside the token account address the caller will likely
+/// want to assert against.
+pub fn build_create_confidential_account_ixs(
+    owner: &Keypair,
+    mint: Address,
+    token_program: Address,
+    associated_token_program: Address,
+    keys: &ConfidentialKeys,
+) -> (Vec<Instruction>, Address) {
+    let owner_address = owner.pubkey();
+    let token_account = anchor_spl::associated_token::get_associated_token_address_with_program_id(
+        &to_anchor_pubkey(owner_address),
+        &to_anchor_pubkey(mint),
+        &to_anchor_pubkey(token_program),
+    );
+    let token_account = to_address(token_account);
+
+    let accounts = vault::accounts::CreateConfidentialAccount {
+        owner: to_anchor_pubkey(owner_address),
+        mint: to_anchor_pubkey(mint),
+        token_account: to_anchor_pubkey(token_account),
+        instructions_sysvar: to_anchor_pubkey(solana_instructions_sysvar::ID),
+        associated_token_program: to_anchor_pubkey(associated_token_program),
+        token_program: to_anchor_pubkey(token_program),
+        system_program: anchor_lang::prelude::Pubkey::default(),
+    }
+    .to_account_metas(None);
+
+    let create_confidential_account_ix = Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::CreateConfidentialAccount {
+            elgamal_pubkey: keys.elgamal_pubkey_bytes(),
+            decryptable_zero_balance: keys.decryptable_zero_balance(),
+        }
+        .data(),
+    };
+
+    let ixs = vec![
+        keys.verify_pubkey_validity_instruction(),
+        create_confidential_account_ix,
+    ];
+
+    (ixs, token_account)
+}
+
+/// Sends the `VerifyPubkeyValidity` + `create_confidential_account`
+/// sequence and returns the token account address.
+pub fn create_confidential_account(
+    svm: &mut LiteSVM,
+    owner: &Keypair,
+    mint: Address,
+    token_program: Address,
+    associated_token_program: Address,
+    keys: &ConfidentialKeys,
+) -> Address {
+    let (ixs, token_account) = build_create_confidential_account_ixs(
+        owner,
+        mint,
+        token_program,
+        associated_token_program,
+        keys,
+    );
+    send(svm, &ixs, owner, &[]);
+    token_account
+}
+
 /// Builds the `VerifyPubkeyValidity` + `configure_treasury_account`
 /// sequence. Returns the instructions alongside the treasury token account
 /// address the caller will likely want to assert against.

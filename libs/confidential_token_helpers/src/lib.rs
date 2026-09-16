@@ -17,7 +17,9 @@
 
 pub mod account_setup;
 pub mod error;
+pub mod mint;
 pub mod proof;
 
 pub use account_setup::{Authority, ConfidentialAccountSetup};
+pub use mint::assert_confidential_transfer_enabled;
 pub use proof::assert_pubkey_validity_proof;

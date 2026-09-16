@@ -1,10 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_2022::ID as TOKEN_2022_PROGRAM_ID;
 use anchor_spl::token_interface::Mint;
+use confidential_token_helpers::assert_confidential_transfer_enabled;
 
-use crate::{
-    assert_confidential_transfer_enabled, constants::*, events::InitializeEvent, state::Vault,
-};
+use crate::{constants::*, events::InitializeEvent, state::Vault};
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {

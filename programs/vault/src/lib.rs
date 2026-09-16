@@ -3,7 +3,6 @@ pub mod error;
 pub mod events;
 pub mod instructions;
 pub mod state;
-pub mod utils;
 
 use anchor_lang::prelude::*;
 
@@ -11,7 +10,6 @@ pub use constants::*;
 pub use events::*;
 pub use instructions::*;
 pub use state::*;
-pub use utils::*;
 
 declare_id!("ELChxVFAiE5jv1SV3v3gprWeWxmbgX7ATWingW5VcB48");
 
@@ -21,6 +19,23 @@ pub mod vault {
 
     pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
         crate::instructions::initialize::handle_initialize(ctx)
+    }
+
+    /// Confidential P2P transfer primitive: sets up a confidential
+    /// Token-2022 account for the caller's own wallet, on any
+    /// confidential-transfer-enabled mint. No `Vault` involved -- see
+    /// `PRODUCT.md` §1/§11 for why this instruction exists separately from
+    /// `create_user_account` below rather than reusing it.
+    pub fn create_confidential_account(
+        ctx: Context<CreateConfidentialAccount>,
+        elgamal_pubkey: [u8; 32],
+        decryptable_zero_balance: [u8; 36],
+    ) -> Result<()> {
+        crate::instructions::create_confidential_account::handle_create_confidential_account(
+            ctx,
+            elgamal_pubkey,
+            decryptable_zero_balance,
+        )
     }
 
     pub fn create_user_account(
