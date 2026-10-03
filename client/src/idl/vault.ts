@@ -133,7 +133,7 @@ export type Vault = {
         {
           "name": "treasuryTokenAccount",
           "docs": [
-            "same reason as `create_user_account`'s `user_token_account`. Owned by",
+            "same reason as `create_confidential_account`'s token account. Owned by",
             "the vault PDA (not the admin) so `pay_employee`/`batch_pay` can move",
             "funds out of it via `invoke_signed` without a human co-signing every",
             "payment."
@@ -186,8 +186,7 @@ export type Vault = {
         "Confidential P2P transfer primitive: sets up a confidential",
         "Token-2022 account for the caller's own wallet, on any",
         "confidential-transfer-enabled mint. No `Vault` involved -- see",
-        "`PRODUCT.md` §1/§11 for why this instruction exists separately from",
-        "`create_user_account` below rather than reusing it."
+        "`PRODUCT.md` decision 9: employees' accounts are wallet-owned, set up with this."
       ],
       "discriminator": [
         66,
@@ -210,127 +209,6 @@ export type Vault = {
         },
         {
           "name": "tokenAccount",
-          "docs": [
-            "because Anchor's `init` sugar for token accounts can't allocate",
-            "Token-2022 extension space (see `ConfidentialAccountSetup`)."
-          ],
-          "writable": true
-        },
-        {
-          "name": "instructionsSysvar",
-          "docs": [
-            "`elgamal_pubkey` precedes this instruction in the same transaction."
-          ],
-          "address": "Sysvar1nstructions1111111111111111111111111"
-        },
-        {
-          "name": "associatedTokenProgram",
-          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-        },
-        {
-          "name": "tokenProgram"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "elgamalPubkey",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
-        },
-        {
-          "name": "decryptableZeroBalance",
-          "type": {
-            "array": [
-              "u8",
-              36
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "createUserAccount",
-      "discriminator": [
-        146,
-        68,
-        100,
-        69,
-        63,
-        46,
-        182,
-        199
-      ],
-      "accounts": [
-        {
-          "name": "user",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "vault",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault.authority",
-                "account": "vault"
-              },
-              {
-                "kind": "account",
-                "path": "vault.mint",
-                "account": "vault"
-              }
-            ]
-          }
-        },
-        {
-          "name": "mint"
-        },
-        {
-          "name": "userAccount",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  117,
-                  115,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "vault"
-              },
-              {
-                "kind": "account",
-                "path": "user"
-              }
-            ]
-          }
-        },
-        {
-          "name": "userTokenAccount",
           "docs": [
             "because Anchor's `init` sugar for token accounts can't allocate",
             "Token-2022 extension space (see `ConfidentialAccountSetup`)."
@@ -506,16 +384,16 @@ export type Vault = {
       ]
     },
     {
-      "name": "initialize",
+      "name": "initializeVault",
       "discriminator": [
-        175,
-        175,
-        109,
-        31,
-        13,
-        152,
-        155,
-        237
+        48,
+        191,
+        163,
+        44,
+        71,
+        129,
+        63,
+        164
       ],
       "accounts": [
         {
@@ -560,37 +438,113 @@ export type Vault = {
       "args": []
     },
     {
-      "name": "transferConfidential",
+      "name": "pausePayroll",
       "docs": [
-        "The actual P2P confidential send. See `instructions/transfer_confidential.rs`",
-        "for why this only accepts context-state-account proofs, not the",
-        "same-transaction instruction-offset form used elsewhere in this",
-        "program."
+        "UC3 (REQ11): blocks `pay_employee`; withdrawals stay open."
       ],
       "discriminator": [
-        215,
-        121,
-        88,
-        79,
-        4,
-        130,
-        130,
-        58
+        77,
+        167,
+        122,
+        250,
+        144,
+        199,
+        60,
+        243
       ],
       "accounts": [
         {
-          "name": "sender",
+          "name": "admin",
           "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.authority",
+                "account": "vault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.mint",
+                "account": "vault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "payEmployee",
+      "docs": [
+        "UC1 (REQ01 to REQ07): pays one employee from the encrypted treasury.",
+        "See `instructions/pay_employee.rs`."
+      ],
+      "discriminator": [
+        202,
+        231,
+        86,
+        72,
+        42,
+        110,
+        167,
+        118
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.authority",
+                "account": "vault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.mint",
+                "account": "vault"
+              }
+            ]
+          }
         },
         {
           "name": "mint"
         },
         {
-          "name": "sourceTokenAccount",
+          "name": "treasuryTokenAccount",
           "writable": true
         },
         {
-          "name": "destinationTokenAccount",
+          "name": "employeeTokenAccount",
           "writable": true
         },
         {
@@ -645,6 +599,57 @@ export type Vault = {
           }
         }
       ]
+    },
+    {
+      "name": "resumePayroll",
+      "docs": [
+        "REQ12: reverses `pause_payroll`."
+      ],
+      "discriminator": [
+        66,
+        189,
+        169,
+        90,
+        216,
+        243,
+        136,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "admin",
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "vault.authority",
+                "account": "vault"
+              },
+              {
+                "kind": "account",
+                "path": "vault.mint",
+                "account": "vault"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
     },
     {
       "name": "unwrapConfidential",
@@ -854,7 +859,7 @@ export type Vault = {
         "Moves a real asset (e.g. USDC) into its wrapped, confidential-",
         "transfer-capable Token-2022 representation via CPI into",
         "`native_programs/token_wrap_compliance`. No `Vault` involved -- see",
-        "`PRODUCT.md` §1/§11."
+        "`PRODUCT.md` §4 (Phase 0 primitives)."
       ],
       "discriminator": [
         128,
@@ -997,19 +1002,6 @@ export type Vault = {
   ],
   "accounts": [
     {
-      "name": "userAccount",
-      "discriminator": [
-        211,
-        33,
-        136,
-        16,
-        186,
-        110,
-        242,
-        127
-      ]
-    },
-    {
       "name": "vault",
       "discriminator": [
         211,
@@ -1090,29 +1082,55 @@ export type Vault = {
       ]
     },
     {
-      "name": "initializeEvent",
+      "name": "initializeVaultEvent",
       "discriminator": [
-        206,
-        175,
-        169,
-        208,
-        241,
-        210,
-        35,
-        221
+        179,
+        75,
+        50,
+        161,
+        191,
+        28,
+        245,
+        107
       ]
     },
     {
-      "name": "transferConfidentialEvent",
+      "name": "pausePayrollEvent",
       "discriminator": [
-        177,
-        207,
-        43,
-        96,
-        232,
-        199,
-        128,
-        183
+        95,
+        155,
+        243,
+        118,
+        222,
+        184,
+        46,
+        231
+      ]
+    },
+    {
+      "name": "payEmployeeEvent",
+      "discriminator": [
+        57,
+        194,
+        139,
+        91,
+        218,
+        6,
+        116,
+        242
+      ]
+    },
+    {
+      "name": "resumePayrollEvent",
+      "discriminator": [
+        180,
+        82,
+        124,
+        144,
+        171,
+        66,
+        248,
+        44
       ]
     },
     {
@@ -1170,6 +1188,11 @@ export type Vault = {
       "code": 6002,
       "name": "treasuryNotConfigured",
       "msg": "The vault's treasury account has not been configured yet"
+    },
+    {
+      "code": 6003,
+      "name": "payrollPaused",
+      "msg": "Payroll is paused for this vault"
     }
   ],
   "types": [
@@ -1206,7 +1229,7 @@ export type Vault = {
       "docs": [
         "Emitted by `create_confidential_account` -- deliberately has no `vault`",
         "field, unlike every event above it. This is the P2P-transfer primitive",
-        "(`PRODUCT.md` §1/§11): a wallet setting up its own confidential account",
+        "(`PRODUCT.md` §4, Phase 0 primitives): a wallet setting up its own confidential account",
         "for a mint, with no vault/treasury/employee relationship involved at all."
       ],
       "type": {
@@ -1264,7 +1287,7 @@ export type Vault = {
       }
     },
     {
-      "name": "initializeEvent",
+      "name": "initializeVaultEvent",
       "type": {
         "kind": "struct",
         "fields": [
@@ -1284,29 +1307,81 @@ export type Vault = {
       }
     },
     {
-      "name": "transferConfidentialEvent",
+      "name": "pausePayrollEvent",
       "docs": [
-        "Emitted by `transfer_confidential`. Deliberately has no amount field --",
-        "that's the entire point of a confidential transfer. No `vault` field",
-        "either, same reasoning as `CreateConfidentialAccountEvent`."
+        "Emitted by `pause_payroll`."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "sender",
+            "name": "vault",
             "type": "pubkey"
           },
           {
-            "name": "mint",
+            "name": "admin",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "payEmployeeEvent",
+      "docs": [
+        "Emitted by `pay_employee`. Deliberately has no plaintext amount: the amount",
+        "appears only as its two auditor-encrypted halves (lo 16 bits, hi 32 bits),",
+        "which the auditor decrypts and recombines as `lo + hi * 2^16`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
             "type": "pubkey"
           },
           {
-            "name": "sourceTokenAccount",
+            "name": "employee",
             "type": "pubkey"
           },
           {
-            "name": "destinationTokenAccount",
+            "name": "employeeTokenAccount",
+            "type": "pubkey"
+          },
+          {
+            "name": "auditorCiphertextLo",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "auditorCiphertextHi",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "resumePayrollEvent",
+      "docs": [
+        "Emitted by `resume_payroll`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "admin",
             "type": "pubkey"
           }
         ]
@@ -1341,38 +1416,6 @@ export type Vault = {
       }
     },
     {
-      "name": "userAccount",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "vault",
-            "type": "pubkey"
-          },
-          {
-            "name": "owner",
-            "type": "pubkey"
-          },
-          {
-            "name": "tokenAccount",
-            "type": "pubkey"
-          },
-          {
-            "name": "elgamalPubkey",
-            "type": "pubkey"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          },
-          {
-            "name": "active",
-            "type": "bool"
-          }
-        ]
-      }
-    },
-    {
       "name": "vault",
       "type": {
         "kind": "struct",
@@ -1384,17 +1427,6 @@ export type Vault = {
           {
             "name": "mint",
             "type": "pubkey"
-          },
-          {
-            "name": "auditorElgamalPubkey",
-            "type": {
-              "option": {
-                "array": [
-                  "u8",
-                  32
-                ]
-              }
-            }
           },
           {
             "name": "bump",
@@ -1422,9 +1454,9 @@ export type Vault = {
     {
       "name": "withdrawConfidentialEvent",
       "docs": [
-        "Emitted by `withdraw_confidential`. Unlike `TransferConfidentialEvent`,",
+        "Emitted by `withdraw_confidential`. Unlike `PayEmployeeEvent`,",
         "`amount` is included here on purpose -- Withdraw is the deliberate",
-        "disclosure point in this design (`PRODUCT.md` §4.4), not something to",
+        "disclosure point in this design (`PRODUCT.md` §7.4), not something to",
         "obscure."
       ],
       "type": {

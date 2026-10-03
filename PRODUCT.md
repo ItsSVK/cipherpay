@@ -124,10 +124,12 @@ can verify after the fact by decrypting.
 - Token-2022 confidential-transfer account setup, with PDA-owned and wallet-owned variants.
 - `token_wrap_compliance`: 1:1 wrap of real USDC into a confidential-capable Token-2022 mint
   (confidential transfer + designated auditor + permanent delegate + pausable).
-- P2P round trip: `create_confidential_account`, `wrap_confidential`, Deposit/ApplyPending,
-  `transfer_confidential` (3 proofs), `withdraw_confidential` (2 proofs), `unwrap_confidential`.
-- Payroll groundwork: `initialize_vault`, `create_user_account`, `configure_treasury_account`,
-  `fund_treasury`, `deposit_confidential`, `apply_treasury_pending`.
+- Primitives: `create_confidential_account`, `wrap_confidential`, Deposit/ApplyPending,
+  `withdraw_confidential` (2 proofs), `unwrap_confidential`.
+- Payroll: `initialize_vault`, `configure_treasury_account`, `fund_treasury`, `deposit_confidential`,
+  `apply_treasury_pending`, and (built 2026-10-03) `pay_employee` (3 proofs, auditor event),
+  `pause_payroll`, `resume_payroll`. All 12 vault instructions exist; the on-chain half of Phase 1 is done and
+  proven on litesvm and a local surfpool validator.
 - Both programs live on devnet with a canonical WUSDC mint.
 - Round trip proven in litesvm and against a local surfpool via an independent TS client.
 

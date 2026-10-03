@@ -2,10 +2,20 @@ import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import {
   TOKEN_WRAP_COMPLIANCE_PROGRAM_ID,
+  VAULT_PROGRAM_ID,
+  VAULT_SEED,
   WRAPPED_MINT_AUTHORITY_SEED,
   WRAPPED_MINT_BACKPOINTER_SEED,
   WRAPPED_MINT_SEED,
 } from "./constants.js";
+
+/** Mirrors the vault program's `[VAULT_SEED, authority, mint]` PDA. */
+export function vaultPda(authority: PublicKey, mint: PublicKey): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [VAULT_SEED, authority.toBuffer(), mint.toBuffer()],
+    VAULT_PROGRAM_ID,
+  );
+}
 
 /** Mirrors token_wrap_compliance's get_wrapped_mint_address. */
 export function wrappedMintPda(

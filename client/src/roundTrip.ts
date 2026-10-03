@@ -1,10 +1,10 @@
-// End-to-end P2P confidential-transfer round trip, run against a local
-// surfpool Surfnet: wrap a real (test) asset, move it into a confidential
-// balance, send part of it to an independent recipient confidentially,
-// withdraw part of what they received back to public, then unwrap it back
-// into the real asset. Mirrors
-// programs/vault/tests/full_p2p_round_trip.rs step for step, but through a
-// real client hitting a real (local) validator instead of litesvm.
+// End-to-end confidential PAYROLL round trip, run against a local surfpool
+// Surfnet: the employer wraps a real (test) asset, funds the encrypted vault
+// treasury, pays an employee with `pay_employee` (the amount stays hidden;
+// the auditor decrypts it from the event), and the employee discloses part of
+// it (`withdraw_confidential`) and unwraps it back into the real asset.
+// Mirrors programs/vault/tests/full_payroll_round_trip.rs step for step, but
+// through a real client hitting a real (local) validator instead of litesvm.
 //
 // Run with `npm run round-trip` from `client/`, against
 // `surfpool start --no-deploy --no-tui` with both `vault` and
@@ -32,12 +32,16 @@ import {
   ElGamalCiphertext,
   ElGamalKeypair,
   ElGamalPubkey,
+  ElGamalSecretKey,
   PubkeyValidityProofData,
 } from "@solana/zk-sdk";
 import BN from "bn.js";
 
-import { COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES, TOKEN_WRAP_COMPLIANCE_PROGRAM_ID } from "./lib/constants.js";
-import { escrowAddress } from "./lib/pdas.js";
+import {
+  COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES,
+  DEMO_AUDITOR_ELGAMAL_SECRET_BYTES,
+} from "./lib/constants.js";
+import { escrowAddress, vaultPda } from "./lib/pdas.js";
 import { createWrappedMint } from "./lib/tokenWrapCompliance.js";
 import {
   ProofInstructionDiscriminant,
@@ -99,17 +103,17 @@ async function main() {
   console.log(`Connected to ${RPC_URL}`);
 
   const mintAuthority = Keypair.generate();
-  const alice = Keypair.generate();
-  const bob = Keypair.generate();
+  const admin = Keypair.generate(); // the employer
+  const employee = Keypair.generate();
   await Promise.all([
     airdrop(connection, mintAuthority.publicKey, 10),
-    airdrop(connection, alice.publicKey, 10),
-    airdrop(connection, bob.publicKey, 10),
+    airdrop(connection, admin.publicKey, 10),
+    airdrop(connection, employee.publicKey, 10),
   ]);
   log("funded wallets", {
     mintAuthority: mintAuthority.publicKey.toBase58(),
-    alice: alice.publicKey.toBase58(),
-    bob: bob.publicKey.toBase58(),
+    admin: admin.publicKey.toBase58(),
+    employee: employee.publicKey.toBase58(),
   });
 
   // 1. Create the plain "real asset" mint (stands in for USDC).
@@ -138,18 +142,18 @@ async function main() {
   );
   log("created unwrapped (real-asset) mint", { mint: unwrappedMint.publicKey.toBase58() });
 
-  // 2. Alice acquires 1,000,000 units of the real asset.
-  const aliceUnwrappedAccount = getAssociatedTokenAddressSync(
+  // 2. The employer acquires 1,000,000 units of the real asset.
+  const adminUnwrappedAccount = getAssociatedTokenAddressSync(
     unwrappedMint.publicKey,
-    alice.publicKey,
+    admin.publicKey,
     false,
     TOKEN_2022_PROGRAM_ID,
   );
-  await sendTx(connection, alice, [
+  await sendTx(connection, admin, [
     createAssociatedTokenAccountIdempotentInstruction(
-      alice.publicKey,
-      aliceUnwrappedAccount,
-      alice.publicKey,
+      admin.publicKey,
+      adminUnwrappedAccount,
+      admin.publicKey,
       unwrappedMint.publicKey,
       TOKEN_2022_PROGRAM_ID,
     ),
@@ -157,22 +161,22 @@ async function main() {
   await sendTx(connection, mintAuthority, [
     createMintToInstruction(
       unwrappedMint.publicKey,
-      aliceUnwrappedAccount,
+      adminUnwrappedAccount,
       mintAuthority.publicKey,
       1_000_000,
       [],
       TOKEN_2022_PROGRAM_ID,
     ),
   ]);
-  log("funded Alice's real-asset account", {
-    account: aliceUnwrappedAccount.toBase58(),
+  log("funded the employer's real-asset account", {
+    account: adminUnwrappedAccount.toBase58(),
     amount: 1_000_000,
   });
 
   // 3. Bootstrap the wrapped mint.
   const { wrappedMint, wrappedMintAuthority } = await createWrappedMint(
     connection,
-    alice,
+    admin,
     unwrappedMint.publicKey,
     TOKEN_2022_PROGRAM_ID,
   );
@@ -181,261 +185,350 @@ async function main() {
     wrappedMintAuthority: wrappedMintAuthority.toBase58(),
   });
 
-  const vault = loadVaultProgram(connection, alice);
+    const vault = loadVaultProgram(connection, admin);
+  const [vaultAddress] = vaultPda(admin.publicKey, wrappedMint);
+  const adminElgamal = new ElGamalKeypair();
+  const adminAe = new AeKey();
+  const employeeElgamal = new ElGamalKeypair();
+  const employeeAe = new AeKey();
 
-  // 4. Alice and Bob each set up a confidential account for the wrapped mint.
-  const aliceElgamal = new ElGamalKeypair();
-  const aliceAe = new AeKey();
-  const bobElgamal = new ElGamalKeypair();
-  const bobAe = new AeKey();
-
-  async function createConfidentialAccount(
-    owner: Keypair,
-    elgamal: ElGamalKeypair,
-    ae: AeKey,
-  ): Promise<PublicKey> {
-    const tokenAccount = getAssociatedTokenAddressSync(
-      wrappedMint,
-      owner.publicKey,
-      false,
-      TOKEN_2022_PROGRAM_ID,
-    );
-    const pubkeyValidityProof = new PubkeyValidityProofData(elgamal);
-    const verifyProofIx = encodeVerifyProofInstruction(
+  // 4. initialize_vault, then configure_treasury_account (the treasury is a
+  // vault-PDA-owned account that only the admin's keys can read).
+  await sendTx(connection, admin, [
+    await vault.methods
+      .initializeVault()
+      .accountsPartial({ admin: admin.publicKey, vault: vaultAddress, mint: wrappedMint })
+      .instruction(),
+  ]);
+  const treasuryTokenAccount = getAssociatedTokenAddressSync(
+    wrappedMint,
+    vaultAddress,
+    true,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  await sendTx(connection, admin, [
+    encodeVerifyProofInstruction(
       ProofInstructionDiscriminant.VerifyPubkeyValidity,
-      pubkeyValidityProof,
-    );
-    const createAccountIx = await vault.methods
-      .createConfidentialAccount(
-        Array.from(elgamal.pubkey().toBytes()),
-        Array.from(ae.encrypt(0n).toBytes()),
+      new PubkeyValidityProofData(adminElgamal),
+    ),
+    await vault.methods
+      .configureTreasuryAccount(
+        Array.from(adminElgamal.pubkey().toBytes()),
+        Array.from(adminAe.encrypt(0n).toBytes()),
       )
-      .accounts({
-        owner: owner.publicKey,
+      .accountsPartial({
+        admin: admin.publicKey,
+        vault: vaultAddress,
         mint: wrappedMint,
-        tokenAccount,
+        treasuryTokenAccount,
         tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
-      .instruction();
-
-    await sendTx(connection, owner, [verifyProofIx, createAccountIx]);
-    return tokenAccount;
-  }
-
-  const aliceWrappedAccount = await createConfidentialAccount(alice, aliceElgamal, aliceAe);
-  const bobWrappedAccount = await createConfidentialAccount(bob, bobElgamal, bobAe);
-  log("set up confidential accounts", {
-    alice: aliceWrappedAccount.toBase58(),
-    bob: bobWrappedAccount.toBase58(),
+      .instruction(),
+  ]);
+  log("vault initialized, treasury configured", {
+    vault: vaultAddress.toBase58(),
+    treasury: treasuryTokenAccount.toBase58(),
   });
 
-  // 5. Alice wraps her real asset into the wrapped mint's public balance.
+  // 5. Fund the treasury: wrap -> fund_treasury (public) ->
+  // deposit_confidential (pending) -> apply_treasury_pending (available).
   const wrapAmount = 1_000_000n;
   const escrow = escrowAddress(unwrappedMint.publicKey, TOKEN_2022_PROGRAM_ID, TOKEN_2022_PROGRAM_ID);
-  const wrapIx = await vault.methods
-    .wrapConfidential(new BN(wrapAmount.toString()))
-    .accounts({
-      owner: alice.publicKey,
-      unwrappedMint: unwrappedMint.publicKey,
-      ownerUnwrappedTokenAccount: aliceUnwrappedAccount,
-      escrow,
-      ownerWrappedTokenAccount: aliceWrappedAccount,
-      unwrappedTokenProgram: TOKEN_2022_PROGRAM_ID,
-    })
-    .instruction();
-  await sendTx(connection, alice, [wrapIx]);
-  log("wrapped real asset into wrapped mint", { amount: wrapAmount.toString() });
-
-  // 6. Move the wrapped public balance into Alice's confidential available
-  // balance: plain Deposit -> ApplyPendingBalance, no vault instruction.
-  await sendTx(connection, alice, [
-    buildDepositInstruction(
-      TOKEN_2022_PROGRAM_ID,
-      aliceWrappedAccount,
-      wrappedMint,
-      wrapAmount,
-      6,
-      alice.publicKey,
-    ),
+  const adminWrappedAccount = getAssociatedTokenAddressSync(
+    wrappedMint,
+    admin.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  await sendTx(connection, admin, [
+    await vault.methods
+      .wrapConfidential(new BN(wrapAmount.toString()))
+      .accounts({
+        owner: admin.publicKey,
+        unwrappedMint: unwrappedMint.publicKey,
+        ownerUnwrappedTokenAccount: adminUnwrappedAccount,
+        escrow,
+        ownerWrappedTokenAccount: adminWrappedAccount,
+        unwrappedTokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .instruction(),
   ]);
-  await sendTx(connection, alice, [
-    buildApplyPendingBalanceInstruction(
-      TOKEN_2022_PROGRAM_ID,
-      aliceWrappedAccount,
-      1n,
-      aliceAe.encrypt(wrapAmount).toBytes(),
-      alice.publicKey,
-    ),
+  await sendTx(connection, admin, [
+    await vault.methods
+      .fundTreasury(new BN(wrapAmount.toString()))
+      .accountsPartial({
+        funder: admin.publicKey,
+        funderTokenAccount: adminWrappedAccount,
+        vault: vaultAddress,
+        mint: wrappedMint,
+        treasuryTokenAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .instruction(),
   ]);
-  log("Alice deposited into her confidential available balance", {
-    amount: wrapAmount.toString(),
-  });
+  await sendTx(connection, admin, [
+    await vault.methods
+      .depositConfidential(new BN(wrapAmount.toString()))
+      .accountsPartial({
+        admin: admin.publicKey,
+        vault: vaultAddress,
+        mint: wrappedMint,
+        treasuryTokenAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .instruction(),
+  ]);
+  await sendTx(connection, admin, [
+    await vault.methods
+      .applyTreasuryPending(
+        new BN(1),
+        Array.from(adminAe.encrypt(wrapAmount).toBytes()),
+      )
+      .accountsPartial({
+        admin: admin.publicKey,
+        vault: vaultAddress,
+        treasuryTokenAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .instruction(),
+  ]);
+  log("treasury funded (encrypted)", { amount: wrapAmount.toString() });
 
-  // 7. Alice sends part of her confidential balance to Bob, confidentially.
-  const transferAmount = 400_000n;
-  const aliceBalanceBefore = await fetchDecryptedBalances(connection, aliceWrappedAccount, aliceAe);
+  // 6. The employee activates their own wallet-owned confidential account.
+  const employeeWrappedAccount = getAssociatedTokenAddressSync(
+    wrappedMint,
+    employee.publicKey,
+    false,
+    TOKEN_2022_PROGRAM_ID,
+  );
+  await sendTx(connection, employee, [
+    encodeVerifyProofInstruction(
+      ProofInstructionDiscriminant.VerifyPubkeyValidity,
+      new PubkeyValidityProofData(employeeElgamal),
+    ),
+    await vault.methods
+      .createConfidentialAccount(
+        Array.from(employeeElgamal.pubkey().toBytes()),
+        Array.from(employeeAe.encrypt(0n).toBytes()),
+      )
+      .accounts({
+        owner: employee.publicKey,
+        mint: wrappedMint,
+        tokenAccount: employeeWrappedAccount,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .instruction(),
+  ]);
+  log("employee activated", { account: employeeWrappedAccount.toBase58() });
+
+  // 7. pay_employee: the employer pays part of the treasury, amount hidden.
+  const payAmount = 400_000n;
+  const treasuryBefore = await fetchDecryptedBalances(connection, treasuryTokenAccount, adminAe);
   const auditorPubkey = ElGamalPubkey.fromBytes(COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES);
-  const transferProofs = transferSplitProofData(
-    ElGamalCiphertext.fromBytes(aliceBalanceBefore.availableCiphertext)!,
-    aliceBalanceBefore.available,
-    transferAmount,
-    aliceElgamal,
-    bobElgamal.pubkey(),
+  const payProofs = transferSplitProofData(
+    ElGamalCiphertext.fromBytes(treasuryBefore.availableCiphertext)!,
+    treasuryBefore.available,
+    payAmount,
+    adminElgamal,
+    employeeElgamal.pubkey(),
     auditorPubkey,
   );
-
   const equalityContext = await createProofContextAccount(
     connection,
-    alice,
+    admin,
     ProofInstructionDiscriminant.VerifyCiphertextCommitmentEquality,
-    transferProofs.equalityProofData,
+    payProofs.equalityProofData,
   );
   const ciphertextValidityContext = await createProofContextAccount(
     connection,
-    alice,
+    admin,
     ProofInstructionDiscriminant.VerifyBatchedGroupedCiphertext3HandlesValidity,
-    transferProofs.ciphertextValidityProofData,
+    payProofs.ciphertextValidityProofData,
   );
   const rangeContext = await createProofContextAccount(
     connection,
-    alice,
+    admin,
     ProofInstructionDiscriminant.VerifyBatchedRangeProofU128,
-    transferProofs.rangeProofData,
+    payProofs.rangeProofData,
   );
-  log("generated transfer proofs and context-state accounts", {
+  log("generated pay proofs and context-state accounts", {
     equalityContext: equalityContext.toBase58(),
     ciphertextValidityContext: ciphertextValidityContext.toBase58(),
     rangeContext: rangeContext.toBase58(),
   });
 
-  const newSourceDecryptableBalance = aliceAe
-    .encrypt(transferProofs.newSourceDecryptableAvailableBalance)
+  const newTreasuryDecryptableBalance = adminAe
+    .encrypt(payProofs.newSourceDecryptableAvailableBalance)
     .toBytes();
+  const payEmployeeIx = await vault.methods
+      .payEmployee(
+        Array.from(newTreasuryDecryptableBalance),
+        Array.from(payProofs.transferAmountAuditorCiphertextLo),
+        Array.from(payProofs.transferAmountAuditorCiphertextHi),
+      )
+      .accountsPartial({
+        admin: admin.publicKey,
+        vault: vaultAddress,
+        mint: wrappedMint,
+        treasuryTokenAccount,
+        employeeTokenAccount: employeeWrappedAccount,
+        equalityProofContext: equalityContext,
+        ciphertextValidityProofContext: ciphertextValidityContext,
+        rangeProofContext: rangeContext,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .instruction();
 
-  const transferIx = await vault.methods
-    .transferConfidential(
-      Array.from(newSourceDecryptableBalance),
-      Array.from(transferProofs.transferAmountAuditorCiphertextLo),
-      Array.from(transferProofs.transferAmountAuditorCiphertextHi),
-    )
-    .accounts({
-      sender: alice.publicKey,
-      mint: wrappedMint,
-      sourceTokenAccount: aliceWrappedAccount,
-      destinationTokenAccount: bobWrappedAccount,
-      equalityProofContext: equalityContext,
-      ciphertextValidityProofContext: ciphertextValidityContext,
-      rangeProofContext: rangeContext,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
-    })
-    .instruction();
-  await sendTx(connection, alice, [transferIx]);
-  log("transferred confidentially", { amount: transferAmount.toString() });
+  // REQ02/REQ11/REQ12 on a real validator: while paused, pay_employee must be
+  // rejected with PayrollPaused (error 6003 = 0x1773); after resume it works.
+  await sendTx(connection, admin, [
+    await vault.methods
+      .pausePayroll()
+      .accountsPartial({ admin: admin.publicKey, vault: vaultAddress })
+      .instruction(),
+  ]);
+  let rejectedWhilePaused = false;
+  try {
+    await sendTx(connection, admin, [payEmployeeIx]);
+  } catch (err) {
+    rejectedWhilePaused = /PayrollPaused|0x1773|6003/.test(String(err) + JSON.stringify((err as { logs?: string[] }).logs ?? []));
+    if (!rejectedWhilePaused) throw err;
+  }
+  if (!rejectedWhilePaused) throw new Error("pay_employee succeeded while payroll was paused");
+  log("pay_employee rejected while paused", { error: "PayrollPaused" });
+  await sendTx(connection, admin, [
+    await vault.methods
+      .resumePayroll()
+      .accountsPartial({ admin: admin.publicKey, vault: vaultAddress })
+      .instruction(),
+  ]);
 
-  // 8. Bob applies his pending balance.
-  await sendTx(connection, bob, [
+  const paySignature = await sendTx(connection, admin, [payEmployeeIx]);
+  log("paid the employee confidentially", { signature: paySignature });
+
+  // 7b. The auditor reads the amount from the PayEmployeeEvent: decrypting
+  // the two ciphertexts with the auditor's secret gives lo + hi * 2^16.
+  const payTx = await connection.getTransaction(paySignature, {
+    commitment: "confirmed",
+    maxSupportedTransactionVersion: 0,
+  });
+  let auditorAmount: bigint | undefined;
+  for (const line of payTx?.meta?.logMessages ?? []) {
+    if (!line.startsWith("Program data: ")) continue;
+    const event = vault.coder.events.decode(line.slice("Program data: ".length));
+    if (event?.name.toLowerCase() !== "payemployeeevent") continue;
+    const data = event.data as {
+      auditorCiphertextLo: number[];
+      auditorCiphertextHi: number[];
+    };
+    const secret = ElGamalSecretKey.fromBytes(DEMO_AUDITOR_ELGAMAL_SECRET_BYTES);
+    const lo = secret.decrypt(ElGamalCiphertext.fromBytes(Uint8Array.from(data.auditorCiphertextLo))!);
+    const hi = secret.decrypt(ElGamalCiphertext.fromBytes(Uint8Array.from(data.auditorCiphertextHi))!);
+    auditorAmount = lo + (hi << 16n);
+  }
+  log("auditor decrypted the event", { amount: String(auditorAmount) });
+
+  // 8. The employee applies their pending balance.
+  await sendTx(connection, employee, [
     buildApplyPendingBalanceInstruction(
       TOKEN_2022_PROGRAM_ID,
-      bobWrappedAccount,
+      employeeWrappedAccount,
       1n,
-      bobAe.encrypt(transferAmount).toBytes(),
-      bob.publicKey,
+      employeeAe.encrypt(payAmount).toBytes(),
+      employee.publicKey,
     ),
   ]);
-  log("Bob applied his pending balance", { amount: transferAmount.toString() });
+  log("employee applied their pending balance", { amount: payAmount.toString() });
 
-  // 9. Bob withdraws part of his confidential balance back to public.
+  // 9. The employee discloses part of their pay: confidential -> public.
   const withdrawAmount = 250_000n;
-  const bobBalanceBefore = await fetchDecryptedBalances(connection, bobWrappedAccount, bobAe);
+  const employeeBalanceBefore = await fetchDecryptedBalances(connection, employeeWrappedAccount, employeeAe);
   const withdrawProofs = withdrawProofData(
-    ElGamalCiphertext.fromBytes(bobBalanceBefore.availableCiphertext)!,
-    bobBalanceBefore.available,
+    ElGamalCiphertext.fromBytes(employeeBalanceBefore.availableCiphertext)!,
+    employeeBalanceBefore.available,
     withdrawAmount,
-    bobElgamal,
+    employeeElgamal,
   );
-
   const withdrawEqualityContext = await createProofContextAccount(
     connection,
-    bob,
+    employee,
     ProofInstructionDiscriminant.VerifyCiphertextCommitmentEquality,
     withdrawProofs.equalityProofData,
   );
   const withdrawRangeContext = await createProofContextAccount(
     connection,
-    bob,
+    employee,
     ProofInstructionDiscriminant.VerifyBatchedRangeProofU64,
     withdrawProofs.rangeProofData,
   );
-  log("generated withdraw proofs and context-state accounts", {
-    equalityContext: withdrawEqualityContext.toBase58(),
-    rangeContext: withdrawRangeContext.toBase58(),
-  });
+  const newDecryptableBalance = employeeAe
+    .encrypt(withdrawProofs.newDecryptableAvailableBalance)
+    .toBytes();
+  await sendTx(connection, employee, [
+    await vault.methods
+      .withdrawConfidential(new BN(withdrawAmount.toString()), Array.from(newDecryptableBalance))
+      .accounts({
+        owner: employee.publicKey,
+        mint: wrappedMint,
+        tokenAccount: employeeWrappedAccount,
+        equalityProofContext: withdrawEqualityContext,
+        rangeProofContext: withdrawRangeContext,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .instruction(),
+  ]);
+  log("employee withdrew to public balance", { amount: withdrawAmount.toString() });
 
-  const newDecryptableBalance = bobAe.encrypt(withdrawProofs.newDecryptableAvailableBalance).toBytes();
-  const withdrawIx = await vault.methods
-    .withdrawConfidential(
-      new BN(withdrawAmount.toString()),
-      Array.from(newDecryptableBalance),
-    )
-    .accounts({
-      owner: bob.publicKey,
-      mint: wrappedMint,
-      tokenAccount: bobWrappedAccount,
-      equalityProofContext: withdrawEqualityContext,
-      rangeProofContext: withdrawRangeContext,
-      tokenProgram: TOKEN_2022_PROGRAM_ID,
-    })
-    .instruction();
-  await sendTx(connection, bob, [withdrawIx]);
-  log("withdrew to public balance", { amount: withdrawAmount.toString() });
-
-  // 10. Bob unwraps his freshly-withdrawn public wrapped balance.
-  const bobUnwrappedAccount = getAssociatedTokenAddressSync(
+  // 10. The employee unwraps what they disclosed back into the real asset.
+  const employeeUnwrappedAccount = getAssociatedTokenAddressSync(
     unwrappedMint.publicKey,
-    bob.publicKey,
+    employee.publicKey,
     false,
     TOKEN_2022_PROGRAM_ID,
   );
-  const unwrapIx = await vault.methods
-    .unwrapConfidential(new BN(withdrawAmount.toString()))
-    .accounts({
-      owner: bob.publicKey,
-      unwrappedMint: unwrappedMint.publicKey,
-      ownerUnwrappedTokenAccount: bobUnwrappedAccount,
-      escrow,
-      ownerWrappedTokenAccount: bobWrappedAccount,
-      unwrappedTokenProgram: TOKEN_2022_PROGRAM_ID,
-    })
-    .instruction();
-  await sendTx(connection, bob, [unwrapIx]);
+  await sendTx(connection, employee, [
+    await vault.methods
+      .unwrapConfidential(new BN(withdrawAmount.toString()))
+      .accounts({
+        owner: employee.publicKey,
+        unwrappedMint: unwrappedMint.publicKey,
+        ownerUnwrappedTokenAccount: employeeUnwrappedAccount,
+        escrow,
+        ownerWrappedTokenAccount: employeeWrappedAccount,
+        unwrappedTokenProgram: TOKEN_2022_PROGRAM_ID,
+      })
+      .instruction(),
+  ]);
   log("unwrapped back into the real asset", { amount: withdrawAmount.toString() });
 
-  // Final assertions, mirroring full_p2p_round_trip.rs.
-  const bobUnwrappedInfo = await connection.getAccountInfo(bobUnwrappedAccount);
-  const bobUnwrappedAmount = bobUnwrappedInfo!.data.readBigUInt64LE(64);
+  // Final assertions, mirroring full_payroll_round_trip.rs.
+  const employeeUnwrappedInfo = await connection.getAccountInfo(employeeUnwrappedAccount);
+  const employeeUnwrappedAmount = employeeUnwrappedInfo!.data.readBigUInt64LE(64);
   const escrowInfo = await connection.getAccountInfo(escrow);
   const escrowAmount = escrowInfo!.data.readBigUInt64LE(64);
-  const aliceBalanceAfter = await fetchDecryptedBalances(connection, aliceWrappedAccount, aliceAe);
-  const bobBalanceAfter = await fetchDecryptedBalances(connection, bobWrappedAccount, bobAe);
+  const treasuryAfter = await fetchDecryptedBalances(connection, treasuryTokenAccount, adminAe);
+  const employeeAfter = await fetchDecryptedBalances(connection, employeeWrappedAccount, employeeAe);
 
   log("FINAL STATE", {
-    "Bob's real-asset balance": `${bobUnwrappedAmount} (expected ${withdrawAmount})`,
+    "employee's real-asset balance": `${employeeUnwrappedAmount} (expected ${withdrawAmount})`,
     "escrow balance": `${escrowAmount} (expected ${wrapAmount - withdrawAmount})`,
-    "Alice's confidential balance": `${aliceBalanceAfter.available} (expected ${wrapAmount - transferAmount})`,
-    "Bob's confidential balance": `${bobBalanceAfter.available} (expected ${transferAmount - withdrawAmount})`,
+    "treasury confidential balance": `${treasuryAfter.available} (expected ${wrapAmount - payAmount})`,
+    "employee confidential balance": `${employeeAfter.available} (expected ${payAmount - withdrawAmount})`,
+    "auditor-decrypted payment": `${auditorAmount} (expected ${payAmount})`,
   });
 
   const ok =
-    bobUnwrappedAmount === withdrawAmount &&
+    employeeUnwrappedAmount === withdrawAmount &&
     escrowAmount === wrapAmount - withdrawAmount &&
-    aliceBalanceAfter.available === wrapAmount - transferAmount &&
-    bobBalanceAfter.available === transferAmount - withdrawAmount;
+    treasuryAfter.available === wrapAmount - payAmount &&
+    employeeAfter.available === payAmount - withdrawAmount &&
+    auditorAmount === payAmount;
 
-  console.log(ok ? "\n✅ round trip succeeded end to end" : "\n❌ round trip produced unexpected balances");
+  console.log(ok ? "\n✅ payroll round trip succeeded end to end" : "\n❌ payroll round trip produced unexpected results");
   process.exit(ok ? 0 : 1);
 }
 
 main().catch((err) => {
-  console.error("round trip failed:", err);
+  console.error("payroll round trip failed:", err);
   process.exit(1);
 });

@@ -139,7 +139,7 @@ After changing any instruction, account, event, error, or PDA seed:
   Keep logic testable independent of `Context` wiring. Don't collapse the split.
 - **Seeds** are named byte-string constants in `constants.rs` (`VAULT_SEED`, `WRAPPED_MINT_SEED`), never inline.
 - **Events** in `events.rs`, one struct per state-mutating instruction, emitted at the end of the
-  handler (not in the impl method). `TransferConfidentialEvent` deliberately omits `amount`;
+  handler (not in the impl method). `PayEmployeeEvent` carries no plaintext amount (only auditor ciphertexts);
   `WithdrawConfidentialEvent` includes it (the disclosure point). The `pay_employee` event carries
   the recipient and the amount **encrypted for the auditor** (never plaintext), so the auditor
   view can decrypt it (`PRODUCT.md` section 7.6, REQ07). Event names follow `<Instruction>Event` (`PayEmployeeEvent`, `WithdrawConfidentialEvent`, ...).
@@ -166,26 +166,25 @@ messages and test names. Don't add instructions outside this list without surfac
 instructions the client can already do directly. If code and PDF disagree on a name, fix the code (or fix
 both, deliberately).
 
-Codebase vs PDF right now: all 12 exist and are tested. `transfer_confidential` also exists in code but is
-**not** in the PDF; `pay_employee` supersedes it (same three-proof CPI, treasury as sender). Plan: delete it
-and move `tests/full_p2p_round_trip.rs` onto `pay_employee` (not done yet; pending the owner's go-ahead).
-`create_user_account`/`UserAccount` have been removed (employees are wallet-owned).
+Codebase vs PDF right now: all 12 exist and match the PDF's names, nothing extra. `create_user_account`/`UserAccount`
+and `transfer_confidential` have been removed (employees are wallet-owned; `pay_employee` replaced the
+wallet-signed transfer). Verified in litesvm and on a local surfpool validator.
 
 ## Current state (keep accurate, not aspirational; update when you finish something)
 
-### P2P primitives (Phase 0, done; no `Vault` involved)
+### Primitives without a `Vault` (Phase 0, done)
 
 | Instruction | Status |
 |---|---|
 | `create_confidential_account` | Done, tested. Wallet's own confidential account on any confidential mint. Reuses `ConfidentialAccountSetup` with `Authority::Signer`. |
 | `wrap_confidential` / `unwrap_confidential` | Done, tested. CPI into `token_wrap_compliance` Wrap/Unwrap (public balance only). CPI is **hand-built** (see lessons). |
-| `transfer_confidential` | Done, tested. 3 proofs (equality, ciphertext-validity, range) via context-state accounts, plain `invoke`. **Not in the PDF; to be replaced by `pay_employee`** (see above). |
 | `withdraw_confidential` | Done, tested. 2 proofs (equality, range). `amount` is plaintext on purpose (disclosure point). |
-| Full round trip | Proven in `tests/full_p2p_round_trip.rs`, and on local surfpool via the legacy TS `client/`. **Not run end-to-end on devnet through the app.** |
+| Full payroll round trip | Proven in `tests/full_payroll_round_trip.rs` (litesvm) **and on a local surfpool validator** via `client/src/roundTrip.ts`: wrap -> fund treasury -> pause blocks `pay_employee` -> resume -> pay -> auditor decrypts the event -> employee withdraws -> unwrap. **Not run on devnet or through the web app.** |
 
-Round-trip chain (current test): `create_confidential_account` -> `wrap_confidential` -> Token-2022
-`Deposit`/`ApplyPendingBalance` (client calls Token-2022 directly) -> `transfer_confidential` ->
-recipient `ApplyPendingBalance` -> `withdraw_confidential` -> `unwrap_confidential`.
+Round-trip chain (current test): `initialize_vault` -> `configure_treasury_account` -> `wrap_confidential` ->
+`fund_treasury` -> `deposit_confidential` -> `apply_treasury_pending` -> employee
+`create_confidential_account` -> `pay_employee` -> employee `ApplyPendingBalance` (Token-2022, direct) ->
+`withdraw_confidential` -> `unwrap_confidential`.
 
 ### Payroll instructions (Phase 1 plan; original numbering kept for continuity)
 
@@ -199,7 +198,7 @@ recipient `ApplyPendingBalance` -> `withdraw_confidential` -> `unwrap_confidenti
 | 6 | employee add/update/remove | **Cut** | Employee list is off-chain (`PRODUCT.md` decision 5). |
 | 7 | `fund_treasury` | Done, tested | Plain `transfer_checked`, permissionless. |
 | 8 | `deposit_confidential` / `apply_treasury_pending` | Done, tested | `invoke_signed` with vault seeds. |
-| 9 | `pay_employee` | Done, tested in litesvm (UC1, REQ01 to REQ07) | Signer == `Vault.authority` (REQ03, `Unauthorized`) is checked before `paused == false` (REQ02, `PayrollPaused`) because `admin` is declared before `vault`. Treasury -> one employee confidential `Transfer`, `invoke_signed` with vault seeds (REQ04), three context-state proofs (REQ05). `PayEmployeeEvent` carries the auditor ciphertexts lo/hi taken **from the instruction args** (Token-2022 requires them to match the validity-proof context, so no need to read the context account); the auditor recovers the amount as `lo + hi * 2^16`. `tests/pay_employee.rs` proves this by decrypting the event with the auditor's secret key. **Not yet run on surfpool/devnet.** |
+| 9 | `pay_employee` | Done, tested in litesvm and on surfpool (UC1, REQ01 to REQ07) | Signer == `Vault.authority` (REQ03, `Unauthorized`) is checked before `paused == false` (REQ02, `PayrollPaused`) because `admin` is declared before `vault`. Treasury -> one employee confidential `Transfer`, `invoke_signed` with vault seeds (REQ04), three context-state proofs (REQ05). `PayEmployeeEvent` carries the auditor ciphertexts lo/hi taken **from the instruction args** (Token-2022 requires them to match the validity-proof context, so no need to read the context account); the auditor recovers the amount as `lo + hi * 2^16`. `tests/pay_employee.rs` proves this by decrypting the event with the auditor's secret key. On surfpool the same decryption works against the burned demo auditor key (see `DEVNET_DEMO_AUDITOR_KEY.md`, whose secret is on record). **Not yet run on devnet.** |
 | 10 | `batch_pay` | **Client pipeline, not a monolithic instruction** (D3) | Lives in `web/`. On-chain you only need `pay_employee` (optionally a small `PayrollRun` state account for idempotency/resume if the team wants it). |
 | 11 | `employee_apply_pending` | **Not needed as a vault instruction** | Employee calls Token-2022 `ApplyPendingBalance` directly. |
 | 12 | payroll `withdraw_confidential` | **Not needed** (decision 9) | Existing P2P `withdraw_confidential` covers UC2 (REQ08 to REQ10); employees are wallet-owned. |
@@ -310,8 +309,8 @@ Full reasoning in `PRODUCT.md` section 7.4.
   `0.5.1` because its `solana-zk-sdk` requirement (`4.0.0`) matches the test suite's key material.
   `0.6.1` needs `solana-zk-sdk = "7.0.1"` and returns types from a different crate. Don't bump
   without re-checking. `bytemuck::bytes_of` is needed to get raw bytes out of Pod-only types.
-- **`transfer_confidential` only accepts the context-state-account form of `ProofLocation`**, because
-  the three proofs don't fit alongside the transfer. It doesn't close the context accounts; the
+- **`pay_employee` (and `withdraw_confidential`) only accept the context-state-account form of `ProofLocation`**,
+  because the proofs don't fit alongside the instruction. They don't close the context accounts; the
   client can call `CloseContextState` separately to reclaim rent.
 - **Combined tests catch what pairwise tests can't.** The full round trip surfaced the auditor-pubkey
   mismatch above immediately. Prefer an end-to-end test for any new multi-instruction flow.

@@ -4,6 +4,9 @@ export const VAULT_PROGRAM_ID = new PublicKey(
   "ELChxVFAiE5jv1SV3v3gprWeWxmbgX7ATWingW5VcB48",
 );
 
+/** Must match programs/vault/src/constants.rs's `VAULT_SEED`. */
+export const VAULT_SEED = Buffer.from("vault");
+
 /** Our fork of spl-token-wrap. See native_programs/token_wrap_compliance. */
 export const TOKEN_WRAP_COMPLIANCE_PROGRAM_ID = new PublicKey(
   "9tbZBdds8EuGX2Yb1yBYWtnA9UyhgxjfVCmgmfV5LPwV",
@@ -31,6 +34,16 @@ export const COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES = new Uint8Array([
   222, 190, 234, 244, 211, 116, 20, 149, 13, 226, 163, 56, 213, 99, 66, 118,
   14, 22, 25, 233, 104, 118, 24, 71, 176, 183, 206, 180, 240, 123, 133, 105,
 ]);
+
+/**
+ * The demo auditor's ElGamal SECRET key, from
+ * native_programs/token_wrap_compliance/DEVNET_DEMO_AUDITOR_KEY.md. That file
+ * already treats it as burned/public: it exists so tests can decrypt
+ * `pay_employee`'s auditor ciphertext. Never use it for anything real.
+ */
+export const DEMO_AUDITOR_ELGAMAL_SECRET_BYTES = new Uint8Array(
+  Buffer.from("BQcR8z8/68cC38HkN2p+8/nh4vGCyreXBo3Q5E0xFwg=", "base64"),
+);
 
 /** Circle's official devnet USDC mint (classic SPL Token program). */
 export const DEVNET_USDC_MINT = new PublicKey(

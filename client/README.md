@@ -1,11 +1,12 @@
 # vault-client
 
-A TS client proving the P2P confidential-transfer round trip end to end
-against a real (local) validator, not just litesvm:
-`create_confidential_account` → `wrap_confidential` → `Deposit`/
-`ApplyPendingBalance` → `transfer_confidential` → `withdraw_confidential` →
-`unwrap_confidential`. Mirrors
-`programs/vault/tests/full_p2p_round_trip.rs` step for step.
+A TS client proving the confidential payroll round trip end to end against a
+real (local) validator, not just litesvm: `initialize_vault` →
+`configure_treasury_account` → `wrap_confidential` → `fund_treasury` →
+`deposit_confidential` → `apply_treasury_pending` → `pause_payroll` (blocks
+`pay_employee`) → `resume_payroll` → `pay_employee` (the auditor decrypts the
+amount from the event) → `withdraw_confidential` → `unwrap_confidential`.
+Mirrors `programs/vault/tests/full_payroll_round_trip.rs` step for step.
 
 ## Prerequisites
 
@@ -81,7 +82,7 @@ non-zero if anything doesn't match.
   style from the rest of this script (web3.js + Anchor); hand-building two
   small, well-understood instructions avoided pulling in a second SDK.
 - **`src/lib/confidentialTransferProofs.ts`**: the actual proof composition
-  for `transfer_confidential` (equality, ciphertext-validity, range) and
+  for `pay_employee`'s transfer proofs (equality, ciphertext-validity, range) and
   `withdraw_confidential` (equality, range), mirroring
   `spl-token-confidential-transfer-proof-generation`'s Rust logic (which
   this project's Rust test suite depends on directly -- no TS equivalent of

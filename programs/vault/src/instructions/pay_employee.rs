@@ -15,8 +15,8 @@ use crate::{error::VaultError, events::PayEmployeeEvent, Vault, VAULT_SEED};
 /// `vault` (`paused` must be false, REQ02).
 ///
 /// The treasury's Token-2022 owner is the vault PDA, so the `Transfer` CPI
-/// needs `invoke_signed` with the vault's seeds (REQ04), unlike the
-/// wallet-signed `transfer_confidential`.
+/// needs `invoke_signed` with the vault's seeds (REQ04); a wallet-owned
+/// source account would use a plain `invoke` instead.
 ///
 /// Proofs (equality, ciphertext-validity, range) are generated client-side
 /// and referenced as three context-state accounts (REQ05); the proofs don't

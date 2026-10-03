@@ -17,8 +17,8 @@ use spl_token_2022_interface::{
 };
 
 /// The disclosure half of the round trip: fund a confidential available
-/// balance (plain `MintTo` -> `Deposit` -> `ApplyPendingBalance`, same
-/// wallet-signed pattern as `transfer_confidential`'s test), then withdraw
+/// balance (plain `MintTo` -> `Deposit` -> `ApplyPendingBalance`, wallet-signed, no
+/// vault instruction involved), then withdraw
 /// part of it back into the public balance. Confirms both the public
 /// balance (plaintext, since Withdraw deliberately discloses `amount`) and
 /// the remaining confidential balance (decrypted with the owner's own AES

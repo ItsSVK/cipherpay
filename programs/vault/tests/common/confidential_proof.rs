@@ -1,5 +1,5 @@
 //! Client-side proof generation and context-state-account bootstrap for
-//! `transfer_confidential`'s three proofs (equality, ciphertext-validity,
+//! `pay_employee`'s three transfer proofs (equality, ciphertext-validity,
 //! range) and `withdraw_confidential`'s two (equality, range).
 //!
 //! Unlike the single small `VerifyPubkeyValidity` proof used elsewhere in
@@ -65,7 +65,7 @@ pub fn compliance_auditor_elgamal_pubkey() -> ElGamalPubkey {
         .expect("compliance auditor pubkey bytes should be a valid ElGamalPubkey")
 }
 
-/// Everything `transfer_confidential` needs, once the three transactions
+/// Everything `pay_employee` needs, once the three transactions
 /// built by [`setup_transfer_proof_contexts`] have all landed.
 pub struct TransferProofContexts {
     pub equality_context: Address,

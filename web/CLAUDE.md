@@ -221,14 +221,13 @@ server-side against the stored state.
 
 - This app **does not exist yet** (the `web/` folder holds only this file). `../client/` was proven only
   against local surfpool. Real devnet transactions from this app are Phase 1 work.
-- `pay_employee`, `pause_payroll`, and `resume_payroll` do not exist on-chain yet (auditor rotation is a
-  direct Token-2022 call, not a vault instruction); see `../CLAUDE.md`. The vault's instruction set is the
+- All 12 vault instructions now exist and are tested on-chain, including `pay_employee`, `pause_payroll` and
+  `resume_payroll` (auditor rotation is a direct Token-2022 call, not a vault instruction); see `../CLAUDE.md`. The vault's instruction set is the
   12 names in the architecture PDF: `initialize_vault`, `configure_treasury_account`, `fund_treasury`,
   `deposit_confidential`, `apply_treasury_pending`, `create_confidential_account`, `wrap_confidential`,
   `unwrap_confidential`, `withdraw_confidential` exist; `pay_employee`, `pause_payroll`, `resume_payroll`
   are coming. Build the UI and pipeline against the existing ones and stub the rest behind a clear
-  interface. Don't build against `transfer_confidential`: it is a temporary reference that `pay_employee`
-  replaces, and it will be deleted. `create_user_account` no longer exists.
+  interface. `transfer_confidential` and `create_user_account` no longer exist.
 - Decided: employee accounts are wallet-owned, signers pay their own fees, one admin is both
   approver and signer, pause blocks only `pay_employee`. Open decisions that affect this half: D2
   (auditor scope), D3 (batch design), D5 (key-derivation UX), D6 (off-chain store). See
