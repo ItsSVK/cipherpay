@@ -41,6 +41,7 @@ solana-instruction = "3.0.0"
 solana-zk-sdk = "4.0.0"
 spl-token-confidential-transfer-proof-generation = "0.5.1"
 bytemuck = "1.19"
+base64 = "0.22"
 
 
 [lints.rust]

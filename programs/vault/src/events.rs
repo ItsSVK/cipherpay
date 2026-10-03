@@ -86,3 +86,29 @@ pub struct WithdrawConfidentialEvent {
     pub token_account: Pubkey,
     pub amount: u64,
 }
+
+/// Emitted by `pay_employee`. Deliberately has no plaintext amount: the amount
+/// appears only as its two auditor-encrypted halves (lo 16 bits, hi 32 bits),
+/// which the auditor decrypts and recombines as `lo + hi * 2^16`.
+#[event]
+pub struct PayEmployeeEvent {
+    pub vault: Pubkey,
+    pub employee: Pubkey,
+    pub employee_token_account: Pubkey,
+    pub auditor_ciphertext_lo: [u8; 64],
+    pub auditor_ciphertext_hi: [u8; 64],
+}
+
+/// Emitted by `pause_payroll`.
+#[event]
+pub struct PausePayrollEvent {
+    pub vault: Pubkey,
+    pub admin: Pubkey,
+}
+
+/// Emitted by `resume_payroll`.
+#[event]
+pub struct ResumePayrollEvent {
+    pub vault: Pubkey,
+    pub admin: Pubkey,
+}

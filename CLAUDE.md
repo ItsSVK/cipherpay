@@ -166,10 +166,9 @@ messages and test names. Don't add instructions outside this list without surfac
 instructions the client can already do directly. If code and PDF disagree on a name, fix the code (or fix
 both, deliberately).
 
-Codebase vs PDF right now: `pay_employee`, `pause_payroll`, `resume_payroll` are not written yet.
-`transfer_confidential` exists in code but is **not** in the PDF; `pay_employee` supersedes it (same
-three-proof CPI, treasury as sender). Plan: delete it once `pay_employee` is built and tested, and move
-`tests/full_p2p_round_trip.rs` onto `pay_employee`. Until then it is the tested reference for the CPI.
+Codebase vs PDF right now: all 12 exist and are tested. `transfer_confidential` also exists in code but is
+**not** in the PDF; `pay_employee` supersedes it (same three-proof CPI, treasury as sender). Plan: delete it
+and move `tests/full_p2p_round_trip.rs` onto `pay_employee` (not done yet; pending the owner's go-ahead).
 `create_user_account`/`UserAccount` have been removed (employees are wallet-owned).
 
 ## Current state (keep accurate, not aspirational; update when you finish something)
@@ -196,11 +195,11 @@ recipient `ApplyPendingBalance` -> `withdraw_confidential` -> `unwrap_confidenti
 | 2 | `create_user_account` | **Removed** | PDA-owned employee account, deleted: employees are wallet-owned (decision 9). |
 | 3 | `configure_treasury_account` | Done, tested | Treasury owner = vault PDA (`invoke_signed`); decrypt authority = admin's ElGamal key. |
 | 4 | `update_auditor_key` | **Not a vault instruction** | Rotation is a direct Token-2022 `UpdateMint` signed by the mint's confidential-transfer authority (deployer wallet), done from a script or client, not a vault CPI (REQ21, roadmap). |
-| 5 | `pause_payroll` / `resume_payroll` | **Phase 1** (UC3, REQ11, REQ12) | Flag flip on `Vault.paused`, authority-only, guard in `pay_employee` only. Withdrawals stay open on purpose. |
+| 5 | `pause_payroll` / `resume_payroll` | Done, tested (UC3, REQ11, REQ12) | Flag flip on `Vault.paused`, authority-only (`Unauthorized` otherwise), idempotent. Guard lives in `pay_employee` only; withdrawals stay open on purpose. Tests: `tests/pause_payroll.rs`. |
 | 6 | employee add/update/remove | **Cut** | Employee list is off-chain (`PRODUCT.md` decision 5). |
 | 7 | `fund_treasury` | Done, tested | Plain `transfer_checked`, permissionless. |
 | 8 | `deposit_confidential` / `apply_treasury_pending` | Done, tested | `invoke_signed` with vault seeds. |
-| 9 | `pay_employee` | **Phase 1, critical path** (UC1, REQ01 to REQ07) | Checks signer == `Vault.authority` (REQ03) then `paused == false` (REQ02); treasury -> one recipient confidential `Transfer`, `invoke_signed` with vault seeds; emits an event with the auditor-encrypted amount. Reuse `transfer_confidential`'s account model and CPI logic. |
+| 9 | `pay_employee` | Done, tested in litesvm (UC1, REQ01 to REQ07) | Signer == `Vault.authority` (REQ03, `Unauthorized`) is checked before `paused == false` (REQ02, `PayrollPaused`) because `admin` is declared before `vault`. Treasury -> one employee confidential `Transfer`, `invoke_signed` with vault seeds (REQ04), three context-state proofs (REQ05). `PayEmployeeEvent` carries the auditor ciphertexts lo/hi taken **from the instruction args** (Token-2022 requires them to match the validity-proof context, so no need to read the context account); the auditor recovers the amount as `lo + hi * 2^16`. `tests/pay_employee.rs` proves this by decrypting the event with the auditor's secret key. **Not yet run on surfpool/devnet.** |
 | 10 | `batch_pay` | **Client pipeline, not a monolithic instruction** (D3) | Lives in `web/`. On-chain you only need `pay_employee` (optionally a small `PayrollRun` state account for idempotency/resume if the team wants it). |
 | 11 | `employee_apply_pending` | **Not needed as a vault instruction** | Employee calls Token-2022 `ApplyPendingBalance` directly. |
 | 12 | payroll `withdraw_confidential` | **Not needed** (decision 9) | Existing P2P `withdraw_confidential` covers UC2 (REQ08 to REQ10); employees are wallet-owned. |

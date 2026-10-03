@@ -288,8 +288,10 @@ Option chosen: the run history plus an event ciphertext.
 1. The client stores the **transaction signature per recipient** in the off-chain run history
    (REQ25).
 2. `pay_employee` emits an event that carries the amount **encrypted for the auditor** (read from
-   the ciphertext-validity context account), never the plaintext. Confirm the exact source of
-   those bytes while building.
+   the ciphertext-validity context account), never the plaintext. Built: the bytes come from the
+   instruction arguments (`transfer_amount_auditor_ciphertext_lo`/`_hi`), which Token-2022 requires to match the
+   ciphertext-validity context, so the event cannot differ from what was proven. The amount is
+   `lo + hi * 2^16`.
 3. The auditor view fetches each recorded transaction by signature and decrypts the ciphertext
    with the auditor secret (REQ26).
 

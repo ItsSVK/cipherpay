@@ -9,6 +9,8 @@ use solana_keypair::Keypair;
 use solana_message::{Message, VersionedMessage};
 use solana_signer::Signer;
 use solana_transaction::versioned::VersionedTransaction;
+use solana_zk_sdk::encryption::elgamal::ElGamalPubkey;
+use solana_zk_sdk_pod::encryption::elgamal::PodElGamalPubkey;
 use spl_token_2022_interface::{
     extension::{confidential_transfer, ExtensionType},
     instruction::{initialize_account3, initialize_mint2, mint_to},
@@ -25,6 +27,21 @@ pub fn create_confidential_mint(
     mint: &Keypair,
     decimals: u8,
     mint_authority: Address,
+) -> Address {
+    create_confidential_mint_with_auditor(svm, payer, mint, decimals, mint_authority, None)
+}
+
+/// Same as [`create_confidential_mint`], but registers `auditor` as the mint's
+/// auditor ElGamal pubkey -- like a `token_wrap_compliance`-created mint. Every
+/// transfer proof against this mint must then be built with the same auditor
+/// pubkey, and the auditor can decrypt each transfer amount.
+pub fn create_confidential_mint_with_auditor(
+    svm: &mut LiteSVM,
+    payer: &Keypair,
+    mint: &Keypair,
+    decimals: u8,
+    mint_authority: Address,
+    auditor: Option<&ElGamalPubkey>,
 ) -> Address {
     let mint_len = ExtensionType::try_calculate_account_len::<TokenMintState>(&[
         ExtensionType::ConfidentialTransferMint,
@@ -48,7 +65,7 @@ pub fn create_confidential_mint(
         &mint.pubkey(),
         Some(mint_authority),
         true,
-        None,
+        auditor.map(|pubkey| PodElGamalPubkey::from(<[u8; 32]>::from(*pubkey))),
     )
     .expect("failed to build confidential transfer InitializeMint instruction");
 

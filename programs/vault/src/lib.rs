@@ -104,6 +104,32 @@ pub mod vault {
         )
     }
 
+    /// UC1 (REQ01 to REQ07): pays one employee from the encrypted treasury.
+    /// See `instructions/pay_employee.rs`.
+    pub fn pay_employee(
+        ctx: Context<PayEmployee>,
+        new_source_decryptable_available_balance: [u8; 36],
+        transfer_amount_auditor_ciphertext_lo: [u8; 64],
+        transfer_amount_auditor_ciphertext_hi: [u8; 64],
+    ) -> Result<()> {
+        crate::instructions::pay_employee::handle_pay_employee(
+            ctx,
+            new_source_decryptable_available_balance,
+            transfer_amount_auditor_ciphertext_lo,
+            transfer_amount_auditor_ciphertext_hi,
+        )
+    }
+
+    /// UC3 (REQ11): blocks `pay_employee`; withdrawals stay open.
+    pub fn pause_payroll(ctx: Context<PausePayroll>) -> Result<()> {
+        crate::instructions::pause_payroll::handle_pause_payroll(ctx)
+    }
+
+    /// REQ12: reverses `pause_payroll`.
+    pub fn resume_payroll(ctx: Context<ResumePayroll>) -> Result<()> {
+        crate::instructions::resume_payroll::handle_resume_payroll(ctx)
+    }
+
     pub fn apply_treasury_pending(
         ctx: Context<ApplyTreasuryPending>,
         expected_pending_balance_credit_counter: u64,

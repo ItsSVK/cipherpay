@@ -8,4 +8,6 @@ pub enum VaultError {
     TreasuryAlreadyConfigured,
     #[msg("The vault's treasury account has not been configured yet")]
     TreasuryNotConfigured,
+    #[msg("Payroll is paused for this vault")]
+    PayrollPaused,
 }

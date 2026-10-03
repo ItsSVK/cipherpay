@@ -1,7 +1,10 @@
 //! Builds and sends the vault program's own instructions.
 
 use anchor_lang::{InstructionData, ToAccountMetas};
-use litesvm::{types::TransactionMetadata, LiteSVM};
+use litesvm::{
+    types::{FailedTransactionMetadata, TransactionMetadata},
+    LiteSVM,
+};
 use solana_address::Address;
 use solana_instruction::Instruction;
 use solana_keypair::Keypair;
@@ -16,13 +19,14 @@ use crate::common::{
 };
 
 /// Signs `instructions` with `payer` plus `extra_signers` and sends the
-/// transaction, panicking (with the simulation logs) if it fails.
-pub fn send(
+/// transaction, returning the failure instead of panicking -- for tests that
+/// assert an instruction is rejected.
+pub fn try_send(
     svm: &mut LiteSVM,
     instructions: &[Instruction],
     payer: &Keypair,
     extra_signers: &[&Keypair],
-) -> TransactionMetadata {
+) -> Result<TransactionMetadata, FailedTransactionMetadata> {
     let blockhash = svm.latest_blockhash();
     let message = Message::new_with_blockhash(instructions, Some(&payer.pubkey()), &blockhash);
 
@@ -33,7 +37,16 @@ pub fn send(
         .expect("failed to sign transaction");
 
     svm.send_transaction(tx)
-        .expect("vault instruction failed")
+}
+
+/// Like [`try_send`], but panics (with the simulation logs) if it fails.
+pub fn send(
+    svm: &mut LiteSVM,
+    instructions: &[Instruction],
+    payer: &Keypair,
+    extra_signers: &[&Keypair],
+) -> TransactionMetadata {
+    try_send(svm, instructions, payer, extra_signers).expect("vault instruction failed")
 }
 
 /// Builds the `initialize_vault` instruction. Returns it alongside the vault PDA
@@ -650,4 +663,87 @@ pub fn unwrap_confidential(
         &to_anchor_pubkey(unwrapped_mint),
         &to_anchor_pubkey(unwrapped_token_program),
     ))
+}
+
+/// Builds the `pay_employee` instruction, referencing three already-populated
+/// proof context-state accounts (see
+/// `confidential_proof::setup_transfer_proof_contexts`).
+#[allow(clippy::too_many_arguments)]
+pub fn build_pay_employee_ix(
+    admin: &Keypair,
+    vault: Address,
+    mint: Address,
+    treasury_token_account: Address,
+    employee_token_account: Address,
+    equality_proof_context: Address,
+    ciphertext_validity_proof_context: Address,
+    range_proof_context: Address,
+    token_program: Address,
+    new_source_decryptable_available_balance: [u8; 36],
+    transfer_amount_auditor_ciphertext_lo: [u8; 64],
+    transfer_amount_auditor_ciphertext_hi: [u8; 64],
+) -> Instruction {
+    let accounts = vault::accounts::PayEmployee {
+        admin: to_anchor_pubkey(admin.pubkey()),
+        vault: to_anchor_pubkey(vault),
+        mint: to_anchor_pubkey(mint),
+        treasury_token_account: to_anchor_pubkey(treasury_token_account),
+        employee_token_account: to_anchor_pubkey(employee_token_account),
+        equality_proof_context: to_anchor_pubkey(equality_proof_context),
+        ciphertext_validity_proof_context: to_anchor_pubkey(ciphertext_validity_proof_context),
+        range_proof_context: to_anchor_pubkey(range_proof_context),
+        token_program: to_anchor_pubkey(token_program),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::PayEmployee {
+            new_source_decryptable_available_balance,
+            transfer_amount_auditor_ciphertext_lo,
+            transfer_amount_auditor_ciphertext_hi,
+        }
+        .data(),
+    }
+}
+
+/// Builds the `pause_payroll` instruction.
+pub fn build_pause_payroll_ix(admin: &Keypair, vault: Address) -> Instruction {
+    let accounts = vault::accounts::PausePayroll {
+        admin: to_anchor_pubkey(admin.pubkey()),
+        vault: to_anchor_pubkey(vault),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::PausePayroll {}.data(),
+    }
+}
+
+/// Sends `pause_payroll`.
+pub fn pause_payroll(svm: &mut LiteSVM, admin: &Keypair, vault: Address) {
+    send(svm, &[build_pause_payroll_ix(admin, vault)], admin, &[]);
+}
+
+/// Builds the `resume_payroll` instruction.
+pub fn build_resume_payroll_ix(admin: &Keypair, vault: Address) -> Instruction {
+    let accounts = vault::accounts::ResumePayroll {
+        admin: to_anchor_pubkey(admin.pubkey()),
+        vault: to_anchor_pubkey(vault),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::ResumePayroll {}.data(),
+    }
+}
+
+/// Sends `resume_payroll`.
+pub fn resume_payroll(svm: &mut LiteSVM, admin: &Keypair, vault: Address) {
+    send(svm, &[build_resume_payroll_ix(admin, vault)], admin, &[]);
 }
