@@ -18,8 +18,7 @@ use crate::{
 ///
 /// Only moves value out of the wrapped mint's *public* balance. Unwrapping
 /// out of a *confidential* balance needs a `Withdraw` first (equality +
-/// range proof) -- that's separate, not-yet-built proof plumbing (see
-/// `PRODUCT.md` §11); this instruction assumes the caller already has a
+/// range proof) -- that's `withdraw_confidential`; this instruction assumes the caller already has a
 /// public wrapped balance to unwrap (e.g. straight from `wrap_confidential`,
 /// or a public wrapped-token transfer they received directly).
 ///

@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[event]
-pub struct InitializeEvent {
+pub struct InitializeVaultEvent {
     pub vault: Pubkey,
     pub admin: Pubkey,
     pub mint: Pubkey,
@@ -33,7 +33,7 @@ pub struct ApplyTreasuryPendingEvent {
 
 /// Emitted by `create_confidential_account` -- deliberately has no `vault`
 /// field, unlike every event above it. This is the P2P-transfer primitive
-/// (`PRODUCT.md` §1/§11): a wallet setting up its own confidential account
+/// (`PRODUCT.md` §4, Phase 0 primitives): a wallet setting up its own confidential account
 /// for a mint, with no vault/treasury/employee relationship involved at all.
 #[event]
 pub struct CreateConfidentialAccountEvent {
@@ -77,7 +77,7 @@ pub struct TransferConfidentialEvent {
 
 /// Emitted by `withdraw_confidential`. Unlike `TransferConfidentialEvent`,
 /// `amount` is included here on purpose -- Withdraw is the deliberate
-/// disclosure point in this design (`PRODUCT.md` §4.4), not something to
+/// disclosure point in this design (`PRODUCT.md` §7.4), not something to
 /// obscure.
 #[event]
 pub struct WithdrawConfidentialEvent {

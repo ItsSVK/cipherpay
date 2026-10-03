@@ -11,8 +11,7 @@ use solana_signer::Signer;
 
 /// The confidential P2P transfer primitive: a wallet sets up its own
 /// confidential account for a mint with no `initialize_vault` step, no
-/// `Vault`, and no bookkeeping PDA at all -- unlike `create_user_account`,
-/// which requires an existing vault.
+/// `Vault`, and no bookkeeping PDA at all.
 #[test]
 fn create_confidential_account_needs_no_vault_at_all() {
     let mut svm = setup_svm();
@@ -20,7 +19,7 @@ fn create_confidential_account_needs_no_vault_at_all() {
     let mint_authority = funded_keypair(&mut svm);
     let mint_keypair = Keypair::new();
 
-    // Note: no `ix::initialize` call anywhere in this test -- that's the
+    // Note: no `ix::initialize_vault` call anywhere in this test -- that's the
     // whole point.
     let mint = mint::create_confidential_mint(
         &mut svm,

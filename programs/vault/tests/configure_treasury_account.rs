@@ -17,7 +17,7 @@ fn configure_treasury_account_sets_up_a_pda_owned_confidential_account() {
     let mint_keypair = Keypair::new();
 
     let mint = mint::create_confidential_mint(&mut svm, &admin, &mint_keypair, 6, admin.pubkey());
-    let vault_address = ix::initialize(&mut svm, &admin, mint);
+    let vault_address = ix::initialize_vault(&mut svm, &admin, mint);
 
     let keys = ConfidentialKeys::new_rand();
     let token_program = spl_token_2022_interface::ID;
@@ -68,7 +68,7 @@ fn configure_treasury_account_rejects_a_non_admin_caller() {
     let mint_keypair = Keypair::new();
 
     let mint = mint::create_confidential_mint(&mut svm, &admin, &mint_keypair, 6, admin.pubkey());
-    let vault_address = ix::initialize(&mut svm, &admin, mint);
+    let vault_address = ix::initialize_vault(&mut svm, &admin, mint);
 
     let keys = ConfidentialKeys::new_rand();
     let token_program = spl_token_2022_interface::ID;

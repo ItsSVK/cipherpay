@@ -3,10 +3,10 @@ use anchor_spl::token_2022::ID as TOKEN_2022_PROGRAM_ID;
 use anchor_spl::token_interface::Mint;
 use confidential_token_helpers::assert_confidential_transfer_enabled;
 
-use crate::{constants::*, events::InitializeEvent, state::Vault};
+use crate::{constants::*, events::InitializeVaultEvent, state::Vault};
 
 #[derive(Accounts)]
-pub struct Initialize<'info> {
+pub struct InitializeVault<'info> {
     #[account(mut)]
     pub admin: Signer<'info>,
     #[account(
@@ -24,12 +24,11 @@ pub struct Initialize<'info> {
     pub system_program: Program<'info, System>,
 }
 
-impl<'info> Initialize<'info> {
-    fn initialize(&mut self, bumps: InitializeBumps) -> Result<()> {
+impl<'info> InitializeVault<'info> {
+    fn initialize_vault(&mut self, bumps: InitializeVaultBumps) -> Result<()> {
         self.vault.set_inner(Vault {
             authority: self.admin.key(),
             mint: self.mint.key(),
-            auditor_elgamal_pubkey: None,
             bump: bumps.vault,
             paused: false,
             treasury_token_account: Pubkey::default(),
@@ -40,12 +39,12 @@ impl<'info> Initialize<'info> {
     }
 }
 
-pub fn handle_initialize(ctx: Context<Initialize>) -> Result<()> {
+pub fn handle_initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
     assert_confidential_transfer_enabled(&ctx.accounts.mint.to_account_info())?;
 
-    ctx.accounts.initialize(ctx.bumps)?;
+    ctx.accounts.initialize_vault(ctx.bumps)?;
 
-    emit!(InitializeEvent {
+    emit!(InitializeVaultEvent {
         vault: ctx.accounts.vault.key(),
         admin: ctx.accounts.admin.key(),
         mint: ctx.accounts.mint.key(),

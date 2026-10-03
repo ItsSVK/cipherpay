@@ -11,15 +11,13 @@ use solana_instructions_sysvar as sysvar_instructions;
 
 use crate::events::CreateConfidentialAccountEvent;
 
-/// The confidential P2P transfer primitive (`PRODUCT.md` §1/§11): sets up a
+/// The confidential P2P transfer primitive (`PRODUCT.md` §4, Phase 0 primitives): sets up a
 /// confidential Token-2022 account for `owner`'s own wallet on any
-/// confidential-transfer-enabled mint -- no `Vault`, no `UserAccount`, no
-/// treasury/employee relationship of any kind. Deliberately the
-/// vault-agnostic sibling of `create_user_account` (which layers vault
-/// membership bookkeeping on top of the same underlying CPI sequence for
-/// the payroll product).
+/// confidential-transfer-enabled mint -- no `Vault`, no
+/// treasury/employee relationship of any kind. Employees use this to
+/// activate their own wallet-owned account (`PRODUCT.md`, decision 9).
 ///
-/// Unlike `create_user_account`/`configure_treasury_account`, there's no
+/// Unlike `configure_treasury_account`, there's no
 /// separate bookkeeping account here at all: the Token-2022 account itself
 /// (its `ConfidentialTransferAccount` extension already stores the
 /// registered ElGamal pubkey) is the complete state. Nothing needs tracking
@@ -56,8 +54,8 @@ pub struct CreateConfidentialAccount<'info> {
 
 impl<'info> CreateConfidentialAccount<'info> {
     /// The owner's own wallet owns the token account directly -- a plain
-    /// `Signer` authority, same as `create_user_account`'s pattern (not the
-    /// treasury's PDA-authority one).
+    /// `Signer` authority, unlike the treasury's PDA-authority
+    /// setup in `configure_treasury_account`.
     fn account_setup(&self) -> ConfidentialAccountSetup<'_, 'info> {
         ConfidentialAccountSetup {
             payer: self.owner.as_ref(),

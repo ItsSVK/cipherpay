@@ -17,33 +17,20 @@ declare_id!("ELChxVFAiE5jv1SV3v3gprWeWxmbgX7ATWingW5VcB48");
 pub mod vault {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        crate::instructions::initialize::handle_initialize(ctx)
+    pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
+        crate::instructions::initialize_vault::handle_initialize_vault(ctx)
     }
 
     /// Confidential P2P transfer primitive: sets up a confidential
     /// Token-2022 account for the caller's own wallet, on any
     /// confidential-transfer-enabled mint. No `Vault` involved -- see
-    /// `PRODUCT.md` §1/§11 for why this instruction exists separately from
-    /// `create_user_account` below rather than reusing it.
+    /// `PRODUCT.md` decision 9: employees' accounts are wallet-owned, set up with this.
     pub fn create_confidential_account(
         ctx: Context<CreateConfidentialAccount>,
         elgamal_pubkey: [u8; 32],
         decryptable_zero_balance: [u8; 36],
     ) -> Result<()> {
         crate::instructions::create_confidential_account::handle_create_confidential_account(
-            ctx,
-            elgamal_pubkey,
-            decryptable_zero_balance,
-        )
-    }
-
-    pub fn create_user_account(
-        ctx: Context<CreateUserAccount>,
-        elgamal_pubkey: [u8; 32],
-        decryptable_zero_balance: [u8; 36],
-    ) -> Result<()> {
-        crate::instructions::create_user_account::handle_create_user_account(
             ctx,
             elgamal_pubkey,
             decryptable_zero_balance,
@@ -73,7 +60,7 @@ pub mod vault {
     /// Moves a real asset (e.g. USDC) into its wrapped, confidential-
     /// transfer-capable Token-2022 representation via CPI into
     /// `native_programs/token_wrap_compliance`. No `Vault` involved -- see
-    /// `PRODUCT.md` §1/§11.
+    /// `PRODUCT.md` §4 (Phase 0 primitives).
     pub fn wrap_confidential(ctx: Context<WrapConfidential>, amount: u64) -> Result<()> {
         crate::instructions::wrap_confidential::handle_wrap_confidential(ctx, amount)
     }

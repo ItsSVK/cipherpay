@@ -10,7 +10,7 @@ use crate::events::WithdrawConfidentialEvent;
 /// Moves `amount` from the caller's confidential *available* balance back
 /// into their ordinary public balance. Unlike `transfer_confidential`,
 /// `amount` here is a plain, public argument -- Withdraw is the deliberate
-/// disclosure point in this design (see `PRODUCT.md` §4.4 / `CLAUDE.md`'s
+/// disclosure point in this design (see `PRODUCT.md` §7.4 / `CLAUDE.md`'s
 /// "Design decision: disclosure control, not anti-correlation"). Nothing
 /// here should try to hide or pad `amount`; that's explicitly out of scope
 /// for this project.

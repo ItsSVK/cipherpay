@@ -17,8 +17,8 @@ use crate::{
 /// `native_programs/token_wrap_compliance` (our fork of spl-token-wrap with
 /// a compliance-focused mint customizer). This only credits the wrapped
 /// mint's *public* balance -- moving it into a confidential balance from
-/// there is a separate step (not yet built for the P2P path; see
-/// `PRODUCT.md` §11).
+/// there is a separate step the client does directly via Token-2022's
+/// `Deposit`/`ApplyPendingBalance` (no vault instruction needed).
 ///
 /// Assumes `wrapped_mint` already exists: `token_wrap_compliance`'s
 /// `CreateMint` is a one-time, per-(unwrapped_mint, wrapped_token_program)

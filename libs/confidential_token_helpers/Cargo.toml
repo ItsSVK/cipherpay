@@ -1,7 +1,7 @@
 [package]
 name = "confidential-token-helpers"
 version = "0.1.0"
-description = "Internal, Anchor-flavored helpers for setting up Token-2022 confidential-transfer accounts -- shared between vault's create_user_account/configure_treasury_account and any future confidential P2P transfer instructions. Not published; scoped to this workspace's own reuse, not external consumption."
+description = "Internal, Anchor-flavored helpers for setting up Token-2022 confidential-transfer accounts -- shared between vault's create_confidential_account/configure_treasury_account and any future confidential P2P transfer instructions. Not published; scoped to this workspace's own reuse, not external consumption."
 edition.workspace = true
 rust-version.workspace = true
 

@@ -65,7 +65,7 @@ pub const CONFIDENTIAL_TRANSFER_AUTHORITY: Pubkey = DEPLOYER_WALLET;
 /// `DEVNET_DEMO_AUDITOR_KEY.md` at the crate root before creating any mint
 /// with this customizer that you intend to keep. It is **not** derived from
 /// `DEPLOYER_WALLET` (or anyone's wallet) the way every other ElGamal key in
-/// this project is (per `PRODUCT.md` §4.2) -- replace it with a real,
+/// this project is (per `PRODUCT.md` §7.2) -- replace it with a real,
 /// wallet-derived key before this leaves "demo" status.
 pub const AUDITOR_ELGAMAL_PUBKEY_B64: &str = "3r7q9NN0FJUN4qM41WNCdg4WGelodhhHsLfOtPB7hWk=";
 

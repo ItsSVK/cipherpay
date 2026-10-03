@@ -66,10 +66,8 @@ impl<'a, 'info> Authority<'a, 'info> {
 /// The create -> reallocate -> configure sequence every confidential
 /// Token-2022 account needs, since Anchor's `#[account(init, ...)]` sugar
 /// can't allocate `ConfidentialTransferAccount` extension space. Extracted
-/// from `vault`'s `create_user_account` (authority = the user's own wallet)
-/// and `configure_treasury_account` (authority = the vault PDA) once a third
-/// context needing it (a P2P transfer account) made the duplication real
-/// rather than theoretical.
+/// from `vault`'s `create_confidential_account` (authority = the user's own
+/// wallet) and `configure_treasury_account` (authority = the vault PDA).
 pub struct ConfidentialAccountSetup<'a, 'info> {
     /// Funds rent for account creation and the extension-space reallocation.
     /// Not necessarily the same account as `authority` -- e.g. an admin can

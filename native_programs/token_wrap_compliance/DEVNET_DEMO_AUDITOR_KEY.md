@@ -12,7 +12,7 @@ Before this program is used for anything beyond a local/devnet demo:
    role? see the open question in the handoff notes).
 2. Derive their ElGamal keypair the same way the rest of this project does —
    from a wallet signature (`deriveElGamalKeypairForOwnerMint`-style, per
-   `PRODUCT.md` §4.2) — **not** by randomly generating one like this.
+   `PRODUCT.md` §7.2) — **not** by randomly generating one like this.
 3. Replace `AUDITOR_ELGAMAL_PUBKEY_B64` in `src/mint_customizer/compliance.rs`
    with that real, wallet-derived public key.
 4. Since `CreateMint` bakes the auditor key in at mint-creation time

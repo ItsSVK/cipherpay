@@ -25,7 +25,7 @@ pub struct ConfigureTreasuryAccount<'info> {
     pub mint: InterfaceAccount<'info, Mint>,
 
     /// CHECK: not yet initialized -- created manually inside the handler,
-    /// same reason as `create_user_account`'s `user_token_account`. Owned by
+    /// same reason as `create_confidential_account`'s token account. Owned by
     /// the vault PDA (not the admin) so `pay_employee`/`batch_pay` can move
     /// funds out of it via `invoke_signed` without a human co-signing every
     /// payment.
@@ -52,7 +52,7 @@ pub struct ConfigureTreasuryAccount<'info> {
 impl<'info> ConfigureTreasuryAccount<'info> {
     /// The treasury's owner is the *vault PDA*, not the admin wallet -- so
     /// this is a `Pda` authority, and CPIs here use `invoke_signed` with the
-    /// vault's own seeds, unlike `create_user_account`'s plain `invoke`.
+    /// vault's own seeds, unlike `create_confidential_account`'s plain `invoke`.
     fn account_setup(&self) -> ConfidentialAccountSetup<'_, 'info> {
         ConfidentialAccountSetup {
             payer: self.admin.as_ref(),

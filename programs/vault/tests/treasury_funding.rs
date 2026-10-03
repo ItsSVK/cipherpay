@@ -22,7 +22,7 @@ fn treasury_funding_flow_moves_a_deposit_from_public_to_available_balance() {
     let funder_token_account_keypair = Keypair::new();
 
     let mint = mint::create_confidential_mint(&mut svm, &admin, &mint_keypair, 6, admin.pubkey());
-    let vault_address = ix::initialize(&mut svm, &admin, mint);
+    let vault_address = ix::initialize_vault(&mut svm, &admin, mint);
 
     let keys = ConfidentialKeys::new_rand();
     let token_program = spl_token_2022_interface::ID;

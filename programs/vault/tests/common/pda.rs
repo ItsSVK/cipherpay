@@ -12,14 +12,6 @@ pub fn vault_pda(authority: Address, mint: Address) -> (Address, u8) {
     )
 }
 
-/// Derives the per-user PDA for `(vault, user)`.
-pub fn user_account_pda(vault: Address, user: Address) -> (Address, u8) {
-    Address::find_program_address(
-        &[vault::USER_SEED, vault.as_ref(), user.as_ref()],
-        &to_address(vault::ID),
-    )
-}
-
 /// Derives `token_wrap_compliance`'s wrapped-mint PDA. Must mirror
 /// `native_programs/token_wrap_compliance/src/lib.rs`'s
 /// `get_wrapped_mint_address` exactly.
