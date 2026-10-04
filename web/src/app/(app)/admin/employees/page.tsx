@@ -13,12 +13,13 @@ import { CopyButton } from "@/components/app/copy-button";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
+import { copyInvite } from "@/lib/payroll/invite";
 import type { Employee } from "@/lib/mock/data";
 import { formatUsdc, parseUsdc } from "@/lib/format";
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-function AddEmployee({ onAdd }: { onAdd: (e: Employee) => void }) {
+function AddEmployee({ onAdd, company }: { onAdd: (e: Employee) => void; company: string }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [wallet, setWallet] = useState("");
@@ -50,7 +51,10 @@ function AddEmployee({ onAdd }: { onAdd: (e: Employee) => void }) {
             setTouched(true);
             if (!valid || amount === null) return;
             onAdd({ id: crypto.randomUUID(), name: name.trim(), role: "Team member", wallet: wallet.trim(), salary: amount });
-            toast.success(`${name.trim()} added`, { description: "Share the activation link so they can set up their account." });
+            toast.success(`${name.trim()} added`, {
+              description: "They need to set up their account once before they can be paid. Send them the invite.",
+              action: { label: "Copy invite", onClick: () => { void copyInvite(company).then((ok) => toast(ok ? "Invite copied" : "Could not copy. Select the text manually.")); } },
+            });
             setName(""); setWallet(""); setSalary(""); setTouched(false); setOpen(false);
           }}
         >
@@ -87,11 +91,11 @@ export default function EmployeesPage() {
       <PageHeader
         title="Employees"
         description={`${rows.length} people, ${formatUsdc(total)} USDC per run. Names and amounts here are your own records, stored off-chain.`}
-        actions={<AddEmployee onAdd={v.addEmployee} />}
+        actions={<AddEmployee onAdd={v.addEmployee} company={v.vault.name} />}
       />
       {pending > 0 ? (
         <p className="enter mb-4 rounded-lg border border-pending/25 bg-pending-soft px-3.5 py-2.5 text-[13.5px] text-pending" style={{ ["--i" as string]: 1 }}>
-          {pending} {pending === 1 ? "person has" : "people have"} not activated an account yet and will be skipped until they do.
+          {pending} {pending === 1 ? "person has" : "people have"} not set up an account yet, so they can&apos;t be paid and will be skipped until they do. Use Copy invite to tell them how.
         </p>
       ) : null}
       <div className="plate enter overflow-hidden" style={{ ["--i" as string]: 2 }}>
@@ -120,7 +124,16 @@ export default function EmployeesPage() {
                 <TableCell><span className="inline-flex items-center gap-1"><Address value={e.wallet} /><CopyButton value={e.wallet} label={`Copy ${e.name}'s address`} /></span></TableCell>
                 <TableCell className="text-right font-mono tnum">{formatUsdc(e.salary)}</TableCell>
                 <TableCell className="pr-5 text-right">
-                  <StatusBadge tone={v.isActivated(e.wallet) ? "verified" : "pending"}>{v.isActivated(e.wallet) ? "Activated" : "Not activated"}</StatusBadge>
+                  {v.isActivated(e.wallet) ? (
+                    <StatusBadge tone="verified">Activated</StatusBadge>
+                  ) : (
+                    <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                      <StatusBadge tone="pending">Not activated, can&apos;t be paid yet</StatusBadge>
+                      <Button size="sm" variant="outline" onClick={() => { void copyInvite(v.vault.name).then((ok) => toast(ok ? `Invite for ${e.name} copied` : "Could not copy. Select the text manually.")); }}>
+                        Copy invite
+                      </Button>
+                    </span>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

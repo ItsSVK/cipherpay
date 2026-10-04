@@ -13,7 +13,6 @@ import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
-import { VaultGate } from "@/components/app/vault-gate";
 import { PIPELINE_STAGES, TRANSFER_STAGE, type Employee, type RunStatus } from "@/lib/mock/data";
 import { shortToday } from "@/lib/mock/store";
 import { formatUsdc, shortAddress } from "@/lib/format";
@@ -34,11 +33,7 @@ const BASE_FLOW: { id: RunStatus; label: string }[] = [
 ];
 
 export default function RunPayrollPage() {
-  return (
-    <VaultGate title="Run payroll">
-      <RunPayroll />
-    </VaultGate>
-  );
+  return <RunPayroll />;
 }
 
 function RunPayroll() {

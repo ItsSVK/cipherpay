@@ -29,6 +29,8 @@ export const EMPLOYEES: Employee[] = [
   { id: "e4", name: "Aiko Tanaka", role: "Designer", wallet: "7vLn3sDzP9mQcX4wTbR2yHkA8eJgU6oFt5NxVhY1qKaB", salary: usdc(5_400) },
   { id: "e5", name: "Tomás Berg", role: "Growth", wallet: "2dXk6yPzW8vNcQ3rLmT9bHsA4eJgU7oFt5nVhYxK1qBa", salary: usdc(4_900) },
   { id: "e6", name: "Lena Fischer", role: "Counsel", wallet: "6bQw9nTzL3vXcP4rKmY2dHsA8eJgU5oFt7NxVhY1kBaq", salary: usdc(3_700) },
+  // The company's own admin wallet is also on its payroll: one wallet can run a company and get paid by it.
+  { id: "e7", name: "Jordan Avery", role: "Founder", wallet: ADMIN_WALLET, salary: usdc(8_000) },
 ];
 
 export const NOT_ACTIVATED_SEED = new Set(["e5"]);
@@ -75,13 +77,13 @@ function seededRun(id: string, label: string, date: string, parts: [wallet: stri
   return { id, label, date, status: "done", recipients: items.length, total: items.reduce((n, i) => n + i.amount, 0n), items };
 }
 
-const [sam, priya, mateo, aiko, , lena] = EMPLOYEES;
+const [sam, priya, mateo, aiko, , lena, founder] = EMPLOYEES;
 
 /** Newest first. r4 is the latest and is not yet applied by employees, so it shows up as "pending" on their side. */
 export const SEED_RUNS: Run[] = [
-  seededRun("r4", "October payroll", "Oct 01", [[sam.wallet, usdc(10_000)], [priya.wallet, usdc(6_800)], [mateo.wallet, usdc(7_200)], [aiko.wallet, usdc(5_400)], [lena.wallet, usdc(3_700)]]),
-  seededRun("r3", "September payroll", "Sep 01", [[sam.wallet, usdc(10_000)], [priya.wallet, usdc(6_800)], [mateo.wallet, usdc(7_200)], [aiko.wallet, usdc(5_400)], [lena.wallet, usdc(3_700)]]),
-  seededRun("r2", "August payroll", "Aug 01", [[sam.wallet, usdc(9_200)], [priya.wallet, usdc(6_800)], [mateo.wallet, usdc(7_200)], [aiko.wallet, usdc(5_400)], [lena.wallet, usdc(3_700)]]),
+  seededRun("r4", "October payroll", "Oct 01", [[sam.wallet, usdc(10_000)], [priya.wallet, usdc(6_800)], [mateo.wallet, usdc(7_200)], [aiko.wallet, usdc(5_400)], [lena.wallet, usdc(3_700)], [founder.wallet, usdc(8_000)]]),
+  seededRun("r3", "September payroll", "Sep 01", [[sam.wallet, usdc(10_000)], [priya.wallet, usdc(6_800)], [mateo.wallet, usdc(7_200)], [aiko.wallet, usdc(5_400)], [lena.wallet, usdc(3_700)], [founder.wallet, usdc(8_000)]]),
+  seededRun("r2", "August payroll", "Aug 01", [[sam.wallet, usdc(9_200)], [priya.wallet, usdc(6_800)], [mateo.wallet, usdc(7_200)], [aiko.wallet, usdc(5_400)], [lena.wallet, usdc(3_700)], [founder.wallet, usdc(8_000)]]),
   seededRun("r1", "Contractor invoice #014", "Jul 18", [[sam.wallet, usdc(7_900)], [TAX_WALLET, usdc(2_000)], [FEE_WALLET, usdc(100)]]),
 ];
 
@@ -133,9 +135,9 @@ export function seedAccounts(): Record<string, Account> {
     if (NOT_ACTIVATED_SEED.has(e.id)) accounts[e.wallet] = emptyAccount(); // no SOL either: shows the fee requirement
   }
   accounts[sam.wallet].publicUsdc = usdc(120.5);
-  accounts[ADMIN_WALLET] = { ...emptyAccount(), activated: true, sol: SOL(2) };
+  accounts[ADMIN_WALLET].sol = SOL(2);
   accounts[AUDITOR_WALLET] = { ...emptyAccount(), activated: true, sol: SOL(1) };
-  accounts[NEW_COMPANY_WALLET] = { ...emptyAccount(), activated: true, sol: SOL(2) };
+  accounts[NEW_COMPANY_WALLET] = { ...emptyAccount(), sol: SOL(2) };
   get(TAX_WALLET);
   get(FEE_WALLET);
   return accounts;

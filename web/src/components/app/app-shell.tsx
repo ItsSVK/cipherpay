@@ -14,54 +14,58 @@ import { UnlockDialog } from "@/components/crypto/unlock-dialog";
 import { ConnectScreen } from "@/components/wallet/connect-screen";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
-import { ROLE_META, roleOf, walletLabel } from "@/lib/mock/wallets";
+import { roleOf, walletLabel } from "@/lib/mock/wallets";
 import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
-import { NAV, roleFromPath, type Role } from "./nav";
+import { navFor, sectionFromPath, type NavGroup, type Role } from "./nav";
 import { StatusBadge } from "./status-badge";
 
-function NavList({ role, pathname, onNavigate }: { role: Role; pathname: string; onNavigate?: () => void }) {
+function NavList({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathname: string; onNavigate?: () => void }) {
   return (
-    <nav aria-label="Primary" className="grid gap-0.5">
-      {NAV[role].map((item) => {
-        const active = item.href === pathname || (item.href !== ROLE_META[role].home && pathname.startsWith(item.href));
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium",
-              "transition-[background-color,color,transform] duration-200 ease-out-expo active:scale-[0.985]",
-              active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            <item.icon className={cn("size-[17px] transition-transform duration-300 ease-out-expo", !active && "group-hover:translate-x-0.5")} />
-            {item.label}
-            <span
-              aria-hidden
-              className={cn(
-                "ml-auto size-1.5 rounded-full bg-primary transition-[opacity,transform] duration-300 ease-out-expo",
-                active ? "scale-100 opacity-100" : "scale-0 opacity-0",
-              )}
-            />
-          </Link>
-        );
-      })}
+    <nav aria-label="Primary" className="grid gap-4">
+      {groups.map((g, gi) => (
+        <div key={g.label ?? gi} className="grid gap-0.5">
+          {g.label ? <p className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">{g.label}</p> : null}
+          {g.items.map((item) => {
+            const active = item.href === pathname || (item.href !== "/admin" && item.href !== "/pay" && pathname.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium",
+                  "transition-[background-color,color,transform] duration-200 ease-out-expo active:scale-[0.985]",
+                  active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <item.icon className={cn("size-[17px] transition-transform duration-300 ease-out-expo", !active && "group-hover:translate-x-0.5")} />
+                {item.label}
+                {item.badge ? (
+                  <span className={cn("ml-1 size-1.5 rounded-full", item.badge === "setup" ? "bg-primary [animation:dot-pulse_1.6s_ease-in-out_infinite]" : "bg-pending")} role="img" aria-label={item.badge === "setup" ? "Setup needed" : "New pay waiting"} title={item.badge === "setup" ? "Set up your account to receive pay" : "New pay waiting"} />
+                ) : null}
+                <span
+                  aria-hidden
+                  className={cn(
+                    "ml-auto size-1.5 rounded-full bg-primary transition-[opacity,transform] duration-300 ease-out-expo",
+                    active ? "scale-100 opacity-100" : "scale-0 opacity-0",
+                  )}
+                />
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
 
-function SidebarBody({ role, pathname, onNavigate }: { role: Role; pathname: string; onNavigate?: () => void }) {
+function SidebarBody({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathname: string; onNavigate?: () => void }) {
   return (
-    <div className="flex h-full flex-col gap-5 p-4">
+    <div className="flex h-full flex-col gap-6 p-4">
       <Brand href="/" />
-      <div className="rounded-lg bg-muted px-3 py-2.5">
-        <p className="text-[13px] font-medium">{ROLE_META[role].label} view</p>
-        <p className="text-xs text-muted-foreground">{ROLE_META[role].blurb}</p>
-      </div>
-      <NavList role={role} pathname={pathname} onNavigate={onNavigate} />
+      <NavList groups={groups} pathname={pathname} onNavigate={onNavigate} />
       <div className="mt-auto grid gap-2 rounded-lg border bg-card p-3 text-xs leading-relaxed text-muted-foreground">
         <div className="flex items-center gap-2 font-medium text-foreground">
           <span className="size-1.5 rounded-full bg-verified [animation:dot-pulse_2s_ease-in-out_infinite]" aria-hidden />
@@ -82,17 +86,29 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
   const store = useDemoStore();
   const [menu, setMenu] = useState(false);
 
-  const role = roleOf(address);
-  const home = ROLE_META[role].home;
-  const inPlace = roleFromPath(pathname) === role;
+  const role: Role = roleOf(address);
+  const section = sectionFromPath(pathname);
+  const vault = store.vaultOf(address);
+  const companyReady = vault.created && vault.treasuryConfigured;
 
-  // Your wallet decides your side of the app: neutral routes and other roles' routes send you home.
+  // One wallet, one portal. Members start on My pay. The company pages (everything under /admin except
+  // the setup screen at /admin itself) are closed until the company is set up, URL or not.
+  let redirect: string | null = null;
+  if (role === "auditor") {
+    if (section !== "auditor") redirect = "/auditor";
+  } else if (section === "auditor" || section === null) {
+    redirect = "/pay";
+  } else if (section === "admin" && !companyReady && pathname !== "/admin") {
+    redirect = "/admin";
+  }
+  const inPlace = redirect === null;
   useEffect(() => {
-    if (!inPlace) router.replace(home);
-  }, [inPlace, home, router]);
+    if (redirect) router.replace(redirect);
+  }, [redirect, router]);
 
-  const vaultName = store.vaultOf(address).name;
-  const crumb = role === "admin" ? vaultName : null;
+  const groups = navFor(role, { companyReady, payBadge: !store.accountOf(address).activated ? "setup" : store.accountOf(address).pending > 0n ? "pay" : undefined });
+  const crumb = section === "admin" && companyReady ? vault.name : null;
+  const crumbPage = section === "admin" ? (companyReady ? "Payroll vault" : "Company setup") : section === "pay" ? "My pay" : "Compliance";
   const label = walletLabel(address);
 
   return (
@@ -100,7 +116,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
     <KeyProvider key={address} mode={role === "auditor" ? "import" : "signature"}>
       <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
         <aside className="sticky top-0 hidden h-dvh border-r bg-sidebar lg:block">
-          <SidebarBody role={role} pathname={pathname} />
+          <SidebarBody groups={groups} pathname={pathname} />
         </aside>
         <div className="min-w-0">
           <div className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b bg-background/90 px-4 backdrop-blur-sm sm:px-6">
@@ -111,7 +127,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
                 </SheetTrigger>
                 <SheetContent side="left" className="w-[280px] p-0 sm:max-w-[280px]">
                   <SheetTitle className="sr-only">Menu</SheetTitle>
-                  <SidebarBody role={role} pathname={pathname} onNavigate={() => setMenu(false)} />
+                  <SidebarBody groups={groups} pathname={pathname} onNavigate={() => setMenu(false)} />
                 </SheetContent>
               </Sheet>
             </div>
@@ -121,7 +137,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
                   {crumb} <span className="mx-1.5 text-border">/</span>
                 </>
               ) : null}
-              <span className="text-foreground">{role === "admin" ? "Payroll vault" : role === "employee" ? "My account" : "Compliance"}</span>
+              <span className="text-foreground">{crumbPage}</span>
             </div>
             <div className="flex items-center gap-2.5">
               <KeyChip seed={address} />
@@ -129,7 +145,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
                 <span className="hidden text-[13px] font-medium md:inline">{label ?? "Wallet"}</span>
                 <Address value={address} className="text-muted-foreground" />
                 <span className="font-mono text-[11.5px] tnum text-muted-foreground">{solText(store.accountOf(address).sol)}</span>
-                <StatusBadge tone="neutral">{ROLE_META[role].label}</StatusBadge>
+                {role === "auditor" ? <StatusBadge tone="neutral">Auditor</StatusBadge> : null}
               </span>
               <Button
                 variant="ghost"

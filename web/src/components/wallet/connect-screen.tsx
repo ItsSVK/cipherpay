@@ -5,7 +5,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { Address } from "@/components/crypto/fingerprint";
 import { Brand } from "@/components/app/brand";
 import { StatusBadge } from "@/components/app/status-badge";
-import { DEMO_WALLETS, ROLE_META } from "@/lib/mock/wallets";
+import { DEMO_WALLETS } from "@/lib/mock/wallets";
 import { cn } from "@/lib/utils";
 import { useWallet } from "./wallet-context";
 
@@ -25,7 +25,7 @@ export function ConnectScreen() {
         <div className="enter" style={{ ["--i" as string]: 0 }}>
           <h1 className="text-[2rem] font-semibold leading-tight sm:text-4xl">Connect your wallet</h1>
           <p className="mt-3 text-[16px] leading-relaxed text-muted-foreground">
-            Your wallet decides what you see. Pay a team from a company wallet, get paid from an employee wallet, or review payments with the auditor key.
+            One wallet can run a company, get paid, or both. Connect yours and the app shows what applies to it.
           </p>
         </div>
 
@@ -51,7 +51,7 @@ export function ConnectScreen() {
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
                         {w.label}
-                        <StatusBadge tone={w.role === "admin" ? "key" : w.role === "employee" ? "verified" : "pending"}>{ROLE_META[w.role].label}</StatusBadge>
+                        <StatusBadge tone={w.role === "auditor" ? "pending" : "key"}>{w.tag}</StatusBadge>
                       </p>
                       <p className="mt-0.5 text-[13px] text-muted-foreground">{w.blurb}</p>
                     </div>
@@ -65,7 +65,7 @@ export function ConnectScreen() {
           </ul>
         </section>
         <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
-          Demo build with sample data. Real wallets (Phantom, Solflare and others) connect here later, and your role will come from the wallet itself.
+          Demo build with sample data. Real wallets (Phantom, Solflare and others) connect here later, and what you see will come from the wallet itself.
         </p>
       </main>
     </div>

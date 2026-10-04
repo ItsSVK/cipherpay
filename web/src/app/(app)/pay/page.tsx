@@ -1,19 +1,18 @@
 "use client";
 
-import Link from "next/link";
-import { ArrowDownToLineIcon, ExternalLinkIcon, EyeIcon } from "lucide-react";
+import { EyeIcon, ExternalLinkIcon } from "lucide-react";
 import { toast } from "sonner";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
 import { StepList, type Step } from "@/components/crypto/step-list";
 import { useEmployee } from "@/components/app/employee-context";
-import { SolNotice } from "@/components/app/sol-notice";
 import { PageHeader } from "@/components/app/page-header";
+import { SolNotice } from "@/components/app/sol-notice";
 import { StatusBadge } from "@/components/app/status-badge";
+import { WithdrawSheet } from "@/components/app/withdraw-sheet";
 import { useStepper } from "@/hooks/use-stepper";
 import { formatUsdc } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 const ACTIVATE_STEPS: Step[] = [
   { label: "Create your token account", detail: "A wallet-owned account for the wrapped USDC mint." },
@@ -23,7 +22,8 @@ const ACTIVATE_STEPS: Step[] = [
 
 const APPLY_STEPS: Step[] = [{ label: "Apply pending balance", detail: "Moves new payments into your spendable balance.", visibility: "encrypted" }];
 
-export default function EmployeeHome() {
+/** Personal side of the app: balances, payments and withdrawal, for any wallet that gets paid. */
+export default function MyPay() {
   const keys = useKeys();
   const emp = useEmployee();
   const activation = useStepper(ACTIVATE_STEPS.length, 950, () => { emp.activate(); toast.success("Account activated", { description: "You can now receive confidential payments." }); });
@@ -32,9 +32,12 @@ export default function EmployeeHome() {
   if (!emp.activated) {
     return (
       <>
-        <PageHeader title="Activate your account" description="One-time setup so your employer can pay you confidentially." />
+        <PageHeader title="Set up to receive pay" description="Before anyone can pay this wallet, it needs a confidential account. You do this once." />
         <section className="plate enter mx-auto max-w-xl p-6" style={{ ["--i" as string]: 1 }}>
           <SolNotice />
+          <p className="mb-4 rounded-lg bg-muted/60 p-3 text-[13px] leading-relaxed text-muted-foreground">
+            It is one account per wallet, not one per employer. Every company that pays this wallet pays into the same account, so you never repeat this. Until it exists there is no balance to show, and nobody can send you pay.
+          </p>
           <StepList steps={ACTIVATE_STEPS} completed={activation.completed} running={activation.running} />
           <Button
             className="mt-5 h-10 w-full"
@@ -46,7 +49,7 @@ export default function EmployeeHome() {
           >
             {activation.running ? "Activating…" : keys.ready ? "Activate account" : "Unlock keys to activate"}
           </Button>
-          <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">You pay the network fee in SOL for each transaction you send, so keep a little SOL in this wallet. Your employer cannot pay you until this is done.</p>
+          <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">You pay the network fee in SOL for each transaction you send, so keep a little SOL in this wallet. An employer cannot pay you until this is done.</p>
         </section>
       </>
     );
@@ -54,15 +57,7 @@ export default function EmployeeHome() {
 
   return (
     <>
-      <PageHeader
-        title="My pay"
-        description="Only you can read these amounts. Decryption happens in this tab."
-        actions={
-          <Link href="/employee/withdraw" className={cn(buttonVariants(), "gap-1.5")}>
-            <ArrowDownToLineIcon /> Withdraw
-          </Link>
-        }
-      />
+      <PageHeader title="My pay" description="Only you can read these amounts. Decryption happens in this tab." actions={<WithdrawSheet />} />
       <SolNotice />
       <div className="grid gap-5 sm:grid-cols-2">
         {[
@@ -98,27 +93,27 @@ export default function EmployeeHome() {
           ) : null}
         </div>
         {emp.payments.length === 0 ? (
-          <div className="plate p-8 text-center text-sm text-muted-foreground">No payments yet. When your employer pays you, it shows up here.</div>
+          <div className="plate p-8 text-center text-sm text-muted-foreground">Account active. Nothing received yet. When an employer pays this wallet, it shows up here.</div>
         ) : (
-        <ul className="plate overflow-hidden">
-          {emp.payments.map((p, i) => (
-            <li key={p.id} className="row-hover flex items-center justify-between gap-4 border-b px-4 py-3.5 last:border-b-0">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{p.from}</p>
-                <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {p.date}
-                  <a href={`https://explorer.solana.com/tx/${p.signature}?cluster=devnet`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono underline-offset-2 hover:text-foreground hover:underline">
-                    {p.signature.slice(0, 6)}… <ExternalLinkIcon className="size-3" />
-                  </a>
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge tone={p.status === "pending" && emp.pending > 0n ? "pending" : "neutral"} className="hidden sm:inline-flex">{p.status === "pending" && emp.pending > 0n ? "Pending" : "Applied"}</StatusBadge>
-                <span className="text-[15px]"><Cipher value={formatUsdc(p.amount)} seed={`pay-${p.id}`} revealed={keys.ready} delay={i * 120} suffix="USDC" /></span>
-              </div>
-            </li>
-          ))}
-        </ul>
+          <ul className="plate overflow-hidden">
+            {emp.payments.map((p, i) => (
+              <li key={p.id} className="row-hover flex items-center justify-between gap-4 border-b px-4 py-3.5 last:border-b-0">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{p.from}</p>
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {p.date}
+                    <a href={`https://explorer.solana.com/tx/${p.signature}?cluster=devnet`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono underline-offset-2 hover:text-foreground hover:underline">
+                      {p.signature.slice(0, 6)}… <ExternalLinkIcon className="size-3" />
+                    </a>
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge tone={p.status === "pending" ? "pending" : "neutral"} className="hidden sm:inline-flex">{p.status === "pending" ? "Pending" : "Applied"}</StatusBadge>
+                  <span className="text-[15px]"><Cipher value={formatUsdc(p.amount)} seed={`pay-${p.id}`} revealed={keys.ready} delay={i * 120} suffix="USDC" /></span>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
         <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
           Your balances above are decrypted from the chain. The per-payment list comes from your employer&apos;s payroll record, because the chain only stores the combined encrypted balance.

@@ -233,6 +233,28 @@ SQLite is fine for the hackathon; pick one early and record it here. Validate al
 input (e.g. with zod). Never trust a client-supplied "approved" flag without checking it
 server-side against the stored state.
 
+## Indexer plan (decided 2026-10-04, build when wiring devnet)
+
+Goal: later, the auditor reads payments quickly from D1 instead of scanning the chain, and direct contract calls
+(not made through this app) are still captured. Independent of how the auditor is set up (that is being reworked).
+
+- **Source of truth is the chain.** A Cloudflare Worker syncs from a dedicated devnet RPC (not the public one).
+  `getSignaturesForAddress(vault PDA)` returns every `pay_employee` (the vault is in its accounts), app-made or not.
+  Keep a per-vault cursor (last indexed signature) in D1; `getTransaction` only for newer signatures.
+- **Triggers:** on-demand sync first (when admin/auditor opens a page, and right after the app sends a run), then an
+  optional Cron Trigger every 1 to 2 minutes. No hosted webhook vendor for now; it can be added later without changing the table.
+- **Decode from instruction data, not logs** (logs can truncate; the ciphertexts are in the args too). Use the
+  IDL-generated decoder, so a contract change only means regenerating it. Store ciphertexts as opaque bytes.
+- **Who writes what:** the app writes only metadata (run id, recipient name, planned recipient, signature). The indexer
+  writes the ciphertext lo/hi, slot and block time from the chain and marks the row confirmed. Never take ciphertext
+  from the browser. Direct calls appear with `source = 'chain'` and no run/name.
+- **Table sketch (`payments`):** `signature` PK (idempotent upserts), `vault`, `employee`, `employee_token_account`,
+  `auditor_ct_lo`, `auditor_ct_hi`, `slot`, `block_time`, `run_id` nullable, `source` ('app' | 'chain').
+- **Access control is required before this holds anything real:** the table has names and wallets, so API routes need
+  wallet-signature auth and scoped reads. Keys and decrypted values never go in the DB; decryption stays in the browser.
+- Decided scope notes: one vault per admin wallet (vault PDA = vault seed + admin + WUSDC mint; multi-company means
+  connecting another wallet). The auditor UI and contract linkage are deferred and will be reworked later.
+
 ## Known current state
 
 - **Scaffolded 2026-10-04**: Next.js 16.3.8 (App Router, `src/`, Turbopack, Tailwind 4), shadcn/ui
@@ -249,17 +271,19 @@ server-side against the stored state.
   zk-sdk WASM proof spike (bundler config is deliberately empty), auth for API routes, and the
   Workers bundle-size check once the Solana/zk deps are actually imported. `../client/` was proven only
   against local surfpool. Real devnet transactions from this app are Phase 1 work.
-- **Mock alignment pass 2026-10-04 (still no chain):** the app now opens on a **wallet connect gate** (`/app`); the
-  connected wallet decides the role (admin / employee / auditor) and sends you to its own area, with no role
-  switcher. Wallet is a mock (`components/wallet/wallet-context.tsx`, demo wallets in `lib/mock/wallets.ts`); swap in
-  wallet-standard behind the same `useWallet()` shape. Mock backend is `lib/mock/store.tsx` (vaults, accounts, runs;
-  actions named after the instructions). Done in the mocks to match the contract: first-run vault setup
-  (`initialize_vault` + `configure_treasury_account`), auditor key **imported** not wallet-derived, transfers
-  **serialized** in the run engine (D3) with per-recipient failure + retry-failed-only, paused/treasury/authority
-  checks in the simulation, employee SOL requirement, withdraw shows its two proofs and leaves WUSDC unless unwrapped,
-  employee per-payment list sourced from the employer record, auditor log spans all companies on the mint. The demo
-  failure toggle is on the payroll review step. Not browser-verified (extension cannot reach localhost); lint,
-  typecheck, tests pass and all routes return 200.
+- **Mock alignment pass 2026-10-04 (still no chain):** the app opens on a **wallet connect gate** (`/app`). There is
+  **one portal for members**: the nav always has **My pay** (default landing, `/pay`: balances, payments, Withdraw
+  sheet) and **Company** (`/admin`). Company opens the "Set up your payroll vault" flow; only once the vault and treasury
+  are configured do Overview, Employees, Run payroll and Split payout appear. Those URLs are closed until then: the shell
+  redirects `/admin/*` (other than `/admin`) to `/admin` for a wallet whose company is not set up. The auditor stays a separate view (`/auditor`, key imported not
+  wallet-derived; deferred rework). Wallet is a mock (`components/wallet/wallet-context.tsx`, demo wallets in
+  `lib/mock/wallets.ts`); swap in wallet-standard behind the same `useWallet()` shape. Mock backend is
+  `lib/mock/store.tsx` (vaults, accounts, runs; actions named after the instructions). Done in the mocks to match the
+  contract: first-run vault setup (`initialize_vault` + `configure_treasury_account`), **serialized** transfers in the
+  run engine (D3) with per-recipient failure + retry-failed-only, paused/treasury/authority checks in the simulation,
+  SOL requirement for anything a wallet signs, withdraw shows its two proofs and leaves WUSDC unless unwrapped, per-payment
+  list sourced from the employer record. The demo failure toggle is on the payroll review step. Not browser-verified
+  (extension cannot reach localhost); lint, typecheck, tests pass and all routes return 200.
 - All 12 vault instructions now exist and are tested on-chain, including `pay_employee`, `pause_payroll` and
   `resume_payroll` (auditor rotation is a direct Token-2022 call, not a vault instruction); see `../CLAUDE.md`. The vault's instruction set is the
   12 names in the architecture PDF: `initialize_vault`, `configure_treasury_account`, `fund_treasury`,

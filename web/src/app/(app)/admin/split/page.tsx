@@ -13,7 +13,6 @@ import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
-import { VaultGate } from "@/components/app/vault-gate";
 import { FEE_WALLET, PIPELINE_STAGES, TAX_WALLET, TRANSFER_STAGE } from "@/lib/mock/data";
 import { shortToday } from "@/lib/mock/store";
 import { formatUsdc, parseUsdc } from "@/lib/format";
@@ -27,11 +26,7 @@ const SPLIT_IDS = ["sam", "tax", "fee"];
 type Stage = "draft" | "approved" | "executing" | "done";
 
 export default function SplitPage() {
-  return (
-    <VaultGate title="Split payout">
-      <Split />
-    </VaultGate>
-  );
+  return <Split />;
 }
 
 function Split() {
