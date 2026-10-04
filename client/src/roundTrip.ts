@@ -6,9 +6,11 @@
 // Mirrors programs/vault/tests/full_payroll_round_trip.rs step for step, but
 // through a real client hitting a real (local) validator instead of litesvm.
 //
-// Run with `npm run round-trip` from `client/`, against
-// `surfpool start --no-deploy --no-tui` with both `vault` and
-// `token_wrap_compliance` already deployed (see client/README.md).
+// One script, two targets, chosen with `--cluster`:
+//   npm run round-trip:surfpool   a local `surfpool start --no-deploy --no-tui`
+//                                 with both programs already deployed
+//   npm run round-trip:devnet     real devnet, against the deployed programs
+// See client/README.md for setup and the differences between the two.
 import {
   Connection,
   Keypair,
@@ -36,6 +38,9 @@ import {
   PubkeyValidityProofData,
 } from "@solana/zk-sdk";
 import BN from "bn.js";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { parseArgs } from "node:util";
 
 import {
   COMPLIANCE_AUDITOR_ELGAMAL_PUBKEY_BYTES,
@@ -56,7 +61,97 @@ import {
 import { transferSplitProofData, withdrawProofData } from "./lib/confidentialTransferProofs.js";
 import { loadVaultProgram } from "./lib/vaultProgram.js";
 
-const RPC_URL = process.env.SURFPOOL_RPC_URL ?? "http://127.0.0.1:8899";
+/**
+ * Everything that differs between the two targets, so the round trip itself
+ * (`main`) is identical for both.
+ */
+interface ClusterConfig {
+  name: "surfpool" | "devnet";
+  rpcUrl: string;
+  /** surfpool: airdrop. devnet: its faucet won't give much, so transfer from a funded keypair. */
+  fundingMode: "airdrop" | "transfer";
+  /** SOL per throwaway wallet. */
+  budget: { mint: number; admin: number; employee: number };
+  /** Space out requests and retry on 429 (the public devnet RPC rate-limits hard). */
+  throttle: boolean;
+}
+
+const CLUSTERS: Record<ClusterConfig["name"], ClusterConfig> = {
+  surfpool: {
+    name: "surfpool",
+    rpcUrl: "http://127.0.0.1:8899",
+    fundingMode: "airdrop",
+    budget: { mint: 10, admin: 10, employee: 10 },
+    throttle: false,
+  },
+  devnet: {
+    name: "devnet",
+    rpcUrl: "https://api.devnet.solana.com",
+    fundingMode: "transfer",
+    budget: { mint: 0.05, admin: 0.4, employee: 0.2 },
+    throttle: true,
+  },
+};
+
+function resolveCluster(): ClusterConfig {
+  const { values } = parseArgs({
+    options: { cluster: { type: "string" } },
+    strict: true,
+  });
+  const name = values.cluster;
+  if (name !== "surfpool" && name !== "devnet") {
+    console.error(
+      `Missing or unknown --cluster (got ${name === undefined ? "nothing" : `"${name}"`}).\n` +
+        "Use `npm run round-trip:surfpool` or `npm run round-trip:devnet`.",
+    );
+    process.exit(2);
+  }
+  const base = CLUSTERS[name];
+  // RPC_URL overrides the default endpoint, e.g. a dedicated devnet RPC.
+  return { ...base, rpcUrl: process.env.RPC_URL ?? base.rpcUrl };
+}
+
+const CLUSTER = resolveCluster();
+const RPC_URL = CLUSTER.rpcUrl;
+
+// The public devnet RPC rate-limits aggressively once the pipeline fires many
+// calls (CLAUDE.md: plan for a dedicated RPC). Space requests out and retry on
+// 429 with backoff.
+let lastRequestAt = 0;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const throttledFetch: typeof fetch = async (input, init) => {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const wait = Math.max(0, lastRequestAt + 250 - Date.now());
+    if (wait) await sleep(wait);
+    lastRequestAt = Date.now();
+    const response = await fetch(input, init);
+    if (response.status !== 429) return response;
+    await sleep(1000 * 2 ** Math.min(attempt, 4));
+  }
+  return fetch(input, init);
+};
+
+/** Devnet funding source: FUNDER_KEYPAIR, default ~/.config/solana/id.json. */
+function loadFunder(): Keypair {
+  const path = process.env.FUNDER_KEYPAIR ?? `${homedir()}/.config/solana/id.json`;
+  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(readFileSync(path, "utf8"))));
+}
+
+async function fund(connection: Connection, pubkey: PublicKey, sol: number) {
+  if (CLUSTER.fundingMode === "airdrop") {
+    const sig = await connection.requestAirdrop(pubkey, sol * 1_000_000_000);
+    await connection.confirmTransaction(sig, "confirmed");
+    return;
+  }
+  const funder = loadFunder();
+  await sendTx(connection, funder, [
+    SystemProgram.transfer({
+      fromPubkey: funder.publicKey,
+      toPubkey: pubkey,
+      lamports: Math.round(sol * 1_000_000_000),
+    }),
+  ]);
+}
 
 function log(step: string, details?: Record<string, unknown>) {
   console.log(`\n[${step}]`);
@@ -65,11 +160,6 @@ function log(step: string, details?: Record<string, unknown>) {
       console.log(`  ${key}: ${value}`);
     }
   }
-}
-
-async function airdrop(connection: Connection, pubkey: PublicKey, sol: number) {
-  const sig = await connection.requestAirdrop(pubkey, sol * 1_000_000_000);
-  await connection.confirmTransaction(sig, "confirmed");
 }
 
 async function sendTx(
@@ -99,17 +189,20 @@ async function fetchDecryptedBalances(
 }
 
 async function main() {
-  const connection = new Connection(RPC_URL, "confirmed");
-  console.log(`Connected to ${RPC_URL}`);
+  const connection = new Connection(RPC_URL, {
+    commitment: "confirmed",
+    fetch: CLUSTER.throttle ? throttledFetch : undefined,
+  });
+  console.log(`Connected to ${CLUSTER.name} (${RPC_URL})`);
 
   const mintAuthority = Keypair.generate();
   const admin = Keypair.generate(); // the employer
   const employee = Keypair.generate();
-  await Promise.all([
-    airdrop(connection, mintAuthority.publicKey, 10),
-    airdrop(connection, admin.publicKey, 10),
-    airdrop(connection, employee.publicKey, 10),
-  ]);
+  // Sequential on purpose: public devnet RPC rate-limits parallel bursts.
+  const budget = CLUSTER.budget;
+  await fund(connection, mintAuthority.publicKey, budget.mint);
+  await fund(connection, admin.publicKey, budget.admin);
+  await fund(connection, employee.publicKey, budget.employee);
   log("funded wallets", {
     mintAuthority: mintAuthority.publicKey.toBase58(),
     admin: admin.publicKey.toBase58(),

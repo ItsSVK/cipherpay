@@ -56,12 +56,37 @@ Re-deploy (`solana program deploy ...` again, same command) any time the
 Rust source changes; surfpool keeps running across script runs since it's a
 long-lived local validator, not a fresh environment per run.
 
-## Running the round trip
+## Two targets, one script
+
+`src/roundTrip.ts` is a single script; `--cluster surfpool|devnet` picks the target, and the two npm
+scripts pass it for you. Only the endpoint, how wallets are funded, and request throttling differ; the
+steps are identical.
+
+| | `npm run round-trip:surfpool` | `npm run round-trip:devnet` |
+|---|---|---|
+| Endpoint | `http://127.0.0.1:8899` | `https://api.devnet.solana.com` (override with `RPC_URL`) |
+| Funding | airdrop 10 SOL each | transfer ~0.65 SOL total from `FUNDER_KEYPAIR` |
+| Throttle / 429 retry | off | on |
+| Needs | surfpool running, both programs deployed | the programs already on devnet |
+
+## Running the round trip on devnet
+
+```bash
+cd client && npm run round-trip:devnet
+```
+
+Funds three fresh throwaway wallets with a small transfer from `FUNDER_KEYPAIR` (default
+`~/.config/solana/id.json`, ~0.65 SOL total, devnet's faucet won't give 10 SOL) and creates its own
+real-asset and wrapped mints, so it never touches the canonical WUSDC mint. The throwaway keys aren't
+saved, so any leftover SOL in them is abandoned. The public devnet RPC rate-limits (429), so requests are
+throttled and retried; setting `RPC_URL` to a dedicated devnet endpoint is faster.
+
+## Running the round trip locally
 
 ```bash
 cd client
 npm install
-npm run round-trip
+npm run round-trip:surfpool
 ```
 
 Every step logs what it just did and the addresses/amounts involved; the

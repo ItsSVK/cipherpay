@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "round-trip": "tsx src/roundTrip.ts",
+    "round-trip:surfpool": "tsx src/roundTrip.ts --cluster surfpool",
+    "round-trip:devnet": "tsx src/roundTrip.ts --cluster devnet",
     "bootstrap-wusdc": "tsx src/bootstrapDevnetWusdc.ts"
   },
   "dependencies": {

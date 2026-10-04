@@ -149,7 +149,7 @@ can verify after the fact by decrypting.
 **Should have**
 
 - Split payout with an approve-then-execute flow (section 3).
-- Flat per-payout platform fee wired into the program (see section 8).
+- ~~Flat per-payout platform fee wired into the program (see section 8).~~ **Dropped 2026-10-04** for the hackathon build; roadmap only.
 - Progress and resume UI for a payroll run (which recipients are paid, which failed).
 
 **Cut for the hackathon**

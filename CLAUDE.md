@@ -77,6 +77,9 @@ not add new features to it. Its `src/idl/` is stale until the IDL is regenerated
 | Real devnet USDC (classic SPL Token) | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
 | WUSDC wrapped mint (canonical, Token-2022) | `3Qj6ZeyMdytvoTXdRTygJrWAWLaiNEpiYMEVLejY6oPf` |
 
+- **`vault` redeployed to devnet on 2026-10-04 (slot 507251861)** with the current `--arch v1` build (all 12
+  instructions; byte-identical to `target/deploy/vault.so`, verified via `solana program dump`). Always pass
+  `--url devnet` explicitly: the global Solana CLI config may be pointing at localhost.
 - Upgrade authority is the default local wallet (`~/.config/solana/id.json`). Coordinate redeploys
   with the team, since `web/` depends on these addresses and on the IDL.
 - The wrapped mint is a PDA of `(unwrapped_mint, wrapped_token_program)`: exactly one valid wrapped
@@ -179,7 +182,7 @@ wallet-signed transfer). Verified in litesvm and on a local surfpool validator.
 | `create_confidential_account` | Done, tested. Wallet's own confidential account on any confidential mint. Reuses `ConfidentialAccountSetup` with `Authority::Signer`. |
 | `wrap_confidential` / `unwrap_confidential` | Done, tested. CPI into `token_wrap_compliance` Wrap/Unwrap (public balance only). CPI is **hand-built** (see lessons). |
 | `withdraw_confidential` | Done, tested. 2 proofs (equality, range). `amount` is plaintext on purpose (disclosure point). |
-| Full payroll round trip | Proven in `tests/full_payroll_round_trip.rs` (litesvm) **and on a local surfpool validator** via `client/src/roundTrip.ts`: wrap -> fund treasury -> pause blocks `pay_employee` -> resume -> pay -> auditor decrypts the event -> employee withdraws -> unwrap. **Not run on devnet or through the web app.** |
+| Full payroll round trip | Proven in `tests/full_payroll_round_trip.rs` (litesvm) **and on a local surfpool validator** via `client/src/roundTrip.ts`: wrap -> fund treasury -> pause blocks `pay_employee` -> resume -> pay -> auditor decrypts the event -> employee withdraws -> unwrap. **Also run on real devnet (2026-10-04)** against the redeployed `vault` and `token_wrap_compliance`, via `npm run round-trip:devnet` in `client/` (the local one is `npm run round-trip:surfpool`) (it makes its own throwaway real-asset and wrapped mints, not the canonical WUSDC). **Not run through the web app.** |
 
 Round-trip chain (current test): `initialize_vault` -> `configure_treasury_account` -> `wrap_confidential` ->
 `fund_treasury` -> `deposit_confidential` -> `apply_treasury_pending` -> employee
@@ -198,14 +201,15 @@ Round-trip chain (current test): `initialize_vault` -> `configure_treasury_accou
 | 6 | employee add/update/remove | **Cut** | Employee list is off-chain (`PRODUCT.md` decision 5). |
 | 7 | `fund_treasury` | Done, tested | Plain `transfer_checked`, permissionless. |
 | 8 | `deposit_confidential` / `apply_treasury_pending` | Done, tested | `invoke_signed` with vault seeds. |
-| 9 | `pay_employee` | Done, tested in litesvm and on surfpool (UC1, REQ01 to REQ07) | Signer == `Vault.authority` (REQ03, `Unauthorized`) is checked before `paused == false` (REQ02, `PayrollPaused`) because `admin` is declared before `vault`. Treasury -> one employee confidential `Transfer`, `invoke_signed` with vault seeds (REQ04), three context-state proofs (REQ05). `PayEmployeeEvent` carries the auditor ciphertexts lo/hi taken **from the instruction args** (Token-2022 requires them to match the validity-proof context, so no need to read the context account); the auditor recovers the amount as `lo + hi * 2^16`. `tests/pay_employee.rs` proves this by decrypting the event with the auditor's secret key. On surfpool the same decryption works against the burned demo auditor key (see `DEVNET_DEMO_AUDITOR_KEY.md`, whose secret is on record). **Not yet run on devnet.** |
+| 9 | `pay_employee` | Done, tested in litesvm and on surfpool (UC1, REQ01 to REQ07) | Signer == `Vault.authority` (REQ03, `Unauthorized`) is checked before `paused == false` (REQ02, `PayrollPaused`) because `admin` is declared before `vault`. Treasury -> one employee confidential `Transfer`, `invoke_signed` with vault seeds (REQ04), three context-state proofs (REQ05). `PayEmployeeEvent` carries the auditor ciphertexts lo/hi taken **from the instruction args** (Token-2022 requires them to match the validity-proof context, so no need to read the context account); the auditor recovers the amount as `lo + hi * 2^16`. `tests/pay_employee.rs` proves this by decrypting the event with the auditor's secret key. On surfpool and devnet the same decryption works against the burned demo auditor key (see `DEVNET_DEMO_AUDITOR_KEY.md`, whose secret is on record). |
 | 10 | `batch_pay` | **Client pipeline, not a monolithic instruction** (D3) | Lives in `web/`. On-chain you only need `pay_employee` (optionally a small `PayrollRun` state account for idempotency/resume if the team wants it). |
 | 11 | `employee_apply_pending` | **Not needed as a vault instruction** | Employee calls Token-2022 `ApplyPendingBalance` directly. |
 | 12 | payroll `withdraw_confidential` | **Not needed** (decision 9) | Existing P2P `withdraw_confidential` covers UC2 (REQ08 to REQ10); employees are wallet-owned. |
 | 13 | `close_user_account` | **Cut** | |
 
-Optional, Phase 1 "should have": a **flat per-payout fee** (system-program SOL transfer or a fixed
-plaintext token amount to a fee wallet stored on `Vault`) inside `pay_employee`. See "Fees" below.
+**Decided 2026-10-04: no flat per-payout fee in the hackathon build.** `pay_employee` has no fee logic. If one is
+added later (system-program SOL transfer or a fixed plaintext token amount to a fee wallet stored on `Vault`) it
+changes the instruction's accounts, so it needs an IDL regeneration and a redeploy. See "Fees" below.
 
 ### Open decisions that touch this half (don't pick silently; surface them)
 
