@@ -41,7 +41,12 @@ decrypts balances/amounts for the right party. Server code handles only **non-se
   `bunx <tool>`. Don't create `package-lock.json`/`yarn.lock`/`pnpm-lock.yaml`.
 - **Tailwind CSS** + **shadcn/ui** (`bunx shadcn@latest add <component>`). Use the shadcn
   primitives before writing custom ones.
-- **`@solana/kit`** (v6) for RPC, transactions, signers. **Not** `@solana/web3.js`.
+- **`@solana/kit`** for RPC, transactions, signers (installed 2026-10-04 resolved to **8.4.0**, not the v6
+  this file used to say; check Token-2022/Codama compatibility before relying on it). **Not** `@solana/web3.js`.
+- **Hosting: Cloudflare Workers** via the OpenNext adapter (`@opennextjs/cloudflare`), config in
+  `wrangler.jsonc` + `open-next.config.ts`. Edge runtime is not supported; routes run on the Node
+  runtime with `nodejs_compat`. **Database: Cloudflare D1 (SQLite) + Drizzle** (decides D6). Schema in
+  `src/server/db/schema.ts`; use `getDb()` from `src/server/db` (per request, server-only).
 - `@solana-program/token-2022` and `@solana-program/token-2022/confidential` for Token-2022
   instructions and key derivation (`deriveElGamalKeypairForOwnerMint`, `deriveAeKeyForOwnerMint`).
 - `@solana/zk-sdk` (official WASM binding) for proofs/encryption, and `@noble/curves` for the
@@ -63,7 +68,18 @@ bun run build
 bun run lint
 bun run typecheck    # add a script if missing: tsc --noEmit
 bun test             # pure-logic tests (split math, amount handling); add if missing
+bun run preview      # opennextjs-cloudflare build + run on local workerd (closest to prod)
+bun run deploy       # build + deploy to Cloudflare (needs `wrangler login`)
+bun run db:generate  # drizzle-kit: schema.ts -> SQL migration in drizzle/
+bun run db:migrate:local   # apply migrations to local D1 (bun run db:migrate:remote for prod)
+bun run cf-typegen   # regenerate cloudflare-env.d.ts after editing wrangler.jsonc
 ```
+
+Setup notes: `bun pm trust esbuild workerd` was needed (blocked postinstalls). Before the first
+deploy, run `bunx wrangler d1 create vault-web` and paste the `database_id` into `wrangler.jsonc`
+(currently a placeholder). Never run `opennextjs-cloudflare build` concurrently: it corrupts
+`.open-next/` (duplicate exports in `next-env.mjs`); `rm -rf .open-next` fixes it. Copy
+`.env.example` to `.env.local` for the RPC URL.
 
 Record here, as they get decided: the client-generation command, the IDL path, the env vars, and
 which RPC provider is used. The public devnet RPC rate-limits aggressively once the pipeline fires
@@ -219,8 +235,31 @@ server-side against the stored state.
 
 ## Known current state
 
-- This app **does not exist yet** (the `web/` folder holds only this file). `../client/` was proven only
+- **Scaffolded 2026-10-04**: Next.js 16.3.8 (App Router, `src/`, Turbopack, Tailwind 4), shadcn/ui
+  initialised (only `button` added), Cloudflare/OpenNext + D1/Drizzle wired and verified (lint,
+  typecheck, OpenNext build, local D1 migration, 200 from `wrangler dev`). The home page is a
+  placeholder. **UI pass 2026-10-04 (mock data, not wired):** Daylight Ledger design (see `DESIGN.md`):
+  landing `/`, admin `/admin`, `/admin/employees`, `/admin/payroll`, `/admin/split`, employee `/employee`,
+  `/employee/withdraw`, auditor `/auditor` (route group `src/app/(app)`), with encrypt/decrypt motion
+  components in `src/components/crypto/`. Mock data in `src/lib/mock/data.ts`; `useRunSimulation`,
+  `useStepper`, `KeyProvider` and `EmployeeProvider` are stand-ins to replace with the real pipeline,
+  wallet signMessage key derivation and chain reads. Lint, typecheck, `bun test` (split math) and the
+  OpenNext build pass; **not yet checked visually in a browser** (the Chrome extension could not reach
+  localhost). Brand name "Cipherpay" is a placeholder. **Not done yet:** wallet library (still to pick), Codama client generation, the
+  zk-sdk WASM proof spike (bundler config is deliberately empty), auth for API routes, and the
+  Workers bundle-size check once the Solana/zk deps are actually imported. `../client/` was proven only
   against local surfpool. Real devnet transactions from this app are Phase 1 work.
+- **Mock alignment pass 2026-10-04 (still no chain):** the app now opens on a **wallet connect gate** (`/app`); the
+  connected wallet decides the role (admin / employee / auditor) and sends you to its own area, with no role
+  switcher. Wallet is a mock (`components/wallet/wallet-context.tsx`, demo wallets in `lib/mock/wallets.ts`); swap in
+  wallet-standard behind the same `useWallet()` shape. Mock backend is `lib/mock/store.tsx` (vaults, accounts, runs;
+  actions named after the instructions). Done in the mocks to match the contract: first-run vault setup
+  (`initialize_vault` + `configure_treasury_account`), auditor key **imported** not wallet-derived, transfers
+  **serialized** in the run engine (D3) with per-recipient failure + retry-failed-only, paused/treasury/authority
+  checks in the simulation, employee SOL requirement, withdraw shows its two proofs and leaves WUSDC unless unwrapped,
+  employee per-payment list sourced from the employer record, auditor log spans all companies on the mint. The demo
+  failure toggle is on the payroll review step. Not browser-verified (extension cannot reach localhost); lint,
+  typecheck, tests pass and all routes return 200.
 - All 12 vault instructions now exist and are tested on-chain, including `pay_employee`, `pause_payroll` and
   `resume_payroll` (auditor rotation is a direct Token-2022 call, not a vault instruction); see `../CLAUDE.md`. The vault's instruction set is the
   12 names in the architecture PDF: `initialize_vault`, `configure_treasury_account`, `fund_treasury`,
