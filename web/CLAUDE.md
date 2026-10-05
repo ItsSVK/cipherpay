@@ -310,6 +310,21 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   SOL requirement for anything a wallet signs, withdraw shows its two proofs and leaves WUSDC unless unwrapped, per-payment
   list sourced from the employer record. The demo failure toggle is on the payroll review step. Not browser-verified
   (extension cannot reach localhost); lint, typecheck, tests pass and all routes return 200.
+- **Logout fix (2026-10-05).** `disconnect()` in `wallet-context.tsx` now deletes the saved `cipherpay:wallet-account` key itself and drops the
+  selection first, then asks the wallet to deauthorize with a 3s timeout. Cause: `SelectedWalletAccountContextProvider` only deletes the saved
+  key from an effect that runs when the selection *changes*; after a reload the library can already have cleared the selection (the wallet
+  reported no accounts), so `setSelected(undefined)` changed nothing, the key stayed, and a wallet that re-lists the site's account on load
+  (Phantom-style trusted site) was restored on the next refresh. Reproduced and verified with a fake wallet that repopulates accounts on load.
+- **Fund treasury is real (2026-10-05).** `useFundTreasury` (`components/chain/use-fund-treasury.ts`, `lib/chain/fund.ts`) sends ONE
+  transaction `[SetComputeUnitLimit 600k, wrap_confidential, fund_treasury, deposit_confidential, apply_treasury_pending]`: one wallet
+  approval, never leaves money half-way. It first reads the treasury FRESH and decrypts it, because `apply_treasury_pending` needs
+  `expected_pending_balance_credit_counter = current counter + 1` and `new_decryptable_available_balance = AES(available + pending +
+  amount)`. Wrap creates the admin's plain WUSDC account (and the escrow) itself, so funding does not require the admin to have activated a
+  personal confidential account. Needs devnet USDC in the wallet (Circle faucet, Solana Devnet); the sheet shows the balance, a Max
+  button and the faucet link. **Gotcha:** the generated `findWrappedMintPda` / `findWrappedMintAuthorityPda` default to the VAULT program;
+  those PDAs belong to the token-wrap program, so pass `programAddress` (a unit test pins the derived mint to the WUSDC constant). Verified
+  on a devnet-forked surfpool (USDC given with the cheatcode `surfnet_setTokenAccount [owner, mint, {amount}, tokenProgram]`): fund 3
+  then top-up 2 through the real UI, treasury decrypts 3.00 then 5.00, wallet USDC 10 -> 7 -> 5. Public by design: the funding amount is visible.
 - **Company setup is real (2026-10-05).** `useCompanySetup` (`components/chain/use-company-setup.ts`,
   `lib/chain/company.ts`) sends ONE transaction `[initialize_vault?, VerifyPubkeyValidity, configure_treasury_account]`: a single
   wallet approval, no half-created company (if a vault exists but its treasury is unconfigured, e.g. made by another client, it

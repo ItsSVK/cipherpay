@@ -101,12 +101,19 @@ function Inner({ children }: { children: React.ReactNode }) {
       setDemo(null);
       return;
     }
-    try {
-      await disconnectRef.current?.();
-    } catch {
-      /* the wallet may not support disconnect; we still drop our own selection */
-    }
+    // Capture the wallet's own disconnect first: dropping the selection unmounts the registrar that provides it.
+    const walletDisconnect = disconnectRef.current;
+    // Forget the wallet and drop the selection right away. We delete the saved key ourselves instead of relying on the
+    // library, which skips the delete when it has already cleared the selection after the wallet reported no accounts.
+    // Otherwise a wallet that stays authorized for this site is restored on the next refresh and logout looks broken.
+    stateSync.deleteSelectedWallet();
     setSelected(undefined);
+    try {
+      // Ask the wallet to deauthorize too, but never let a slow or missing disconnect hold up logging out.
+      await Promise.race([walletDisconnect?.(), new Promise((resolve) => setTimeout(resolve, 3000))]);
+    } catch {
+      /* the wallet may not support disconnect; we have already dropped our own selection */
+    }
   }, [demo, setSelected]);
 
   const value = useMemo<WalletState>(() => {

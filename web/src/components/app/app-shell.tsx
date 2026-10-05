@@ -75,7 +75,7 @@ function SidebarBody({ groups, pathname, isDemo, onNavigate }: { groups: NavGrou
           <span className="size-1.5 rounded-full bg-verified [animation:dot-pulse_2s_ease-in-out_infinite]" aria-hidden />
           Solana devnet
         </div>
-        {isDemo ? "Demo data. Proofs and chain calls are not connected yet." : "Balances and account state are read live from devnet. Account activation and company setup send real transactions; the rest is not wired yet."}
+        {isDemo ? "Demo data. Proofs and chain calls are not connected yet." : "Balances and account state are read live from devnet. Activation, company setup and funding the treasury send real transactions; the rest is not wired yet."}
       </div>
     </div>
   );
