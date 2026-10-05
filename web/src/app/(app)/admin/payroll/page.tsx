@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
+import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
@@ -39,6 +40,7 @@ export default function RunPayrollPage() {
 function RunPayroll() {
   const keys = useKeys();
   const v = useVault();
+  const guard = useLiveGuard();
   const employees = v.vault.employees;
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [phaseState, setPhase] = useState<Phase>("review");
@@ -123,6 +125,10 @@ function RunPayroll() {
 
   const runSimulation = useCallback((list: Employee[], paused = v.vault.paused) => {
     if (!keys.requireKeys()) return;
+    if (v.isLive && v.treasuryStatus !== "ready") {
+      toast(v.treasuryStatus === "error" ? "Couldn't read the treasury balance" : "Still decrypting the treasury balance", { description: v.treasuryError ?? "Try again in a moment." });
+      return;
+    }
     timers.current.forEach(clearTimeout);
     timers.current = [];
     const results = buildChecks(list, paused);
@@ -146,6 +152,7 @@ function RunPayroll() {
       setExcluded(ids);
       runSimulation(employees.filter((e) => !ids.has(e.id)));
     } else {
+      if (!guard()) return;
       v.setPaused(false);
       toast("Payroll resumed", { description: "Payouts can run again." });
       runSimulation(included, false);
@@ -153,6 +160,7 @@ function RunPayroll() {
   };
 
   const approveAndRun = () => {
+    if (!guard()) return;
     setPhase("executing");
     credited.current.clear();
     recorded.current = false;

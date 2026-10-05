@@ -11,6 +11,7 @@ import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
 import { StepList, type Step } from "@/components/crypto/step-list";
 import { useEmployee } from "@/components/app/employee-context";
+import { useLiveGuard } from "@/components/app/live-guard";
 import { SolNotice } from "@/components/app/sol-notice";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useStepper } from "@/hooks/use-stepper";
@@ -23,6 +24,7 @@ const PRESETS = [10, 25, 50, 100];
 export function WithdrawSheet() {
   const keys = useKeys();
   const emp = useEmployee();
+  const guard = useLiveGuard();
   const [open, setOpen] = useState(false);
   const [pct, setPct] = useState(25);
   const [unwrap, setUnwrap] = useState(true);
@@ -76,7 +78,7 @@ export function WithdrawSheet() {
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border bg-cipher/60 p-3.5">
               <p className="text-xs font-medium text-muted-foreground">Stays encrypted</p>
-              <p className="mt-1.5 text-lg font-medium"><Cipher value={formatUsdc(remaining)} seed={`wd-remaining-${remaining}`} revealed={keys.ready} suffix="USDC" className="[&>span:last-child]:text-xs" /></p>
+              <p className="mt-1.5 text-lg font-medium"><Cipher value={formatUsdc(remaining)} seed={`wd-remaining-${remaining}`} revealed={keys.ready && emp.balanceStatus === "ready"} suffix="USDC" className="[&>span:last-child]:text-xs" /></p>
             </div>
             <div className="rounded-lg border border-pending/30 bg-pending-soft p-3.5">
               <p className="text-xs font-medium text-pending">Becomes public</p>
@@ -103,7 +105,7 @@ export function WithdrawSheet() {
           {stepper.done ? (
             <Button variant="outline" className="h-10" onClick={() => { stepper.reset(); setOpen(false); }}>Done</Button>
           ) : (
-            <Button className="h-10" disabled={amount === 0n || stepper.running || !emp.hasSol} onClick={() => { if (!keys.requireKeys()) return; stepper.run(); }}>
+            <Button className="h-10" disabled={amount === 0n || stepper.running || !emp.hasSol} onClick={() => { if (!keys.requireKeys()) return; if (!guard()) return; stepper.run(); }}>
               {stepper.running ? "Sending…" : keys.ready ? `Withdraw ${formatUsdc(amount)} USDC` : "Unlock keys to withdraw"}
             </Button>
           )}

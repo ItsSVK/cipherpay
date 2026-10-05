@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { StepList, type Step } from "@/components/crypto/step-list";
 import { useKeys } from "@/components/crypto/key-context";
+import { useLiveGuard } from "@/components/app/live-guard";
 import { useVault } from "@/components/app/vault-context";
 import { useStepper } from "@/hooks/use-stepper";
 import { formatUsdc, parseUsdc } from "@/lib/format";
@@ -27,6 +28,7 @@ export function FundSheet() {
   const parsed = parseUsdc(amount);
   const invalid = parsed === null || parsed <= 0n;
   const vault = useVault();
+  const guard = useLiveGuard();
   const stepper = useStepper(STEPS.length, 950, () => {
     if (parsed !== null) vault.fund(parsed);
     toast.success("Treasury funded", { description: `${formatUsdc(parsed ?? 0n)} USDC added to the encrypted balance.` });
@@ -56,6 +58,7 @@ export function FundSheet() {
               disabled={invalid || stepper.running}
               onClick={() => {
                 if (!keys.requireKeys()) return;
+                if (!guard()) return;
                 stepper.run();
               }}
               className="h-10"

@@ -3,20 +3,24 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LogOutIcon, MenuIcon } from "lucide-react";
+import { LogOutIcon, MenuIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Address } from "@/components/crypto/fingerprint";
 import { KeyChip } from "@/components/crypto/key-chip";
 import { KeyProvider } from "@/components/crypto/key-context";
+import { WalletKeyProvider } from "@/components/crypto/wallet-key-provider";
 import { UnlockDialog } from "@/components/crypto/unlock-dialog";
+import { ChainProvider, useChain } from "@/components/chain/chain-state";
 import { ConnectScreen } from "@/components/wallet/connect-screen";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
 import { roleOf } from "@/lib/mock/wallets";
 import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
+import { useAccountStatus } from "./employee-context";
+import { useCompanyStatus } from "./vault-context";
 import { navFor, sectionFromPath, type NavGroup, type Role } from "./nav";
 import { StatusBadge } from "./status-badge";
 
@@ -61,7 +65,7 @@ function NavList({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathnam
   );
 }
 
-function SidebarBody({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathname: string; onNavigate?: () => void }) {
+function SidebarBody({ groups, pathname, isDemo, onNavigate }: { groups: NavGroup[]; pathname: string; isDemo: boolean; onNavigate?: () => void }) {
   return (
     <div className="flex h-full flex-col gap-6 p-4">
       <Brand href="/" />
@@ -71,7 +75,7 @@ function SidebarBody({ groups, pathname, onNavigate }: { groups: NavGroup[]; pat
           <span className="size-1.5 rounded-full bg-verified [animation:dot-pulse_2s_ease-in-out_infinite]" aria-hidden />
           Solana devnet
         </div>
-        Demo data. Proofs and chain calls are not connected yet.
+        {isDemo ? "Demo data. Proofs and chain calls are not connected yet." : "Balances and account state are read live from devnet. Account activation and company setup send real transactions; the rest is not wired yet."}
       </div>
     </div>
   );
@@ -88,8 +92,10 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
 
   const role: Role = roleOf(address);
   const section = sectionFromPath(pathname);
-  const vault = store.vaultOf(address);
-  const companyReady = vault.created && vault.treasuryConfigured;
+  const company = useCompanyStatus();
+  const account = useAccountStatus();
+  const chain = useChain();
+  const companyReady = company.ready;
 
   // One wallet, one portal. Members start on My pay. The company pages (everything under /admin except
   // the setup screen at /admin itself) are closed until the company is set up, URL or not.
@@ -98,7 +104,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
     if (section !== "auditor") redirect = "/auditor";
   } else if (section === "auditor" || section === null) {
     redirect = "/pay";
-  } else if (section === "admin" && !companyReady && pathname !== "/admin") {
+  } else if (section === "admin" && !companyReady && !company.loading && pathname !== "/admin") {
     redirect = "/admin";
   }
   const inPlace = redirect === null;
@@ -106,17 +112,16 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
     if (redirect) router.replace(redirect);
   }, [redirect, router]);
 
-  const groups = navFor(role, { companyReady, payBadge: !store.accountOf(address).activated ? "setup" : store.accountOf(address).pending > 0n ? "pay" : undefined });
-  const crumb = section === "admin" && companyReady ? vault.name : null;
+  const groups = navFor(role, { companyReady, payBadge: account.loading ? undefined : !account.activated ? "setup" : account.pendingBadge ? "pay" : undefined });
+  const crumb = section === "admin" && companyReady ? store.vaultOf(address).name : null;
   const crumbPage = section === "admin" ? (companyReady ? "Payroll vault" : "Company setup") : section === "pay" ? "My pay" : "Compliance";
   const label = wallet.walletName;
 
-  return (
-    // Remounting on address change drops every derived key, as the key-handling rules require.
-    <KeyProvider key={address} mode={role === "auditor" ? "import" : "signature"}>
+  const body = (
+    <>
       <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
         <aside className="sticky top-0 hidden h-dvh border-r bg-sidebar lg:block">
-          <SidebarBody groups={groups} pathname={pathname} />
+          <SidebarBody groups={groups} pathname={pathname} isDemo={wallet.isDemo} />
         </aside>
         <div className="min-w-0">
           <div className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b bg-background/90 px-4 backdrop-blur-sm sm:px-6">
@@ -127,7 +132,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
                 </SheetTrigger>
                 <SheetContent side="left" className="w-[280px] p-0 sm:max-w-[280px]">
                   <SheetTitle className="sr-only">Menu</SheetTitle>
-                  <SidebarBody groups={groups} pathname={pathname} onNavigate={() => setMenu(false)} />
+                  <SidebarBody groups={groups} pathname={pathname} isDemo={wallet.isDemo} onNavigate={() => setMenu(false)} />
                 </SheetContent>
               </Sheet>
             </div>
@@ -144,9 +149,20 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
               <span className="hidden items-center gap-2.5 rounded-full border bg-card py-1 pl-3 pr-1.5 sm:inline-flex">
                 <span className="hidden text-[13px] font-medium md:inline">{label ?? "Wallet"}</span>
                 <Address value={address} className="text-muted-foreground" />
-                {wallet.isDemo ? <span className="font-mono text-[11.5px] tnum text-muted-foreground">{solText(store.accountOf(address).sol)}</span> : null}
+                {!account.loading ? <span className="font-mono text-[11.5px] tnum text-muted-foreground">{solText(account.sol)}</span> : null}
                 {wallet.isDemo ? <StatusBadge tone="pending">Demo</StatusBadge> : null}{role === "auditor" ? <StatusBadge tone="neutral">Auditor</StatusBadge> : null}
               </span>
+              {!wallet.isDemo ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Refresh devnet state"
+                  title={chain.updatedAt ? `Live devnet data. Updated ${new Date(chain.updatedAt).toLocaleTimeString()}. Click to refresh.` : "Reading devnet…"}
+                  onClick={chain.refresh}
+                >
+                  <RefreshCwIcon className={cn(chain.loading && "animate-spin")} />
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 size="icon"
@@ -165,7 +181,14 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
         </div>
       </div>
       <UnlockDialog seed={address} />
-    </KeyProvider>
+    </>
+  );
+
+  // Remounting on address change drops every derived key, as the key-handling rules require.
+  return wallet.account ? (
+    <WalletKeyProvider key={address} account={wallet.account}>{body}</WalletKeyProvider>
+  ) : (
+    <KeyProvider key={address} mode={role === "auditor" ? "import" : "signature"}>{body}</KeyProvider>
   );
 }
 
@@ -173,5 +196,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const wallet = useWallet();
   if (wallet.status === "loading") return <div className="min-h-dvh" aria-busy="true" />;
   if (wallet.status !== "connected" || !wallet.address) return <ConnectScreen />;
-  return <ConnectedShell address={wallet.address}>{children}</ConnectedShell>;
+  return (
+    <ChainProvider>
+      <ConnectedShell address={wallet.address}>{children}</ConnectedShell>
+    </ChainProvider>
+  );
 }

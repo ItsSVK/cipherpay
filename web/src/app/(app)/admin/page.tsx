@@ -11,19 +11,23 @@ import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
 import { CopyButton } from "@/components/app/copy-button";
 import { FundSheet } from "@/components/app/fund-sheet";
+import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
+import { PageLoading } from "@/components/app/page-loading";
 import { SetupVault } from "@/components/app/setup-vault";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
-import { VAULT_ADDRESS } from "@/lib/mock/data";
 import { formatUsdc } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export default function AdminOverview() {
   const keys = useKeys();
   const v = useVault();
+  const guard = useLiveGuard();
   const { vault } = v;
+  const shown = keys.ready && v.treasuryStatus === "ready";
 
+  if (v.loading) return <PageLoading label="Reading your vault from devnet…" />;
   if (!v.ready) return <SetupVault />;
 
   const funded = vault.treasury > 0n;
@@ -55,10 +59,10 @@ export default function AdminOverview() {
               <h2 id="treasury-h" className="font-sans text-sm font-medium text-muted-foreground">Treasury balance</h2>
               <p className="mt-1 text-xs text-muted-foreground">Encrypted on-chain. The public sees ciphertext.</p>
             </div>
-            <StatusBadge tone={keys.ready ? "verified" : "key"}>{keys.ready ? "Decrypted locally" : "Encrypted"}</StatusBadge>
+            <StatusBadge tone={shown ? "verified" : "key"}>{shown ? "Decrypted locally" : keys.ready && v.treasuryStatus === "decrypting" ? "Decrypting…" : "Encrypted"}</StatusBadge>
           </div>
           <div className="mt-6 text-[2.5rem] font-medium leading-none sm:text-5xl">
-            <Cipher value={formatUsdc(vault.treasury)} seed={`treasury-${vault.treasury}`} revealed={keys.ready} suffix="USDC" className="[&>span:last-child]:text-base" />
+            <Cipher value={formatUsdc(vault.treasury)} seed={`treasury-${vault.treasury}`} revealed={shown} suffix="USDC" className="[&>span:last-child]:text-base" />
           </div>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             {keys.ready ? (
@@ -72,7 +76,9 @@ export default function AdminOverview() {
             )}
             <p className="text-[13px] text-muted-foreground">Decryption happens in this tab. Nothing is sent to a server.</p>
           </div>
-          {!funded ? <p className="mt-5 rounded-lg bg-muted/60 p-3 text-[13px] text-muted-foreground">The treasury is empty. Use Fund treasury to add USDC before running payroll.</p> : null}
+          {v.treasuryError ? <p className="mt-5 rounded-lg border border-destructive/30 bg-failed-soft p-3 text-[13px] text-destructive" role="alert">{v.treasuryError}</p> : null}
+          {v.treasuryPending > 0n && shown ? <p className="mt-5 rounded-lg bg-muted/60 p-3 text-[13px] text-muted-foreground">{formatUsdc(v.treasuryPending)} USDC has been deposited but is still pending. Apply it to make it spendable by payroll.</p> : null}
+          {!funded && v.treasuryStatus !== "locked" && v.treasuryStatus !== "decrypting" ? <p className="mt-5 rounded-lg bg-muted/60 p-3 text-[13px] text-muted-foreground">The treasury is empty. Use Fund treasury to add USDC before running payroll.</p> : null}
         </section>
 
         <section className="plate enter p-6" style={{ ["--i" as string]: 2 }} aria-labelledby="vault-h">
@@ -89,6 +95,7 @@ export default function AdminOverview() {
               checked={vault.paused}
               aria-label="Pause payroll"
               onCheckedChange={(on) => {
+                if (!guard()) return;
                 v.setPaused(on);
                 toast(on ? "Payroll paused" : "Payroll resumed", { description: on ? "Withdrawals stay open." : "Payouts can run again." });
               }}
@@ -97,7 +104,7 @@ export default function AdminOverview() {
           <dl className="mt-5 grid gap-3 text-sm">
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Vault</dt>
-              <dd className="flex items-center gap-1"><Address value={VAULT_ADDRESS} /><CopyButton value={VAULT_ADDRESS} label="Copy vault address" /></dd>
+              <dd className="flex items-center gap-1"><Address value={v.vaultAddress} /><CopyButton value={v.vaultAddress} label="Copy vault address" /></dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Auditor key</dt>

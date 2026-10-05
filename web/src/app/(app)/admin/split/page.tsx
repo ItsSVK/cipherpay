@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
+import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
@@ -49,6 +50,7 @@ function Split() {
 
 function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
   const keys = useKeys();
+  const guard = useLiveGuard();
   const v = useVault();
   const DEST_META: Record<string, { name: string; wallet: string; color: string }> = {
     sam: { name: primary.name, wallet: primary.wallet, color: COLORS.sam },
@@ -169,7 +171,7 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
           {stage === "draft" && v.vault.paused ? (
             <div className="plate flex flex-wrap items-center justify-between gap-3 border-pending/25 bg-pending-soft p-4 text-[13.5px] text-pending" role="alert">
               <p>Payroll is paused, so payouts would be rejected. Resume it to continue.</p>
-              <Button size="sm" variant="outline" onClick={() => { v.setPaused(false); toast("Payroll resumed", { description: "Payouts can run again." }); }}>Resume payroll</Button>
+              <Button size="sm" variant="outline" onClick={() => { if (!guard()) return; v.setPaused(false); toast("Payroll resumed", { description: "Payouts can run again." }); }}>Resume payroll</Button>
             </div>
           ) : null}
           {stage === "draft" && parts && !treasuryOk ? (
@@ -216,7 +218,7 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
             )}
             {stage === "approved" && (
               <>
-                <Button className="h-10" onClick={() => { if (!keys.requireKeys()) return; credited.current.clear(); recorded.current = false; setStage("executing"); sim.start(); }}>{keys.ready ? "Execute payout" : "Unlock keys to execute"}</Button>
+                <Button className="h-10" onClick={() => { if (!keys.requireKeys()) return; if (!guard()) return; credited.current.clear(); recorded.current = false; setStage("executing"); sim.start(); }}>{keys.ready ? "Execute payout" : "Unlock keys to execute"}</Button>
                 <Button variant="ghost" onClick={() => setStage("draft")}>Edit rule</Button>
               </>
             )}

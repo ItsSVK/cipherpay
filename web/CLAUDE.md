@@ -57,7 +57,8 @@ decrypts balances/amounts for the right party. Server code handles only **non-se
   `filterWallets`, the README says `filterWallet`; keep the filter and `stateSync` at module scope, the provider memoises
   on their identity). Detected wallets must support `solana:devnet` and `standard:connect`. Each wallet row calls
   `useConnect(wallet)` then `selectAccount(accounts[0])`. Only `walletName:address` is persisted (localStorage), never keys or
-  signatures. Signing next: `useSignMessage` for key derivation, `useWalletAccountTransactionSigner` /
+  signatures. Key derivation is live: `WalletKeyProvider` uses `useSignMessage`. For transactions use
+  `useWalletAccountTransactionSigner` /
   `useSignAndSendTransaction` for transactions, both taking `useWallet().account`.
 - A **generated program client** for `vault` from the Anchor IDL via Codama
   (`@codama/nodes-from-anchor` + `@codama/renderers-js`), which produces `@solana/kit`-compatible
@@ -79,6 +80,7 @@ bun run deploy       # build + deploy to Cloudflare (needs `wrangler login`)
 bun run db:generate  # drizzle-kit: schema.ts -> SQL migration in drizzle/
 bun run db:migrate:local   # apply migrations to local D1 (bun run db:migrate:remote for prod)
 bun run cf-typegen   # regenerate cloudflare-env.d.ts after editing wrangler.jsonc
+bun run gen:vault    # regenerate src/generated/vault from ../target/idl/vault.json (Codama); see below
 ```
 
 Setup notes: `bun pm trust esbuild workerd` was needed (blocked postinstalls). Before the first
@@ -87,7 +89,12 @@ deploy, run `bunx wrangler d1 create vault-web` and paste the `database_id` into
 `.open-next/` (duplicate exports in `next-env.mjs`); `rm -rf .open-next` fixes it. Copy
 `.env.example` to `.env.local` for the RPC URL.
 
-Record here, as they get decided: the client-generation command, the IDL path, the env vars, and
+**Generated vault client (done 2026-10-05):** `bun run gen:vault` runs `scripts/generate-vault-client.ts`
+(`codama@1.11.0`, `@codama/nodes-from-anchor@1.5.6`, `@codama/renderers-js@2.5.0`, dev deps) on `../target/idl/vault.json` and
+writes `src/generated/vault/` (never hand-edit; eslint ignores it; import from `@/generated/vault/src/generated`). Run it after
+the on-chain half changes anything (root order: `anchor build`, then `cargo build-sbf --arch v1` last). It gives account
+decoders (`fetchMaybeVault`), PDA finders (`findVaultPda({ admin, mint })`), instruction builders and event decoders.
+Env: `NEXT_PUBLIC_SOLANA_RPC_URL` (devnet; defaults to the public RPC, which rate-limits). Record here, as they get decided:
 which RPC provider is used. The public devnet RPC rate-limits aggressively once the pipeline fires
 many parallel transactions, so plan for a dedicated devnet RPC URL in env.
 
@@ -126,8 +133,15 @@ web/src/
    database as sensitive (auth, access control) even though it holds no keys.
 4. **Use `bigint` for all token amounts.** USDC/WUSDC have 6 decimals. No floating point anywhere
    in amount math. Format only at the UI edge.
-5. **Derive keys per `(owner, mint)`** exactly as the Rust/TS reference does. If derivation differs,
-   proofs fail verification with opaque errors.
+5. **Derive keys with the standard wallet-level derivation** (`deriveConfidentialKeys` from
+   `@solana-program/token-2022/confidential`, changed 2026-10-05; this rule used to say per `(owner, mint)`).
+   The wallet signs the constant `solana-conf-bal/v1` once; the ElGamal keypair and AES key both come from that one
+   signature, byte-identical to what the Rust `solana-zk-sdk`, the CLI and other clients derive for the same wallet. The
+   per-`(owner, mint)` helpers are deprecated in 0.19.0 and exist only to migrate old accounts. Consequence: one key
+   per wallet, so the treasury account and the same wallet's personal account share a key. If proofs fail with opaque
+   errors, check derivation first. The wallet must sign **canonically and deterministically** (Ed25519, RFC 8032) and must
+   not rewrite the message; the app rejects a rewriting wallet and warns if the public key changes between sessions
+   (`checkKeyContinuity`, stores only the public key).
 
 ## Where the WASM bites in Next.js
 
@@ -136,6 +150,12 @@ bundler config (check whether the app uses Turbopack or webpack and the current 
 async WASM), and proof generation off the main thread (a Web Worker) so the UI doesn't freeze
 during range-proof generation. Prove a single proof generating in-browser **in the first days**;
 this is the highest technical risk in this half. Record the working config here.
+
+**Verified 2026-10-05:** with `next.config.ts` left empty, Turbopack bundles `@solana/zk-sdk` (the `bundler` wasm-pack
+target, pulled in by `@solana-program/token-2022/confidential`) and it instantiates and runs in the browser. Key
+derivation ran in headless Chrome against `next dev`. Keep the import lazy (`await import(...)` inside `lib/crypto/keys.ts`)
+so the WASM only loads client-side on demand. Not yet checked: the Cloudflare Workers production build (`bun run build` /
+`preview`), and proof generation (heavier) on the main thread vs a Web Worker.
 
 ## The payout pipeline (this half's core engineering)
 
@@ -290,6 +310,51 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   SOL requirement for anything a wallet signs, withdraw shows its two proofs and leaves WUSDC unless unwrapped, per-payment
   list sourced from the employer record. The demo failure toggle is on the payroll review step. Not browser-verified
   (extension cannot reach localhost); lint, typecheck, tests pass and all routes return 200.
+- **Company setup is real (2026-10-05).** `useCompanySetup` (`components/chain/use-company-setup.ts`,
+  `lib/chain/company.ts`) sends ONE transaction `[initialize_vault?, VerifyPubkeyValidity, configure_treasury_account]`: a single
+  wallet approval, no half-created company (if a vault exists but its treasury is unconfigured, e.g. made by another client, it
+  skips `initialize_vault` and just finishes configuration). It fits the default compute budget. The treasury is the **vault PDA's**
+  associated token account (not the admin's), registered with the admin's wallet-level ElGamal key, the same key as the admin's
+  personal account. Shared proof helper: `lib/chain/key-registration.ts` (used by activation too). Verified on a devnet-forked
+  surfpool with a fresh funded wallet through the real UI: vault + treasury created in one tx, treasury owner = vault PDA,
+  `approved`, key matches `Vault.treasuryElgamalPubkey`, Overview decrypts 0.00, company nav and `/admin/*` open. Unit-tested
+  (order, accounts, token program, proof validity, repair path). Company pages are closed until the vault AND treasury are configured.
+- **First real write: account activation (2026-10-05).** `useActivation` (`components/chain/use-activation.ts`) sends ONE
+  transaction `[VerifyPubkeyValidity, vault::create_confidential_account]` (`lib/chain/activate.ts`; the proof must be
+  the instruction immediately before the program's, and `create_confidential_account` does create + reallocate + configure
+  internally, so activation is not three transactions). Signing goes through `useWalletAccountTransactionSigner`
+  (`components/chain/tx-signer.tsx`, only offered when the account supports `solana:signTransaction` on devnet); sending and
+  confirmation use our RPC (`lib/chain/send.ts`: blockhash expiry, preflight logs mapped to readable errors, polls to
+  `confirmed`). **Gotchas:** the Codama builder defaults `tokenProgram` to the classic SPL Token program, so pass
+  `TOKEN_2022_PROGRAM_ADDRESS` explicitly (a unit test pins this); reads and the blockhash use `confirmed` so a new account
+  shows up in seconds. **Verified end to end** on a devnet-forked surfpool (`surfpool start --network devnet --no-tui
+  --no-studio --no-deploy`: it lazily pulls the real vault program and WUSDC mint from devnet and gives free airdrops) with a
+  funded throwaway wallet driven in headless Chrome: one signature for keys, one transaction, page flips to activated and the
+  new account decrypts to 0.00 (first real decrypt). Also unit-tested (shape, proof validity, key bytes). The WUSDC mint
+  currently has `autoApproveNewAccounts = true`, so no approval step is needed (D4 is moot for this mint). Test recipe:
+  clone the app to a scratch dir (never run a second `next dev` in this directory), set `NEXT_PUBLIC_SOLANA_RPC_URL=http://127.0.0.1:8899`.
+  Not yet tried against real devnet with a real wallet app. Every other write still goes through `useLiveGuard`.
+- **Chain reads live for real wallets (2026-10-05); writes still not wired.** `lib/chain/{rpc,read,decrypt}.ts`,
+  `components/chain/chain-state.tsx` (`ChainProvider`/`useChain`, polls every 20s while the tab is visible, header refresh
+  button) and `use-confidential-balance.ts`. A real wallet now shows its true SOL, whether its WUSDC account exists with the
+  confidential extension (= "activated"; `approved` is surfaced for decision D4), its vault PDA state (exists, paused,
+  treasury configured), and activation of everyone on its payroll list (one batched call). Balances decrypt only while keys are
+  unlocked and are dropped on lock; an account registered under a different key shows a clear error instead of garbage. The
+  light hooks `useAccountStatus` / `useCompanyStatus` need no keys (the shell uses them); `useEmployee` / `useVault` decrypt.
+  **Still mock for real wallets:** employee list and run history (in-memory, becomes D1) and per-payment history (needs the
+  indexer). Every action that would send a transaction goes through `useLiveGuard()`, which toasts "not wired yet" for real
+  wallets and lets demo wallets run the mock flow. Verified: PDA derivation, Vault decoding and treasury-token decoding against
+  4 real devnet vaults; decryption against synthetic ciphertexts (2 tests); end-to-end in headless Chrome against live devnet
+  (fresh wallet: 0 SOL, no account, no vault, `/admin/payroll` redirects). **Not verified:** decrypting a real devnet account
+  (no account of ours exists under the canonical WUSDC mint yet), so the first real activation should be watched.
+- **Real wallet + key derivation live (2026-10-05).** Connect via wallet-standard; unlocking keys asks the wallet for one
+  `signMessage` and derives the ElGamal + AES keys (`lib/crypto/keys.ts`, `components/crypto/wallet-key-provider.tsx`;
+  `useKeys().getKeys()` hands out the material, `elgamalPubkey` is public). Demo wallets still play the animation only.
+  Tested: 4 bun tests (determinism, distinct wallets, rewriting wallet rejected, declined prompt), and an end-to-end run in
+  headless Chrome with an injected fake wallet-standard wallet (detect, connect, route to `/pay`, unlock with exactly one
+  signature, reload keeps the connection and re-locks keys, disconnect sticks). **Not yet tried with a real wallet app**:
+  whether Phantom/Solflare/Backpack sign the `solana-conf-bal/v1` message unmodified and repeatably is the open risk. Balances
+  and actions are still mock.
 - All 12 vault instructions now exist and are tested on-chain, including `pay_employee`, `pause_payroll` and
   `resume_payroll` (auditor rotation is a direct Token-2022 call, not a vault instruction); see `../CLAUDE.md`. The vault's instruction set is the
   12 names in the architecture PDF: `initialize_vault`, `configure_treasury_account`, `fund_treasury`,

@@ -13,7 +13,7 @@ import { LockIcon } from "./lock-icon";
 const DEMO_SECRET = "devnet-demo-auditor-secret (burned)";
 
 export function UnlockDialog({ seed }: { seed: string }) {
-  const { dialogOpen, setDialogOpen, status, stage, unlock, mode } = useKeys();
+  const { dialogOpen, setDialogOpen, status, stage, unlock, mode, real, error, elgamalPubkey } = useKeys();
   const [secret, setSecret] = useState("");
   const busy = status === "deriving";
   const importing = mode === "import";
@@ -30,7 +30,7 @@ export function UnlockDialog({ seed }: { seed: string }) {
           <DialogDescription>
             {importing
               ? "The auditor key is a standalone secret set on the mint. It cannot be derived from your wallet, so paste it here. It stays in memory for this session only and is cleared when you disconnect."
-              : "Keys are derived from a wallet signature, held in memory for this session only, and cleared when you disconnect. They never leave this browser."}
+              : "Your wallet signs one fixed message, which costs nothing and sends nothing. Your encryption keys are derived from that signature, held in memory for this session only, and cleared when you disconnect. They never leave this browser."}
           </DialogDescription>
         </DialogHeader>
         {importing && status === "locked" ? (
@@ -42,7 +42,8 @@ export function UnlockDialog({ seed }: { seed: string }) {
             </button>
           </div>
         ) : null}
-        <KeyDerivation status={status} stage={stage} seed={seed} mode={mode} />
+        <KeyDerivation status={status} stage={stage} seed={elgamalPubkey ?? seed} mode={mode} />
+        {error ? <p role="alert" className="rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">{error}</p> : null}
         <Button
           onClick={() => {
             unlock();
@@ -61,10 +62,14 @@ export function UnlockDialog({ seed }: { seed: string }) {
           ) : importing ? (
             "Import key"
           ) : (
-            "Sign message and derive keys"
+            error ? "Try again" : "Sign message and derive keys"
           )}
         </Button>
-        <p className="text-center text-xs text-muted-foreground">Demo build: no real {importing ? "key check" : "signature"} happens yet.</p>
+        {real ? (
+          <p className="text-center text-xs leading-relaxed text-muted-foreground">Your wallet may show the message as unreadable text starting with <span className="font-mono">solana-conf-bal/v1</span>. That is expected.</p>
+        ) : (
+          <p className="text-center text-xs text-muted-foreground">Demo wallet: no real {importing ? "key check" : "signature"} happens.</p>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -14,13 +14,15 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "test": "bun test"
+    "test": "bun test",
+    "gen:vault": "bun scripts/generate-vault-client.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
     "@noble/curves": "^2.4.0",
     "@opennextjs/cloudflare": "^1.20.8",
     "@solana-program/token-2022": "^0.19.0",
+    "@solana-program/zk-elgamal-proof": "0.4.0",
     "@solana/kit": "^8.4.0",
     "@solana/react": "8.4.0",
     "@solana/zk-sdk": "^0.5.3",
@@ -40,11 +42,14 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@codama/nodes-from-anchor": "1.5.6",
+    "@codama/renderers-js": "2.5.0",
     "@tailwindcss/postcss": "^4",
     "@types/bun": "^1.4.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "codama": "1.11.0",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.3.8",
