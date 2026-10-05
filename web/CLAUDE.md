@@ -51,8 +51,14 @@ decrypts balances/amounts for the right party. Server code handles only **non-se
   instructions and key derivation (`deriveElGamalKeypairForOwnerMint`, `deriveAeKeyForOwnerMint`).
 - `@solana/zk-sdk` (official WASM binding) for proofs/encryption, and `@noble/curves` for the
   Ristretto255 point arithmetic the WASM binding doesn't expose.
-- Wallet connection via **wallet-standard** (e.g. `@solana/react` or wallet-standard directly).
-  Pick one on day 1 and record it here.
+- **Wallet connection (decided 2026-10-04): `@solana/react@8.4.0` + `@wallet-standard/react@1.0.3`**, pinned. 8.4.0
+  matches our `@solana/kit` 8.4.0 (swr and tanstack are optional peers, not installed). `WalletProvider`
+  (`src/components/wallet/wallet-context.tsx`) wraps `SelectedWalletAccountContextProvider` (note the prop is
+  `filterWallets`, the README says `filterWallet`; keep the filter and `stateSync` at module scope, the provider memoises
+  on their identity). Detected wallets must support `solana:devnet` and `standard:connect`. Each wallet row calls
+  `useConnect(wallet)` then `selectAccount(accounts[0])`. Only `walletName:address` is persisted (localStorage), never keys or
+  signatures. Signing next: `useSignMessage` for key derivation, `useWalletAccountTransactionSigner` /
+  `useSignAndSendTransaction` for transactions, both taking `useWallet().account`.
 - A **generated program client** for `vault` from the Anchor IDL via Codama
   (`@codama/nodes-from-anchor` + `@codama/renderers-js`), which produces `@solana/kit`-compatible
   code. Verify this against current Codama docs before relying on it, and record the exact
@@ -276,8 +282,8 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   sheet) and **Company** (`/admin`). Company opens the "Set up your payroll vault" flow; only once the vault and treasury
   are configured do Overview, Employees, Run payroll and Split payout appear. Those URLs are closed until then: the shell
   redirects `/admin/*` (other than `/admin`) to `/admin` for a wallet whose company is not set up. The auditor stays a separate view (`/auditor`, key imported not
-  wallet-derived; deferred rework). Wallet is a mock (`components/wallet/wallet-context.tsx`, demo wallets in
-  `lib/mock/wallets.ts`); swap in wallet-standard behind the same `useWallet()` shape. Mock backend is
+  wallet-derived; deferred rework). Real wallet connect is live (see Stack); demo wallets in
+  `lib/mock/wallets.ts` remain as a secondary "sample data" option until the mock store is replaced by chain reads. Mock backend is
   `lib/mock/store.tsx` (vaults, accounts, runs; actions named after the instructions). Done in the mocks to match the
   contract: first-run vault setup (`initialize_vault` + `configure_treasury_account`), **serialized** transfers in the
   run engine (D3) with per-recipient failure + retry-failed-only, paused/treasury/authority checks in the simulation,

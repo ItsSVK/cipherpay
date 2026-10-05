@@ -14,7 +14,7 @@ import { UnlockDialog } from "@/components/crypto/unlock-dialog";
 import { ConnectScreen } from "@/components/wallet/connect-screen";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
-import { roleOf, walletLabel } from "@/lib/mock/wallets";
+import { roleOf } from "@/lib/mock/wallets";
 import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
 import { navFor, sectionFromPath, type NavGroup, type Role } from "./nav";
@@ -109,7 +109,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
   const groups = navFor(role, { companyReady, payBadge: !store.accountOf(address).activated ? "setup" : store.accountOf(address).pending > 0n ? "pay" : undefined });
   const crumb = section === "admin" && companyReady ? vault.name : null;
   const crumbPage = section === "admin" ? (companyReady ? "Payroll vault" : "Company setup") : section === "pay" ? "My pay" : "Compliance";
-  const label = walletLabel(address);
+  const label = wallet.walletName;
 
   return (
     // Remounting on address change drops every derived key, as the key-handling rules require.
@@ -144,16 +144,16 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
               <span className="hidden items-center gap-2.5 rounded-full border bg-card py-1 pl-3 pr-1.5 sm:inline-flex">
                 <span className="hidden text-[13px] font-medium md:inline">{label ?? "Wallet"}</span>
                 <Address value={address} className="text-muted-foreground" />
-                <span className="font-mono text-[11.5px] tnum text-muted-foreground">{solText(store.accountOf(address).sol)}</span>
-                {role === "auditor" ? <StatusBadge tone="neutral">Auditor</StatusBadge> : null}
+                {wallet.isDemo ? <span className="font-mono text-[11.5px] tnum text-muted-foreground">{solText(store.accountOf(address).sol)}</span> : null}
+                {wallet.isDemo ? <StatusBadge tone="pending">Demo</StatusBadge> : null}{role === "auditor" ? <StatusBadge tone="neutral">Auditor</StatusBadge> : null}
               </span>
               <Button
                 variant="ghost"
                 size="icon"
                 aria-label="Disconnect wallet"
                 title="Disconnect wallet"
-                onClick={() => {
-                  wallet.disconnect();
+                onClick={async () => {
+                  await wallet.disconnect();
                   toast("Wallet disconnected", { description: "Keys were cleared from memory." });
                 }}
               >

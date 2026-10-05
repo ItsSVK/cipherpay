@@ -7,3 +7,6 @@ export const TOKEN_DECIMALS = 6;
 
 export const SOLANA_RPC_URL =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+
+/** Wallet Standard chain id. Wallets must support it to appear in the connect list. Devnet only. */
+export const SOLANA_CHAIN = "solana:devnet" as const;
