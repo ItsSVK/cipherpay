@@ -55,11 +55,14 @@ impl<'info> SetOperator<'info> {
             require!(max_payments >= 1, VaultError::InvalidOperatorLimit);
         }
 
+        // Bumping the sequence invalidates any offline authorization the admin signed earlier but never submitted.
+        let seq = self.operator_config.seq.saturating_add(1);
         self.operator_config.set_inner(OperatorConfig {
             vault: self.vault.key(),
             operator,
             expires_at: if revoking { 0 } else { expires_at },
             payments_left: if revoking { 0 } else { max_payments },
+            seq,
             bump,
         });
         Ok(())
@@ -76,6 +79,7 @@ pub fn handle_set_operator(ctx: Context<SetOperator>, operator: Pubkey, expires_
         operator: ctx.accounts.operator_config.operator,
         expires_at: ctx.accounts.operator_config.expires_at,
         payments_left: ctx.accounts.operator_config.payments_left,
+        seq: ctx.accounts.operator_config.seq,
     });
 
     Ok(())

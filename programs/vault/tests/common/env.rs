@@ -71,7 +71,9 @@ const TOKEN_WRAP_COMPLIANCE_PROGRAM_SO: &str = concat!(
 /// newer one -- see [`TOKEN_2022_PROGRAM_SO`]. Also loads our
 /// `token_wrap_compliance` fork -- see [`TOKEN_WRAP_COMPLIANCE_PROGRAM_SO`].
 pub fn setup_svm() -> LiteSVM {
-    let mut svm = LiteSVM::new();
+    // `with_precompiles` registers the Ed25519 / secp256k1 signature-verification programs. Without it litesvm fails any
+    // transaction that uses one with `InvalidProgramForExecution`, and `authorize_operator` depends on the Ed25519 one.
+    let mut svm = LiteSVM::new().with_precompiles();
 
     svm.add_program_from_file(spl_token_2022_interface::ID, TOKEN_2022_PROGRAM_SO)
         .expect("failed to load tests/fixtures/spl_token_2022-11.0.0.so");

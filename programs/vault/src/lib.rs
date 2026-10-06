@@ -108,6 +108,13 @@ pub mod vault {
         crate::instructions::set_operator::handle_set_operator(ctx, operator, expires_at, max_payments)
     }
 
+    /// Authorizes or revokes the payroll operator from a message the admin signed OFFLINE, submitted (and paid for) by anyone.
+    /// A signed message never expires and needs no simulation, so a slow wallet popup can't invalidate it the way it can a
+    /// transaction the admin signs. See `instructions/authorize_operator.rs`.
+    pub fn authorize_operator(ctx: Context<AuthorizeOperator>, operator: Pubkey, expires_at: i64, max_payments: u32, seq: u64) -> Result<()> {
+        crate::instructions::authorize_operator::handle_authorize_operator(ctx, operator, expires_at, max_payments, seq)
+    }
+
     /// UC3 (REQ11): blocks `pay_employee`; withdrawals stay open.
     pub fn pause_payroll(ctx: Context<PausePayroll>) -> Result<()> {
         crate::instructions::pause_payroll::handle_pause_payroll(ctx)
