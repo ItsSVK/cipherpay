@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useChain } from "@/components/chain/chain-state";
 import { useTxSigner } from "@/components/chain/tx-signer";
 import { useKeys } from "@/components/crypto/key-context";
-import { deriveHelperSigner, ensureHelperFunded, sweepHelper } from "@/lib/chain/helper-signer";
+import { deriveHelperSigner, ensureHelperReady } from "@/lib/chain/helper-signer";
 import { PaymentError, payOne, type PayStage } from "@/lib/chain/pay-run";
 import { rpc } from "@/lib/chain/rpc";
 import type { RecipientRun } from "./use-run-simulation";
@@ -24,8 +24,8 @@ const STAGE_INDEX: Record<PayStage, number> = { prove: 0, create: 1, verify: 2, 
 /**
  * The real payout engine: pays each recipient in turn through pay_employee. Recipients are strictly sequential, which is
  * exactly what the protocol needs, since each equality proof is built against the treasury's current balance ciphertext
- * and so payment N must land before payment N+1 is proved. Each recipient needs ONE small wallet approval (pay_employee): the
- * proof-account transactions are signed silently by a payroll helper key, which the wallet tops up with a little SOL when short.
+ * and so payment N must land before payment N+1 is proved. The wallet approves at most ONCE per run (it authorizes the
+ * payroll helper key as the vault's operator and tops it up with a little SOL); every transaction of every payment is then signed by the helper.
  * Same return shape as the demo engine (`useRunSimulation`), so the payroll page can use either.
  */
 export function useLiveRun(items: LiveItem[], stageCount: number) {
@@ -73,44 +73,47 @@ export function useLiveRun(items: LiveItem[], stageCount: number) {
       if (!signer) return;
       setRunning(true);
       const helper = await deriveHelperSigner(k);
+      // ONE wallet approval for the whole run, and none while a recent authorization is live: it tops the helper up with SOL if short
+      // and authorizes it to pay as the vault's operator. After that every payment is signed by the helper, with no popup.
+      const sol = (lamports: bigint) => (Number(lamports) / 1e9).toFixed(4);
+      const shortHelper = `${helper.address.slice(0, 4)}…${helper.address.slice(-4)}`;
+      let what = { topUpLamports: 0n, authorize: false };
+      const first = ids[0];
+      try {
+        await ensureHelperReady({
+          rpc,
+          admin: signer,
+          helper,
+          onNeedApproval: (w) => {
+            what = w;
+          },
+          onPrompt: ({ attempt, expiresAtMs }) =>
+            first &&
+            patch(first, {
+              status: "running",
+              deadline: expiresAtMs,
+              note: `${attempt > 0 ? "That took longer than devnet allows, so we're asking again. " : ""}Your wallet will show one transaction${what.topUpLamports > 0n ? `: a SOL transfer of ${sol(what.topUpLamports)} SOL to your payroll helper (${shortHelper}), which pays the rent for the temporary proof accounts` : ""}${what.authorize ? `${what.topUpLamports > 0n ? ", plus" : ":"} a Cipherpay call that lets the helper pay employees for the next hour (it can't do anything else)` : ""}. After this, payments need no more approvals.`,
+            }),
+          onSigned: () => first && patch(first, { deadline: undefined, note: undefined }),
+        });
+      } catch (e) {
+        for (const id of ids) patch(id, { status: "failed", error: `Couldn't authorize payroll: ${e instanceof Error ? e.message : "The approval failed."}`, uncertain: false, note: undefined, deadline: undefined });
+        if (alive.current) setRunning(false);
+        return;
+      }
       for (const id of ids) {
         const item = itemsRef.current.find((i) => i.id === id);
         if (!item || !alive.current) continue;
         patch(id, { status: "running", completed: 0, error: undefined, uncertain: false, note: undefined, deadline: undefined });
         try {
-          // The helper pays for the proof accounts' rent. Topping it up is the only extra wallet prompt, and only when it is short.
-          let topUp = 0n;
-          const sol = (lamports: bigint) => (Number(lamports) / 1e9).toFixed(4);
-          const shortHelper = `${helper.address.slice(0, 4)}…${helper.address.slice(-4)}`;
-          await ensureHelperFunded({
-            rpc,
-            admin: signer,
-            helper,
-            onNeedTopUp: (lamports) => {
-              topUp = lamports;
-            },
-            onPrompt: ({ attempt, expiresAtMs }) =>
-              patch(id, {
-                deadline: expiresAtMs,
-                note: `${attempt > 0 ? "That took longer than devnet allows, so we're asking again. " : ""}Your wallet will show a plain SOL transfer of ${sol(topUp)} SOL to your payroll helper (${shortHelper}). It pays the rent for the temporary proof accounts and is sent back to you when the run is done.`,
-              }),
-            onSigned: () => patch(id, { deadline: undefined }),
-          });
-          patch(id, { note: undefined });
           const result = await payOne({
             rpc,
-            admin: signer,
+            admin: address(signer.address),
             helper,
             keys: k,
             employee: address(item.wallet),
             amount: item.amount,
             onStage: (stage) => patch(id, { completed: STAGE_INDEX[stage], note: undefined }),
-            onPrompt: ({ attempt, expiresAtMs }) =>
-              patch(id, {
-                deadline: expiresAtMs,
-                note: `${attempt > 0 ? "That took longer than devnet allows, so we're asking again. " : ""}Your wallet will show one transaction that calls the Cipherpay vault program to pay ${item.name}. The amount is encrypted, so your wallet can't display it. That is expected.`,
-              }),
-            onSigned: () => patch(id, { deadline: undefined, note: undefined }),
           });
           patch(id, { status: "done", completed: stageCount, signature: result.signature, note: result.closeWarning });
         } catch (e) {
@@ -124,8 +127,6 @@ export function useLiveRun(items: LiveItem[], stageCount: number) {
           });
         }
       }
-      // When everything is paid, give the helper's leftover SOL back. If something failed we leave it for the retry.
-      if (rowsRef.current.every((r) => r.status === "done")) await sweepHelper({ rpc, admin: signer, helper }).catch(() => undefined);
       if (alive.current) setRunning(false);
       chain.refresh();
     },

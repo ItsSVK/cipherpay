@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from './operatorConfig';
 export * from './vault';
 export * from './wrappedMint';
 export * from './wrappedMintAuthority';

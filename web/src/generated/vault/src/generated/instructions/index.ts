@@ -15,6 +15,7 @@ export * from './initializeVault';
 export * from './pausePayroll';
 export * from './payEmployee';
 export * from './resumePayroll';
+export * from './setOperator';
 export * from './unwrapConfidential';
 export * from './withdrawConfidential';
 export * from './wrapConfidential';

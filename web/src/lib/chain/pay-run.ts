@@ -1,12 +1,13 @@
 // Runs ONE payment end to end against the chain: read fresh state, build proofs, set up and verify the proof accounts with the
-// payroll helper, ask the admin's wallet to approve the single pay_employee transaction, then clean up. Client-only.
-import { address, type Address, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
+// payroll helper, send pay_employee as the helper (the vault's authorized operator, so no wallet prompt), then clean up. Client-only.
+import { address, type Address, type KeyPairSigner } from "@solana/kit";
 import type { DerivedKeys } from "@/lib/crypto/keys";
 import { decryptAccountBalance } from "./decrypt";
+import { readOperator } from "./operator";
 import { buildPaymentPlan } from "./pay";
 import { readAuditorPubkey, readConfidentialAccount, readVaultState } from "./read";
 import type { AppRpc } from "./rpc";
-import { signAndSend, TxError, type SignAndSendOptions } from "./send";
+import { signAndSend, TxError } from "./send";
 
 export type PayStage = "prove" | "create" | "verify" | "transfer" | "close";
 
@@ -25,18 +26,14 @@ export class PaymentError extends Error {
 
 export interface PayOneInput {
   rpc: AppRpc;
-  /** The vault admin's wallet. It approves pay_employee and nothing else. */
-  admin: TransactionSigner;
-  /** The payroll helper (already funded): signs the proof-account transactions without any wallet prompt. */
+  /** The vault admin's address. Its wallet is not involved in a payment. */
+  admin: Address;
+  /** The payroll helper (already funded and authorized as the vault's operator): signs every transaction without a wallet prompt. */
   helper: KeyPairSigner;
   keys: DerivedKeys;
   employee: Address;
   amount: bigint;
   onStage?: (stage: PayStage) => void;
-  /** Fires each time the wallet is asked to approve the payment (again, if the first window closed), with when that request expires. */
-  onPrompt?: SignAndSendOptions["onPrompt"];
-  /** Fires once the wallet has approved. */
-  onSigned?: () => void;
 }
 
 export interface PayOneResult {
@@ -49,14 +46,17 @@ export interface PayOneResult {
 const describe = (e: unknown) => (e instanceof Error ? e.message : "The transaction failed.");
 
 export async function payOne(input: PayOneInput): Promise<PayOneResult> {
-  const { rpc, admin, helper, keys, employee, amount, onStage, onPrompt, onSigned } = input;
+  const { rpc, admin, helper, keys, employee, amount, onStage } = input;
   const stage = (s: PayStage) => onStage?.(s);
   stage("prove");
 
   // ---- Fresh state. The treasury's ciphertext must be the current one, or the equality proof is built against stale data.
-  const vault = await readVaultState(rpc, address(admin.address));
+  const vault = await readVaultState(rpc, admin);
   if (!vault.exists || !vault.treasuryConfigured || !vault.treasury) throw new PaymentError("Set up your company before paying.", "prove", false);
   if (vault.paused) throw new PaymentError("Payroll is paused. Resume it to pay.", "prove", false);
+
+  const operator = await readOperator(rpc, admin, helper.address);
+  if (!operator.authorized) throw new PaymentError("The payroll helper isn't authorized (or its authorization has run out). Authorize it and try again.", "prove", false);
 
   const recipient = await readConfidentialAccount(rpc, employee);
   if (!recipient || !recipient.confidential) throw new PaymentError("This person hasn't set up their account yet, so they can't receive pay.", "prove", false);
@@ -103,14 +103,13 @@ export async function payOne(input: PayOneInput): Promise<PayOneResult> {
   // Once the proofs exist, a failure still leaves three funded accounts behind. The helper can close them without any prompt.
   const closeContexts = () => withHelper(plan.close.instructions);
 
-  // ---- The ONE wallet approval. Its blockhash is fetched right before the prompt, so the window starts when the popup does, and
-  // the wallet's own simulation passes because the proofs are already verified on-chain.
+  // ---- pay_employee, signed by the helper as the authorized operator: no wallet prompt, so nothing here waits on a human.
   stage("transfer");
   let signature: string;
   try {
-    ({ signature } = await signAndSend({ rpc, signer: admin, instructions: plan.transfer.instructions, onPrompt, onSigned }));
+    ({ signature } = await signAndSend({ rpc, signer: helper, instructions: plan.transfer.instructions }));
   } catch (e) {
-    // Rejected up front (preflight), declined, or expired before sending: nothing moved. If it may have reached the network
+    // Rejected up front (preflight) or expired before sending: nothing moved. If it may have reached the network
     // (a timeout, a dropped connection) we cannot know, so the row says to check before retrying.
     const submitted = e instanceof TxError ? e.submitted : true;
     // Free the proof accounts' rent unless the payment may have landed (its contexts are then still referenced).

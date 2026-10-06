@@ -5,9 +5,10 @@
 // its proof (litesvm hides this; the TS client in ../client learned it the hard way).
 //   1. create the three context accounts          (the helper pays; the new context keypairs co-sign)
 //   2-4. verify equality, ciphertext-validity and range proofs, one transaction each   (the helper)
-//   5. pay_employee, which references the three contexts                               (the ADMIN's wallet: the only one it needs)
+//   5. pay_employee, which references the three contexts                               (the helper, as the vault's authorized operator)
 //   6. close the three contexts, rent back to the helper                               (the helper)
-// Everything except step 5 is signed by the helper key (see helper-signer.ts), so the wallet approves one small transaction.
+// All six are signed by the helper key (see helper-signer.ts), so a payment needs no wallet prompt. The admin's wallet approves
+// once, beforehand, with `set_operator` (see operator.ts).
 import { address, getAddressEncoder, generateKeyPairSigner, unwrapOption, type Address, type Instruction, type TransactionSigner } from "@solana/kit";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import {
@@ -16,7 +17,7 @@ import {
   verifyBatchedRangeProofU128,
   verifyCiphertextCommitmentEquality,
 } from "@solana-program/zk-elgamal-proof";
-import { findVaultPda, getPayEmployeeInstruction } from "@/generated/vault/src/generated";
+import { findOperatorConfigPda, findVaultPda, getPayEmployeeInstruction } from "@/generated/vault/src/generated";
 import type { DerivedKeys } from "@/lib/crypto/keys";
 import { DEVNET_WUSDC_MINT } from "./constants";
 import { ataFor, type ConfidentialAccountView } from "./read";
@@ -51,9 +52,9 @@ export interface PaymentPlan {
 
 export interface PaymentInput {
   rpc: Pick<AppRpc, "getMinimumBalanceForRentExemption">;
-  /** The vault admin's wallet. It signs pay_employee and nothing else. */
-  admin: TransactionSigner;
-  /** The payroll helper: pays for and signs everything around the payment. */
+  /** The vault admin's address (it only seeds the vault PDA here; it signs nothing in a payment). */
+  admin: Address;
+  /** The payroll helper: the vault's authorized operator. Pays for and signs every transaction of the payment. */
   helper: TransactionSigner;
   keys: DerivedKeys;
   /** The vault's treasury token account as just read from the chain. */
@@ -69,8 +70,7 @@ export interface PaymentInput {
 }
 
 export async function buildPaymentPlan(input: PaymentInput): Promise<PaymentPlan> {
-  const { admin: adminSigner, helper, keys, treasury, amount } = input;
-  const admin = adminSigner.address;
+  const { admin, helper, keys, treasury, amount } = input;
   const ext = (unwrapOption(treasury.token.extensions) ?? []).find((e) => e.__kind === "ConfidentialTransferAccount");
   if (!ext || ext.__kind !== "ConfidentialTransferAccount") throw new Error("The treasury has no confidential-transfer extension.");
 
@@ -103,8 +103,9 @@ export async function buildPaymentPlan(input: PaymentInput): Promise<PaymentPlan
     ae.free();
   }
 
+  const [operatorConfig] = await findOperatorConfigPda({ vault });
   const pay = getPayEmployeeInstruction({
-    admin: adminSigner,
+    signer: helper,
     vault,
     mint: WUSDC,
     treasuryTokenAccount: treasury.address,
@@ -113,6 +114,7 @@ export async function buildPaymentPlan(input: PaymentInput): Promise<PaymentPlan
     ciphertextValidityProofContext: valCtx.address,
     rangeProofContext: rangeCtx.address,
     tokenProgram: TOKEN_2022_PROGRAM_ADDRESS,
+    operatorConfig,
     newSourceDecryptableAvailableBalance: newDecryptable,
     transferAmountAuditorCiphertextLo: proofs.auditorCiphertextLo,
     transferAmountAuditorCiphertextHi: proofs.auditorCiphertextHi,

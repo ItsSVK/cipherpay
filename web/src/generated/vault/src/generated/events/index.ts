@@ -15,6 +15,7 @@ export * from './initializeVaultEvent';
 export * from './pausePayrollEvent';
 export * from './payEmployeeEvent';
 export * from './resumePayrollEvent';
+export * from './setOperatorEvent';
 export * from './unwrapConfidentialEvent';
 export * from './withdrawConfidentialEvent';
 export * from './wrapConfidentialEvent';

@@ -7,15 +7,16 @@
  */
 
 import { combineCodec, fixDecoderSize, fixEncoderSize, getBytesDecoder, getBytesEncoder, getStructDecoder, getStructEncoder, SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS, SolanaError, transformEncoder, type AccountMeta, type AccountSignerMeta, type Address, type FixedSizeCodec, type FixedSizeDecoder, type FixedSizeEncoder, type Instruction, type InstructionWithAccounts, type InstructionWithData, type ReadonlyAccount, type ReadonlySignerAccount, type ReadonlyUint8Array, type WritableAccount } from '@solana/kit';
-import { getAccountMetaFactory, type InstructionAccountInput, type InstructionAccountInputAddress, type InstructionSignerInput, type ResolvedInstructionAccount, type ResolvedInstructionAccountMeta } from '@solana/program-client-core';
+import { getAccountMetaFactory, getAddressFromResolvedInstructionAccount, type InstructionAccountInput, type InstructionAccountInputAddress, type InstructionSignerInput, type ResolvedInstructionAccount, type ResolvedInstructionAccountMeta } from '@solana/program-client-core';
+import { findOperatorConfigPda } from '../pdas';
 import { VAULT_PROGRAM_ADDRESS } from '../programs';
 
 export const PAY_EMPLOYEE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([202, 231, 86, 72, 42, 110, 167, 118]);
 
 export function getPayEmployeeDiscriminatorBytes(): ReadonlyUint8Array { return fixEncoderSize(getBytesEncoder(), 8).encode(PAY_EMPLOYEE_DISCRIMINATOR); }
 
-export type PayEmployeeInstruction<TProgram extends string = typeof VAULT_PROGRAM_ADDRESS, TAccountAdmin extends string | AccountMeta<string> = string, TAccountVault extends string | AccountMeta<string> = string, TAccountMint extends string | AccountMeta<string> = string, TAccountTreasuryTokenAccount extends string | AccountMeta<string> = string, TAccountEmployeeTokenAccount extends string | AccountMeta<string> = string, TAccountEqualityProofContext extends string | AccountMeta<string> = string, TAccountCiphertextValidityProofContext extends string | AccountMeta<string> = string, TAccountRangeProofContext extends string | AccountMeta<string> = string, TAccountTokenProgram extends string | AccountMeta<string> = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", TRemainingAccounts extends readonly AccountMeta<string>[] = []> =
-Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array> & InstructionWithAccounts<[TAccountAdmin extends string ? ReadonlySignerAccount<TAccountAdmin> & AccountSignerMeta<TAccountAdmin> : TAccountAdmin, TAccountVault extends string ? ReadonlyAccount<TAccountVault> : TAccountVault, TAccountMint extends string ? ReadonlyAccount<TAccountMint> : TAccountMint, TAccountTreasuryTokenAccount extends string ? WritableAccount<TAccountTreasuryTokenAccount> : TAccountTreasuryTokenAccount, TAccountEmployeeTokenAccount extends string ? WritableAccount<TAccountEmployeeTokenAccount> : TAccountEmployeeTokenAccount, TAccountEqualityProofContext extends string ? ReadonlyAccount<TAccountEqualityProofContext> : TAccountEqualityProofContext, TAccountCiphertextValidityProofContext extends string ? ReadonlyAccount<TAccountCiphertextValidityProofContext> : TAccountCiphertextValidityProofContext, TAccountRangeProofContext extends string ? ReadonlyAccount<TAccountRangeProofContext> : TAccountRangeProofContext, TAccountTokenProgram extends string ? ReadonlyAccount<TAccountTokenProgram> : TAccountTokenProgram, ...TRemainingAccounts]>;
+export type PayEmployeeInstruction<TProgram extends string = typeof VAULT_PROGRAM_ADDRESS, TAccountSigner extends string | AccountMeta<string> = string, TAccountVault extends string | AccountMeta<string> = string, TAccountMint extends string | AccountMeta<string> = string, TAccountTreasuryTokenAccount extends string | AccountMeta<string> = string, TAccountEmployeeTokenAccount extends string | AccountMeta<string> = string, TAccountEqualityProofContext extends string | AccountMeta<string> = string, TAccountCiphertextValidityProofContext extends string | AccountMeta<string> = string, TAccountRangeProofContext extends string | AccountMeta<string> = string, TAccountTokenProgram extends string | AccountMeta<string> = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", TAccountOperatorConfig extends string | AccountMeta<string> = string, TRemainingAccounts extends readonly AccountMeta<string>[] = []> =
+Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array> & InstructionWithAccounts<[TAccountSigner extends string ? ReadonlySignerAccount<TAccountSigner> & AccountSignerMeta<TAccountSigner> : TAccountSigner, TAccountVault extends string ? ReadonlyAccount<TAccountVault> : TAccountVault, TAccountMint extends string ? ReadonlyAccount<TAccountMint> : TAccountMint, TAccountTreasuryTokenAccount extends string ? WritableAccount<TAccountTreasuryTokenAccount> : TAccountTreasuryTokenAccount, TAccountEmployeeTokenAccount extends string ? WritableAccount<TAccountEmployeeTokenAccount> : TAccountEmployeeTokenAccount, TAccountEqualityProofContext extends string ? ReadonlyAccount<TAccountEqualityProofContext> : TAccountEqualityProofContext, TAccountCiphertextValidityProofContext extends string ? ReadonlyAccount<TAccountCiphertextValidityProofContext> : TAccountCiphertextValidityProofContext, TAccountRangeProofContext extends string ? ReadonlyAccount<TAccountRangeProofContext> : TAccountRangeProofContext, TAccountTokenProgram extends string ? ReadonlyAccount<TAccountTokenProgram> : TAccountTokenProgram, TAccountOperatorConfig extends string ? ReadonlyAccount<TAccountOperatorConfig> : TAccountOperatorConfig, ...TRemainingAccounts]>;
 
 export type PayEmployeeInstructionData = { discriminator: ReadonlyUint8Array; newSourceDecryptableAvailableBalance: ReadonlyUint8Array; transferAmountAuditorCiphertextLo: ReadonlyUint8Array; transferAmountAuditorCiphertextHi: ReadonlyUint8Array;  };
 
@@ -33,8 +34,9 @@ export function getPayEmployeeInstructionDataCodec(): FixedSizeCodec<PayEmployee
     return combineCodec(getPayEmployeeInstructionDataEncoder(), getPayEmployeeInstructionDataDecoder());
 }
 
-export type PayEmployeeInput<TAccountAdmin extends InstructionSignerInput = InstructionSignerInput, TAccountVault extends InstructionAccountInput = InstructionAccountInput, TAccountMint extends InstructionAccountInput = InstructionAccountInput, TAccountTreasuryTokenAccount extends InstructionAccountInput = InstructionAccountInput, TAccountEmployeeTokenAccount extends InstructionAccountInput = InstructionAccountInput, TAccountEqualityProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountCiphertextValidityProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountRangeProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountTokenProgram extends InstructionAccountInput = InstructionAccountInput> =  {
-  admin: TAccountAdmin;
+export type PayEmployeeAsyncInput<TAccountSigner extends InstructionSignerInput = InstructionSignerInput, TAccountVault extends InstructionAccountInput = InstructionAccountInput, TAccountMint extends InstructionAccountInput = InstructionAccountInput, TAccountTreasuryTokenAccount extends InstructionAccountInput = InstructionAccountInput, TAccountEmployeeTokenAccount extends InstructionAccountInput = InstructionAccountInput, TAccountEqualityProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountCiphertextValidityProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountRangeProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountTokenProgram extends InstructionAccountInput = InstructionAccountInput, TAccountOperatorConfig extends InstructionAccountInput = InstructionAccountInput> =  {
+  /** The vault's admin, or its authorized operator. Checked in the handler. */
+signer: TAccountSigner;
 vault: TAccountVault;
 mint: TAccountMint;
 treasuryTokenAccount: TAccountTreasuryTokenAccount;
@@ -49,12 +51,19 @@ ciphertextValidityProofContext: TAccountCiphertextValidityProofContext;
 /** account. See `equality_proof_context`. */
 rangeProofContext: TAccountRangeProofContext;
 tokenProgram?: TAccountTokenProgram;
+/**
+ * its address), but only read when the signer is not the admin: it may not
+ * exist (no operator was ever set), and an admin-signed payment never needs
+ * it. Its address is pinned by the seeds constraint, and the owner and
+ * discriminator are checked before the data is trusted.
+ */
+operatorConfig?: TAccountOperatorConfig;
 newSourceDecryptableAvailableBalance: PayEmployeeInstructionDataArgs["newSourceDecryptableAvailableBalance"];
 transferAmountAuditorCiphertextLo: PayEmployeeInstructionDataArgs["transferAmountAuditorCiphertextLo"];
 transferAmountAuditorCiphertextHi: PayEmployeeInstructionDataArgs["transferAmountAuditorCiphertextHi"];
 }
 
-export function getPayEmployeeInstruction<TAccountAdmin extends InstructionSignerInput, TAccountVault extends InstructionAccountInput, TAccountMint extends InstructionAccountInput, TAccountTreasuryTokenAccount extends InstructionAccountInput, TAccountEmployeeTokenAccount extends InstructionAccountInput, TAccountEqualityProofContext extends InstructionAccountInput, TAccountCiphertextValidityProofContext extends InstructionAccountInput, TAccountRangeProofContext extends InstructionAccountInput, TAccountTokenProgram extends InstructionAccountInput, TProgramAddress extends Address = typeof VAULT_PROGRAM_ADDRESS>(input: PayEmployeeInput<TAccountAdmin, TAccountVault, TAccountMint, TAccountTreasuryTokenAccount, TAccountEmployeeTokenAccount, TAccountEqualityProofContext, TAccountCiphertextValidityProofContext, TAccountRangeProofContext, TAccountTokenProgram>, config?: { programAddress?: TProgramAddress } ): PayEmployeeInstruction<TProgramAddress, ResolvedInstructionAccountMeta<TAccountAdmin, InstructionAccountInputAddress<TAccountAdmin>>, ResolvedInstructionAccountMeta<TAccountVault, InstructionAccountInputAddress<TAccountVault>>, ResolvedInstructionAccountMeta<TAccountMint, InstructionAccountInputAddress<TAccountMint>>, ResolvedInstructionAccountMeta<TAccountTreasuryTokenAccount, InstructionAccountInputAddress<TAccountTreasuryTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEmployeeTokenAccount, InstructionAccountInputAddress<TAccountEmployeeTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEqualityProofContext, InstructionAccountInputAddress<TAccountEqualityProofContext>>, ResolvedInstructionAccountMeta<TAccountCiphertextValidityProofContext, InstructionAccountInputAddress<TAccountCiphertextValidityProofContext>>, ResolvedInstructionAccountMeta<TAccountRangeProofContext, InstructionAccountInputAddress<TAccountRangeProofContext>>, ResolvedInstructionAccountMeta<TAccountTokenProgram, InstructionAccountInputAddress<TAccountTokenProgram>>> {
+export async function getPayEmployeeInstructionAsync<TAccountSigner extends InstructionSignerInput, TAccountVault extends InstructionAccountInput, TAccountMint extends InstructionAccountInput, TAccountTreasuryTokenAccount extends InstructionAccountInput, TAccountEmployeeTokenAccount extends InstructionAccountInput, TAccountEqualityProofContext extends InstructionAccountInput, TAccountCiphertextValidityProofContext extends InstructionAccountInput, TAccountRangeProofContext extends InstructionAccountInput, TAccountTokenProgram extends InstructionAccountInput, TAccountOperatorConfig extends InstructionAccountInput, TProgramAddress extends Address = typeof VAULT_PROGRAM_ADDRESS>(input: PayEmployeeAsyncInput<TAccountSigner, TAccountVault, TAccountMint, TAccountTreasuryTokenAccount, TAccountEmployeeTokenAccount, TAccountEqualityProofContext, TAccountCiphertextValidityProofContext, TAccountRangeProofContext, TAccountTokenProgram, TAccountOperatorConfig>, config?: { programAddress?: TProgramAddress } ): Promise<PayEmployeeInstruction<TProgramAddress, ResolvedInstructionAccountMeta<TAccountSigner, InstructionAccountInputAddress<TAccountSigner>>, ResolvedInstructionAccountMeta<TAccountVault, InstructionAccountInputAddress<TAccountVault>>, ResolvedInstructionAccountMeta<TAccountMint, InstructionAccountInputAddress<TAccountMint>>, ResolvedInstructionAccountMeta<TAccountTreasuryTokenAccount, InstructionAccountInputAddress<TAccountTreasuryTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEmployeeTokenAccount, InstructionAccountInputAddress<TAccountEmployeeTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEqualityProofContext, InstructionAccountInputAddress<TAccountEqualityProofContext>>, ResolvedInstructionAccountMeta<TAccountCiphertextValidityProofContext, InstructionAccountInputAddress<TAccountCiphertextValidityProofContext>>, ResolvedInstructionAccountMeta<TAccountRangeProofContext, InstructionAccountInputAddress<TAccountRangeProofContext>>, ResolvedInstructionAccountMeta<TAccountTokenProgram, InstructionAccountInputAddress<TAccountTokenProgram>>, ResolvedInstructionAccountMeta<TAccountOperatorConfig, InstructionAccountInputAddress<TAccountOperatorConfig>>>> {
   // Program address.
 const programAddress = config?.programAddress ?? VAULT_PROGRAM_ADDRESS;
 
@@ -62,7 +71,63 @@ const programAddress = config?.programAddress ?? VAULT_PROGRAM_ADDRESS;
 const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
 
  // Original accounts.
-const originalAccounts = { admin: { value: input.admin ?? null, isSigner: true, isWritable: false }, vault: { value: input.vault ?? null, isSigner: false, isWritable: false }, mint: { value: input.mint ?? null, isSigner: false, isWritable: false }, treasuryTokenAccount: { value: input.treasuryTokenAccount ?? null, isSigner: false, isWritable: true }, employeeTokenAccount: { value: input.employeeTokenAccount ?? null, isSigner: false, isWritable: true }, equalityProofContext: { value: input.equalityProofContext ?? null, isSigner: false, isWritable: false }, ciphertextValidityProofContext: { value: input.ciphertextValidityProofContext ?? null, isSigner: false, isWritable: false }, rangeProofContext: { value: input.rangeProofContext ?? null, isSigner: false, isWritable: false }, tokenProgram: { value: input.tokenProgram ?? null, isSigner: false, isWritable: false } }
+const originalAccounts = { signer: { value: input.signer ?? null, isSigner: true, isWritable: false }, vault: { value: input.vault ?? null, isSigner: false, isWritable: false }, mint: { value: input.mint ?? null, isSigner: false, isWritable: false }, treasuryTokenAccount: { value: input.treasuryTokenAccount ?? null, isSigner: false, isWritable: true }, employeeTokenAccount: { value: input.employeeTokenAccount ?? null, isSigner: false, isWritable: true }, equalityProofContext: { value: input.equalityProofContext ?? null, isSigner: false, isWritable: false }, ciphertextValidityProofContext: { value: input.ciphertextValidityProofContext ?? null, isSigner: false, isWritable: false }, rangeProofContext: { value: input.rangeProofContext ?? null, isSigner: false, isWritable: false }, tokenProgram: { value: input.tokenProgram ?? null, isSigner: false, isWritable: false }, operatorConfig: { value: input.operatorConfig ?? null, isSigner: false, isWritable: false } }
+const accounts = originalAccounts as Record<keyof typeof originalAccounts, ResolvedInstructionAccount>;
+
+
+// Original args.
+const args = { ...input,  };
+
+
+// Resolve default values.
+if (!accounts.tokenProgram.value) {
+accounts.tokenProgram.value = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' as Address<'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'>;
+}
+if (!accounts.operatorConfig.value) {
+accounts.operatorConfig.value = await findOperatorConfigPda({ vault: getAddressFromResolvedInstructionAccount("vault", accounts.vault.value) }, { programAddress });
+}
+
+return Object.freeze({ accounts: [getAccountMeta("signer", accounts.signer), getAccountMeta("vault", accounts.vault), getAccountMeta("mint", accounts.mint), getAccountMeta("treasuryTokenAccount", accounts.treasuryTokenAccount), getAccountMeta("employeeTokenAccount", accounts.employeeTokenAccount), getAccountMeta("equalityProofContext", accounts.equalityProofContext), getAccountMeta("ciphertextValidityProofContext", accounts.ciphertextValidityProofContext), getAccountMeta("rangeProofContext", accounts.rangeProofContext), getAccountMeta("tokenProgram", accounts.tokenProgram), getAccountMeta("operatorConfig", accounts.operatorConfig)], data: getPayEmployeeInstructionDataEncoder().encode(args as PayEmployeeInstructionDataArgs), programAddress } as PayEmployeeInstruction<TProgramAddress, ResolvedInstructionAccountMeta<TAccountSigner, InstructionAccountInputAddress<TAccountSigner>>, ResolvedInstructionAccountMeta<TAccountVault, InstructionAccountInputAddress<TAccountVault>>, ResolvedInstructionAccountMeta<TAccountMint, InstructionAccountInputAddress<TAccountMint>>, ResolvedInstructionAccountMeta<TAccountTreasuryTokenAccount, InstructionAccountInputAddress<TAccountTreasuryTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEmployeeTokenAccount, InstructionAccountInputAddress<TAccountEmployeeTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEqualityProofContext, InstructionAccountInputAddress<TAccountEqualityProofContext>>, ResolvedInstructionAccountMeta<TAccountCiphertextValidityProofContext, InstructionAccountInputAddress<TAccountCiphertextValidityProofContext>>, ResolvedInstructionAccountMeta<TAccountRangeProofContext, InstructionAccountInputAddress<TAccountRangeProofContext>>, ResolvedInstructionAccountMeta<TAccountTokenProgram, InstructionAccountInputAddress<TAccountTokenProgram>>, ResolvedInstructionAccountMeta<TAccountOperatorConfig, InstructionAccountInputAddress<TAccountOperatorConfig>>>);
+}
+
+export type PayEmployeeInput<TAccountSigner extends InstructionSignerInput = InstructionSignerInput, TAccountVault extends InstructionAccountInput = InstructionAccountInput, TAccountMint extends InstructionAccountInput = InstructionAccountInput, TAccountTreasuryTokenAccount extends InstructionAccountInput = InstructionAccountInput, TAccountEmployeeTokenAccount extends InstructionAccountInput = InstructionAccountInput, TAccountEqualityProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountCiphertextValidityProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountRangeProofContext extends InstructionAccountInput = InstructionAccountInput, TAccountTokenProgram extends InstructionAccountInput = InstructionAccountInput, TAccountOperatorConfig extends InstructionAccountInput = InstructionAccountInput> =  {
+  /** The vault's admin, or its authorized operator. Checked in the handler. */
+signer: TAccountSigner;
+vault: TAccountVault;
+mint: TAccountMint;
+treasuryTokenAccount: TAccountTreasuryTokenAccount;
+employeeTokenAccount: TAccountEmployeeTokenAccount;
+/**
+ * account -- Token-2022 checks its ownership (must belong to the ZK
+ * ElGamal Proof program) and contents when the CPI below runs.
+ */
+equalityProofContext: TAccountEqualityProofContext;
+/** context-state account. See `equality_proof_context`. */
+ciphertextValidityProofContext: TAccountCiphertextValidityProofContext;
+/** account. See `equality_proof_context`. */
+rangeProofContext: TAccountRangeProofContext;
+tokenProgram?: TAccountTokenProgram;
+/**
+ * its address), but only read when the signer is not the admin: it may not
+ * exist (no operator was ever set), and an admin-signed payment never needs
+ * it. Its address is pinned by the seeds constraint, and the owner and
+ * discriminator are checked before the data is trusted.
+ */
+operatorConfig: TAccountOperatorConfig;
+newSourceDecryptableAvailableBalance: PayEmployeeInstructionDataArgs["newSourceDecryptableAvailableBalance"];
+transferAmountAuditorCiphertextLo: PayEmployeeInstructionDataArgs["transferAmountAuditorCiphertextLo"];
+transferAmountAuditorCiphertextHi: PayEmployeeInstructionDataArgs["transferAmountAuditorCiphertextHi"];
+}
+
+export function getPayEmployeeInstruction<TAccountSigner extends InstructionSignerInput, TAccountVault extends InstructionAccountInput, TAccountMint extends InstructionAccountInput, TAccountTreasuryTokenAccount extends InstructionAccountInput, TAccountEmployeeTokenAccount extends InstructionAccountInput, TAccountEqualityProofContext extends InstructionAccountInput, TAccountCiphertextValidityProofContext extends InstructionAccountInput, TAccountRangeProofContext extends InstructionAccountInput, TAccountTokenProgram extends InstructionAccountInput, TAccountOperatorConfig extends InstructionAccountInput, TProgramAddress extends Address = typeof VAULT_PROGRAM_ADDRESS>(input: PayEmployeeInput<TAccountSigner, TAccountVault, TAccountMint, TAccountTreasuryTokenAccount, TAccountEmployeeTokenAccount, TAccountEqualityProofContext, TAccountCiphertextValidityProofContext, TAccountRangeProofContext, TAccountTokenProgram, TAccountOperatorConfig>, config?: { programAddress?: TProgramAddress } ): PayEmployeeInstruction<TProgramAddress, ResolvedInstructionAccountMeta<TAccountSigner, InstructionAccountInputAddress<TAccountSigner>>, ResolvedInstructionAccountMeta<TAccountVault, InstructionAccountInputAddress<TAccountVault>>, ResolvedInstructionAccountMeta<TAccountMint, InstructionAccountInputAddress<TAccountMint>>, ResolvedInstructionAccountMeta<TAccountTreasuryTokenAccount, InstructionAccountInputAddress<TAccountTreasuryTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEmployeeTokenAccount, InstructionAccountInputAddress<TAccountEmployeeTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEqualityProofContext, InstructionAccountInputAddress<TAccountEqualityProofContext>>, ResolvedInstructionAccountMeta<TAccountCiphertextValidityProofContext, InstructionAccountInputAddress<TAccountCiphertextValidityProofContext>>, ResolvedInstructionAccountMeta<TAccountRangeProofContext, InstructionAccountInputAddress<TAccountRangeProofContext>>, ResolvedInstructionAccountMeta<TAccountTokenProgram, InstructionAccountInputAddress<TAccountTokenProgram>>, ResolvedInstructionAccountMeta<TAccountOperatorConfig, InstructionAccountInputAddress<TAccountOperatorConfig>>> {
+  // Program address.
+const programAddress = config?.programAddress ?? VAULT_PROGRAM_ADDRESS;
+
+// Account meta helper.
+const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
+
+ // Original accounts.
+const originalAccounts = { signer: { value: input.signer ?? null, isSigner: true, isWritable: false }, vault: { value: input.vault ?? null, isSigner: false, isWritable: false }, mint: { value: input.mint ?? null, isSigner: false, isWritable: false }, treasuryTokenAccount: { value: input.treasuryTokenAccount ?? null, isSigner: false, isWritable: true }, employeeTokenAccount: { value: input.employeeTokenAccount ?? null, isSigner: false, isWritable: true }, equalityProofContext: { value: input.equalityProofContext ?? null, isSigner: false, isWritable: false }, ciphertextValidityProofContext: { value: input.ciphertextValidityProofContext ?? null, isSigner: false, isWritable: false }, rangeProofContext: { value: input.rangeProofContext ?? null, isSigner: false, isWritable: false }, tokenProgram: { value: input.tokenProgram ?? null, isSigner: false, isWritable: false }, operatorConfig: { value: input.operatorConfig ?? null, isSigner: false, isWritable: false } }
 const accounts = originalAccounts as Record<keyof typeof originalAccounts, ResolvedInstructionAccount>;
 
 
@@ -75,12 +140,13 @@ if (!accounts.tokenProgram.value) {
 accounts.tokenProgram.value = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA' as Address<'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'>;
 }
 
-return Object.freeze({ accounts: [getAccountMeta("admin", accounts.admin), getAccountMeta("vault", accounts.vault), getAccountMeta("mint", accounts.mint), getAccountMeta("treasuryTokenAccount", accounts.treasuryTokenAccount), getAccountMeta("employeeTokenAccount", accounts.employeeTokenAccount), getAccountMeta("equalityProofContext", accounts.equalityProofContext), getAccountMeta("ciphertextValidityProofContext", accounts.ciphertextValidityProofContext), getAccountMeta("rangeProofContext", accounts.rangeProofContext), getAccountMeta("tokenProgram", accounts.tokenProgram)], data: getPayEmployeeInstructionDataEncoder().encode(args as PayEmployeeInstructionDataArgs), programAddress } as PayEmployeeInstruction<TProgramAddress, ResolvedInstructionAccountMeta<TAccountAdmin, InstructionAccountInputAddress<TAccountAdmin>>, ResolvedInstructionAccountMeta<TAccountVault, InstructionAccountInputAddress<TAccountVault>>, ResolvedInstructionAccountMeta<TAccountMint, InstructionAccountInputAddress<TAccountMint>>, ResolvedInstructionAccountMeta<TAccountTreasuryTokenAccount, InstructionAccountInputAddress<TAccountTreasuryTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEmployeeTokenAccount, InstructionAccountInputAddress<TAccountEmployeeTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEqualityProofContext, InstructionAccountInputAddress<TAccountEqualityProofContext>>, ResolvedInstructionAccountMeta<TAccountCiphertextValidityProofContext, InstructionAccountInputAddress<TAccountCiphertextValidityProofContext>>, ResolvedInstructionAccountMeta<TAccountRangeProofContext, InstructionAccountInputAddress<TAccountRangeProofContext>>, ResolvedInstructionAccountMeta<TAccountTokenProgram, InstructionAccountInputAddress<TAccountTokenProgram>>>);
+return Object.freeze({ accounts: [getAccountMeta("signer", accounts.signer), getAccountMeta("vault", accounts.vault), getAccountMeta("mint", accounts.mint), getAccountMeta("treasuryTokenAccount", accounts.treasuryTokenAccount), getAccountMeta("employeeTokenAccount", accounts.employeeTokenAccount), getAccountMeta("equalityProofContext", accounts.equalityProofContext), getAccountMeta("ciphertextValidityProofContext", accounts.ciphertextValidityProofContext), getAccountMeta("rangeProofContext", accounts.rangeProofContext), getAccountMeta("tokenProgram", accounts.tokenProgram), getAccountMeta("operatorConfig", accounts.operatorConfig)], data: getPayEmployeeInstructionDataEncoder().encode(args as PayEmployeeInstructionDataArgs), programAddress } as PayEmployeeInstruction<TProgramAddress, ResolvedInstructionAccountMeta<TAccountSigner, InstructionAccountInputAddress<TAccountSigner>>, ResolvedInstructionAccountMeta<TAccountVault, InstructionAccountInputAddress<TAccountVault>>, ResolvedInstructionAccountMeta<TAccountMint, InstructionAccountInputAddress<TAccountMint>>, ResolvedInstructionAccountMeta<TAccountTreasuryTokenAccount, InstructionAccountInputAddress<TAccountTreasuryTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEmployeeTokenAccount, InstructionAccountInputAddress<TAccountEmployeeTokenAccount>>, ResolvedInstructionAccountMeta<TAccountEqualityProofContext, InstructionAccountInputAddress<TAccountEqualityProofContext>>, ResolvedInstructionAccountMeta<TAccountCiphertextValidityProofContext, InstructionAccountInputAddress<TAccountCiphertextValidityProofContext>>, ResolvedInstructionAccountMeta<TAccountRangeProofContext, InstructionAccountInputAddress<TAccountRangeProofContext>>, ResolvedInstructionAccountMeta<TAccountTokenProgram, InstructionAccountInputAddress<TAccountTokenProgram>>, ResolvedInstructionAccountMeta<TAccountOperatorConfig, InstructionAccountInputAddress<TAccountOperatorConfig>>>);
 }
 
 export type ParsedPayEmployeeInstruction<TProgram extends string = typeof VAULT_PROGRAM_ADDRESS, TAccountMetas extends readonly AccountMeta[] = readonly AccountMeta[]> = { programAddress: Address<TProgram>;
 accounts: {
-admin: TAccountMetas[0];
+/** The vault's admin, or its authorized operator. Checked in the handler. */
+signer: TAccountMetas[0];
 vault: TAccountMetas[1];
 mint: TAccountMetas[2];
 treasuryTokenAccount: TAccountMetas[3];
@@ -95,12 +161,19 @@ ciphertextValidityProofContext: TAccountMetas[6];
 /** account. See `equality_proof_context`. */
 rangeProofContext: TAccountMetas[7];
 tokenProgram: TAccountMetas[8];
+/**
+ * its address), but only read when the signer is not the admin: it may not
+ * exist (no operator was ever set), and an admin-signed payment never needs
+ * it. Its address is pinned by the seeds constraint, and the owner and
+ * discriminator are checked before the data is trusted.
+ */
+operatorConfig: TAccountMetas[9];
 };
 data: PayEmployeeInstructionData; };
 
 export function parsePayEmployeeInstruction<TProgram extends string, TAccountMetas extends readonly AccountMeta[]>(instruction: Instruction<TProgram> & InstructionWithAccounts<TAccountMetas> & InstructionWithData<ReadonlyUint8Array>): ParsedPayEmployeeInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 9) {
-  throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS, { actualAccountMetas: instruction.accounts.length, expectedAccountMetas: 9 });
+  if (instruction.accounts.length < 10) {
+  throw new SolanaError(SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS, { actualAccountMetas: instruction.accounts.length, expectedAccountMetas: 10 });
 }
 let accountIndex = 0;
 const getNextAccount = () => {
@@ -108,5 +181,5 @@ const getNextAccount = () => {
   accountIndex += 1;
   return accountMeta;
 }
-  return { programAddress: instruction.programAddress, accounts: { admin: getNextAccount(), vault: getNextAccount(), mint: getNextAccount(), treasuryTokenAccount: getNextAccount(), employeeTokenAccount: getNextAccount(), equalityProofContext: getNextAccount(), ciphertextValidityProofContext: getNextAccount(), rangeProofContext: getNextAccount(), tokenProgram: getNextAccount() }, data: getPayEmployeeInstructionDataDecoder().decode(instruction.data) };
+  return { programAddress: instruction.programAddress, accounts: { signer: getNextAccount(), vault: getNextAccount(), mint: getNextAccount(), treasuryTokenAccount: getNextAccount(), employeeTokenAccount: getNextAccount(), equalityProofContext: getNextAccount(), ciphertextValidityProofContext: getNextAccount(), rangeProofContext: getNextAccount(), tokenProgram: getNextAccount(), operatorConfig: getNextAccount() }, data: getPayEmployeeInstructionDataDecoder().decode(instruction.data) };
 }

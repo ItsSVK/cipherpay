@@ -17,12 +17,16 @@ export const VAULT_ERROR__TREASURY_ALREADY_CONFIGURED = 0x1771; // 6001
 export const VAULT_ERROR__TREASURY_NOT_CONFIGURED = 0x1772; // 6002
 /** PayrollPaused: Payroll is paused for this vault */
 export const VAULT_ERROR__PAYROLL_PAUSED = 0x1773; // 6003
+/** OperatorExpired: The vault's operator authorization has expired */
+export const VAULT_ERROR__OPERATOR_EXPIRED = 0x1774; // 6004
+/** InvalidOperatorExpiry: An operator expiry must be 0 (never) or a time in the future */
+export const VAULT_ERROR__INVALID_OPERATOR_EXPIRY = 0x1775; // 6005
 
-export type VaultError = typeof VAULT_ERROR__PAYROLL_PAUSED | typeof VAULT_ERROR__TREASURY_ALREADY_CONFIGURED | typeof VAULT_ERROR__TREASURY_NOT_CONFIGURED | typeof VAULT_ERROR__UNAUTHORIZED;
+export type VaultError = typeof VAULT_ERROR__INVALID_OPERATOR_EXPIRY | typeof VAULT_ERROR__OPERATOR_EXPIRED | typeof VAULT_ERROR__PAYROLL_PAUSED | typeof VAULT_ERROR__TREASURY_ALREADY_CONFIGURED | typeof VAULT_ERROR__TREASURY_NOT_CONFIGURED | typeof VAULT_ERROR__UNAUTHORIZED;
 
 let vaultErrorMessages: Record<VaultError, string> | undefined;
 if (process.env['NODE_ENV'] !== 'production') {
-  vaultErrorMessages = { [VAULT_ERROR__PAYROLL_PAUSED]: `Payroll is paused for this vault`, [VAULT_ERROR__TREASURY_ALREADY_CONFIGURED]: `The vault's treasury account has already been configured`, [VAULT_ERROR__TREASURY_NOT_CONFIGURED]: `The vault's treasury account has not been configured yet`, [VAULT_ERROR__UNAUTHORIZED]: `Only the vault's authority can perform this action` };
+  vaultErrorMessages = { [VAULT_ERROR__INVALID_OPERATOR_EXPIRY]: `An operator expiry must be 0 (never) or a time in the future`, [VAULT_ERROR__OPERATOR_EXPIRED]: `The vault's operator authorization has expired`, [VAULT_ERROR__PAYROLL_PAUSED]: `Payroll is paused for this vault`, [VAULT_ERROR__TREASURY_ALREADY_CONFIGURED]: `The vault's treasury account has already been configured`, [VAULT_ERROR__TREASURY_NOT_CONFIGURED]: `The vault's treasury account has not been configured yet`, [VAULT_ERROR__UNAUTHORIZED]: `Only the vault's authority can perform this action` };
 }
 
 export function getVaultErrorMessage(code: VaultError): string {

@@ -362,6 +362,12 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   map multiple inputs to one `signAllTransactions` approval, unconfirmed); blockhash lifetime if the user sits on the approval for more
   than ~60-90s (the run fails safely with "expired", nothing sent); leftover context accounts if a run dies after step 1 (rent only, not yet
   auto-closed). Split payout stays on the demo engine (its tax/fee destinations are demo wallets). Pause/resume still guarded.
+- **Operator key, no per-payment wallet prompt (2026-10-06).** The contract (`set_operator`, `OperatorConfig` PDA `["operator", vault]`, `pay_employee` accepts
+  the admin OR an unexpired operator as `signer`) is on `main` and deployed to devnet. The app makes the payroll helper key the operator: `lib/chain/operator.ts`
+  (`readOperator`, `buildAuthorizeInstruction` for 1 hour, `buildRevokeInstruction`), `ensureHelperReady` in `helper-signer.ts` does ONE wallet approval per run
+  (SOL top-up + `set_operator` in a single transaction) and none while the authorization has more than 5 minutes left. `payOne` then sends all six transactions
+  signed by the helper. The helper is no longer swept after a run (`sweepHelper` and `revokeHelper` exist but have no button yet). **Slow popup root cause:**
+  it was the Helium browser (Phantom popup took ~40 s there, instant in Chrome), not our transactions. Still to do: authorize/revoke/reclaim panel, e2e on devnet.
 - **Send errors and blockhash handling (2026-10-06).** A payment failed on a real network with only "The network rejected the transaction
   before sending it". Cause of the vagueness: for a rejected preflight, kit puts the real reason in **`error.cause`** (e.g. "Blockhash not
   found") and the `context.logs` are EMPTY in that case, so a log-only message says nothing. `toTxError` (`lib/chain/send.ts`) now keeps

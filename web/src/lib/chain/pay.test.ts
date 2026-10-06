@@ -14,7 +14,7 @@ import {
 } from "@solana/kit";
 import { TOKEN_2022_PROGRAM_ADDRESS, type Token } from "@solana-program/token-2022";
 import { AeKey, ElGamalKeypair, ElGamalSecretKey } from "@solana/zk-sdk/bundler";
-import { findVaultPda, VAULT_PROGRAM_ADDRESS } from "@/generated/vault/src/generated";
+import { findOperatorConfigPda, findVaultPda, VAULT_PROGRAM_ADDRESS } from "@/generated/vault/src/generated";
 import { deriveWalletKeys, toMessagePartialSigner, type WalletSignMessage } from "@/lib/crypto/keys";
 import { DEVNET_WUSDC_MINT } from "./constants";
 import { buildPaymentPlan, type TxSpec } from "./pay";
@@ -77,9 +77,9 @@ const wireSize = (feePayer: Awaited<ReturnType<typeof generateKeyPairSigner>>, s
 };
 
 describe("buildPaymentPlan", () => {
-  test("only pay_employee is the admin's; the proof-account transactions belong to the helper; every transaction fits the real 1232-byte limit", async () => {
+  test("every transaction belongs to the helper (pay_employee as the operator, the admin's wallet is in none); every transaction fits the real 1232-byte limit", async () => {
     const f = await fixture(9_000_000n);
-    const plan = await buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer, helper: f.helper, keys: f.keys, treasury: f.treasury, treasuryAvailable: 9_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 1_250_000n });
+    const plan = await buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer.address, helper: f.helper, keys: f.keys, treasury: f.treasury, treasuryAvailable: 9_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 1_250_000n });
     const { equality, validity, range } = plan.contextAddresses;
 
     // 1. three createAccount instructions paid for by the HELPER, with the three new context accounts as signers
@@ -102,11 +102,13 @@ describe("buildPaymentPlan", () => {
       expect(spec.instructions[0].accounts!.map((a) => a.address)).not.toContain(f.signer.address);
     });
 
-    // 5. pay_employee, after a compute-budget instruction, signed by the ADMIN, with the contexts in the order the program expects
+    // 5. pay_employee, after a compute-budget instruction, signed by the HELPER as the vault's operator, with the contexts in the order the program expects
     const pay = plan.transfer.instructions[1];
     expect(pay.programAddress).toBe(VAULT_PROGRAM_ADDRESS);
     const [vault] = await findVaultPda({ admin: f.signer.address, mint: WUSDC });
-    expect(pay.accounts!.map((a) => a.address)).toEqual([f.signer.address, vault, WUSDC, f.treasury.address, f.employeeToken, equality, validity, range, TOKEN_2022_PROGRAM_ADDRESS]);
+    const [operatorConfig] = await findOperatorConfigPda({ vault });
+    expect(pay.accounts!.map((a) => a.address)).toEqual([f.helper.address, vault, WUSDC, f.treasury.address, f.employeeToken, equality, validity, range, TOKEN_2022_PROGRAM_ADDRESS, operatorConfig]);
+    expect(pay.accounts!.map((a) => a.address)).not.toContain(f.signer.address);
     expect(Uint8Array.from(pay.data!)).toHaveLength(8 + 36 + 64 + 64);
 
     // 6. three CloseContextState instructions: authority and destination are the helper, so the rent comes back to it
@@ -120,12 +122,12 @@ describe("buildPaymentPlan", () => {
 
     // The point of splitting: a real validator rejects anything over 1232 bytes.
     for (const spec of [plan.create, ...plan.verify, plan.close]) expect(wireSize(f.helper, spec)).toBeLessThanOrEqual(MAX_TX_BYTES);
-    expect(wireSize(f.signer, plan.transfer)).toBeLessThanOrEqual(MAX_TX_BYTES);
+    expect(wireSize(f.helper, plan.transfer)).toBeLessThanOrEqual(MAX_TX_BYTES);
     expect(plan.newBalance).toBe(9_000_000n - 1_250_000n);
   }, 90_000);
 
   test("refuses to pay more than the treasury holds", async () => {
     const f = await fixture(1_000_000n);
-    await expect(buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer, helper: f.helper, keys: f.keys, treasury: f.treasury, treasuryAvailable: 1_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 2_000_000n })).rejects.toThrow();
+    await expect(buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer.address, helper: f.helper, keys: f.keys, treasury: f.treasury, treasuryAvailable: 1_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 2_000_000n })).rejects.toThrow();
   }, 30_000);
 });

@@ -12,18 +12,20 @@ export const PAY_EMPLOYEE_EVENT_EVENT_DISCRIMINATOR: ReadonlyUint8Array = new Ui
 
 export function getPayEmployeeEventEventDiscriminatorBytes(): ReadonlyUint8Array { return fixEncoderSize(getBytesEncoder(), 8).encode(PAY_EMPLOYEE_EVENT_EVENT_DISCRIMINATOR); }
 
-export type PayEmployeeEventEvent = { vault: Address; employee: Address; employeeTokenAccount: Address; auditorCiphertextLo: ReadonlyUint8Array; auditorCiphertextHi: ReadonlyUint8Array;  };
+export type PayEmployeeEventEvent = { vault: Address; 
+/** Who signed this payment: the vault's admin, or its authorized operator. Lets an auditor tell the two apart. */
+signer: Address; employee: Address; employeeTokenAccount: Address; auditorCiphertextLo: ReadonlyUint8Array; auditorCiphertextHi: ReadonlyUint8Array;  };
 
 export type PayEmployeeEventEventArgs = PayEmployeeEventEvent;
 
 /** Gets the encoder for {@link PayEmployeeEventEventArgs} event data. */
 export function getPayEmployeeEventEventEncoder(): FixedSizeEncoder<PayEmployeeEventEventArgs> {
-    return getHiddenPrefixEncoder(getStructEncoder([['vault', getAddressEncoder()], ['employee', getAddressEncoder()], ['employeeTokenAccount', getAddressEncoder()], ['auditorCiphertextLo', fixEncoderSize(getBytesEncoder(), 64)], ['auditorCiphertextHi', fixEncoderSize(getBytesEncoder(), 64)]]), [getConstantEncoder(PAY_EMPLOYEE_EVENT_EVENT_DISCRIMINATOR)]);
+    return getHiddenPrefixEncoder(getStructEncoder([['vault', getAddressEncoder()], ['signer', getAddressEncoder()], ['employee', getAddressEncoder()], ['employeeTokenAccount', getAddressEncoder()], ['auditorCiphertextLo', fixEncoderSize(getBytesEncoder(), 64)], ['auditorCiphertextHi', fixEncoderSize(getBytesEncoder(), 64)]]), [getConstantEncoder(PAY_EMPLOYEE_EVENT_EVENT_DISCRIMINATOR)]);
 }
 
 /** Gets the decoder for {@link PayEmployeeEventEvent} event data. */
 export function getPayEmployeeEventEventDecoder(): FixedSizeDecoder<PayEmployeeEventEvent> {
-    return getHiddenPrefixDecoder(getStructDecoder([['vault', getAddressDecoder()], ['employee', getAddressDecoder()], ['employeeTokenAccount', getAddressDecoder()], ['auditorCiphertextLo', fixDecoderSize(getBytesDecoder(), 64)], ['auditorCiphertextHi', fixDecoderSize(getBytesDecoder(), 64)]]), [getConstantDecoder(PAY_EMPLOYEE_EVENT_EVENT_DISCRIMINATOR)]);
+    return getHiddenPrefixDecoder(getStructDecoder([['vault', getAddressDecoder()], ['signer', getAddressDecoder()], ['employee', getAddressDecoder()], ['employeeTokenAccount', getAddressDecoder()], ['auditorCiphertextLo', fixDecoderSize(getBytesDecoder(), 64)], ['auditorCiphertextHi', fixDecoderSize(getBytesDecoder(), 64)]]), [getConstantDecoder(PAY_EMPLOYEE_EVENT_EVENT_DISCRIMINATOR)]);
 }
 
 /** Gets the codec for {@link PayEmployeeEventEvent} event data. */
