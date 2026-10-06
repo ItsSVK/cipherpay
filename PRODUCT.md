@@ -252,7 +252,7 @@ signer, so approval lives in the off-chain database and gatekeeps no one else. T
 is roadmap.
 
 Automation (recurring, event-triggered, API-driven) needs unattended proof generation, which means
-a server or SDK holding treasury keys. That is **Phase 2/3**, and the honest answer is: SDK in the
+a server or SDK holding treasury keys. (A scoped **operator key**, with an expiry and revocation, now exists on-chain for the in-browser case: decision 13. It removes the per-payment wallet prompt, not the proof generation.) That is **Phase 2/3**, and the honest answer is: SDK in the
 customer's infrastructure first; later options include a scoped operator key with limits or a
 TEE/MPC signer. Name this as an open problem on the roadmap slide.
 
@@ -332,6 +332,7 @@ payout is a client-side policy line, not protocol enforcement.
 | 10 | **Auditor view data source:** transaction signatures stored per recipient in the run history, plus an auditor-encrypted ciphertext emitted in the `pay_employee` event. Covers payments made through the app. A full chain indexer is Phase 2. |
 | 11 | **Auditor rotation is not a vault instruction.** It is a direct Token-2022 `UpdateMint` signed by the mint's confidential-transfer authority (the deployer wallet unless moved to the Vault PDA). Roadmap (REQ21). |
 | 12 | `pause_payroll` blocks only `pay_employee`; withdrawals stay open by design. |
+| 13 | **Payroll operator (2026-10-06).** The admin can authorize one operator key, with an optional expiry, that may sign `pay_employee` and nothing else (`set_operator`; stored in its own PDA so existing vaults are untouched). Reason: a wallet approval per payment is subject to devnet's ~40 s transaction window and a slow wallet popup made payroll fail every time; with an operator the admin approves once and a run pays everyone. Cost: the program cannot cap an operator's payments because amounts are encrypted, so exposure is limited by expiry, revocation, and keeping the key in the admin's own client. Not in the architecture PDF. |
 
 ### Open (surface to the team on day 1; a recommended default is given)
 

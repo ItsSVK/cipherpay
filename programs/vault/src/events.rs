@@ -82,6 +82,8 @@ pub struct WithdrawConfidentialEvent {
 #[event]
 pub struct PayEmployeeEvent {
     pub vault: Pubkey,
+    /// Who signed this payment: the vault's admin, or its authorized operator. Lets an auditor tell the two apart.
+    pub signer: Pubkey,
     pub employee: Pubkey,
     pub employee_token_account: Pubkey,
     pub auditor_ciphertext_lo: [u8; 64],
@@ -100,4 +102,13 @@ pub struct PausePayrollEvent {
 pub struct ResumePayrollEvent {
     pub vault: Pubkey,
     pub admin: Pubkey,
+}
+
+/// Emitted by `set_operator`. `operator` is `Pubkey::default()` when the operator was revoked.
+#[event]
+pub struct SetOperatorEvent {
+    pub vault: Pubkey,
+    pub admin: Pubkey,
+    pub operator: Pubkey,
+    pub expires_at: i64,
 }

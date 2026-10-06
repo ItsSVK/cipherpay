@@ -3,6 +3,10 @@ use anchor_lang::prelude::*;
 #[constant]
 pub const VAULT_SEED: &[u8] = b"vault";
 
+/// Seed for a vault's `OperatorConfig` PDA: `[OPERATOR_SEED, vault]`.
+#[constant]
+pub const OPERATOR_SEED: &[u8] = b"operator";
+
 /// Program ID of our confidential-transfer-aware fork of spl-token-wrap
 /// (`native_programs/token_wrap_compliance`). Deliberately **not** a Cargo
 /// dependency of this crate: that program's pinned `solana-instruction`/

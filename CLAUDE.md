@@ -159,6 +159,41 @@ After changing any instruction, account, event, error, or PDA seed:
   transaction, or a context-state account referenced by address. The program only verifies or
   references.
 
+### Payroll operator (added 2026-10-06)
+
+- **What:** `set_operator(operator: Pubkey, expires_at: i64)`, admin-only. Stores `OperatorConfig { vault, operator, expires_at, bump }`
+  in its own PDA `[b"operator", vault]` (seed constant `OPERATOR_SEED`). `operator = Pubkey::default()` revokes (and clears the
+  expiry); `expires_at = 0` never expires; a real operator needs `expires_at` of 0 or in the future (`InvalidOperatorExpiry`).
+  Emits `SetOperatorEvent`.
+- **`pay_employee` rule:** the signer must be `Vault.authority`, or the vault's operator if one is set and unexpired. The operator
+  cannot pause, resume, fund, or call `set_operator`; it can pay, that is all. A paused vault blocks the operator too.
+- **Why a separate PDA, not fields on `Vault`:** `Vault`'s layout is unchanged, so every vault already on devnet (including funded ones)
+  keeps deserializing after the program is upgraded. No migration. `pay_employee` gets an `operator_config` account that is **always
+  passed** (clients derive it from the vault) and only read when the signer is not the admin; it is an `UncheckedAccount` with a seeds
+  constraint so the address is pinned, and the owner + discriminator are checked before the data is trusted (an admin payment never
+  needs it to exist).
+- **Trade-off, stated plainly:** amounts are encrypted, so the program cannot cap what an operator pays. An operator can pay any
+  employee account that is set up for confidential pay, up to the treasury's spendable balance. The admin limits the exposure with
+  `expires_at` and by revoking. The operator key is meant to be derived and held by the admin's own client, never a server.
+- **`PayEmployeeEvent` now has `signer`** (who signed: the admin or the operator) so the auditor can tell the two apart.
+- **Gotchas:** `anchor-lang` needs the `init-if-needed` feature for `set_operator`'s `init_if_needed`; litesvm's clock is
+  `solana-clock` 3.x (dev-dependency) and `svm.set_sysvar(&Clock { unix_timestamp, .. })` is how the tests move time; the shared payroll test
+  fixture now lives in `tests/common/payroll.rs`.
+
+#### What `web/` must change for this (the IDL changed)
+
+1. `anchor build` then `cargo build-sbf --arch v1` last, then in `web/`: `bun run gen:vault`.
+2. `pay_employee`: the signer account is renamed `admin` -> **`signer`**, and there is a new trailing account **`operatorConfig`**
+   (verified with Codama: `getPayEmployeeInstructionAsync` derives it from the vault; the sync `getPayEmployeeInstruction` that
+   `lib/chain/pay.ts` uses needs it passed, e.g. `(await findOperatorConfigPda({ vault }))[0]`, a finder Codama generates).
+   `lib/chain/pay.ts` passes `admin: adminSigner` today and must pass `signer:`. Nothing else in that file changes.
+3. New instruction `setOperator({ operator, expiresAt })` (accounts: `admin`, `vault`, `operatorConfig`, `systemProgram`).
+4. `PayEmployeeEvent` gained `signer`; `SetOperatorEvent` is new.
+5. Redeploy `vault` to devnet (needs an explicit go-ahead: costs SOL, upgrade authority is the default local wallet) before `web/` can
+   use it; existing devnet vaults keep working.
+6. Product flow in `web/`: one-time "Authorize payroll helper" (the derived helper key becomes the operator, with an expiry), then
+   `payOne` signs `pay_employee` with the helper instead of prompting the wallet. Revoke after a run or let it expire.
+
 ## Canonical instruction set (from the architecture PDF; names must match)
 
 `vault` has exactly these 12 instructions, named exactly as in the PDF (and in REQ IDs, tests, events):
@@ -169,9 +204,15 @@ messages and test names. Don't add instructions outside this list without surfac
 instructions the client can already do directly. If code and PDF disagree on a name, fix the code (or fix
 both, deliberately).
 
-Codebase vs PDF right now: all 12 exist and match the PDF's names, nothing extra. `create_user_account`/`UserAccount`
-and `transfer_confidential` have been removed (employees are wallet-owned; `pay_employee` replaced the
-wallet-signed transfer). Verified in litesvm and on a local surfpool validator.
+**One deliberate addition, decided 2026-10-06 (not in the PDF): `set_operator`** (13th instruction). It lets the
+admin authorize a single "payroll operator" key that may call `pay_employee` and nothing else, so a payroll run does
+not need the admin's wallet to approve every payment (a wallet that is slow to show its popup missed devnet's
+~40-second transaction window every time, so payroll was unusable). The architecture PDF cannot be edited from here:
+update it deliberately when convenient. Design below, in "Payroll operator".
+
+Codebase vs PDF right now: all 12 PDF instructions exist and match the PDF's names; the only extra is `set_operator`.
+`create_user_account`/`UserAccount` and `transfer_confidential` have been removed (employees are wallet-owned;
+`pay_employee` replaced the wallet-signed transfer). Verified in litesvm and on a local surfpool validator.
 
 ## Current state (keep accurate, not aspirational; update when you finish something)
 
@@ -201,7 +242,8 @@ Round-trip chain (current test): `initialize_vault` -> `configure_treasury_accou
 | 6 | employee add/update/remove | **Cut** | Employee list is off-chain (`PRODUCT.md` decision 5). |
 | 7 | `fund_treasury` | Done, tested | Plain `transfer_checked`, permissionless. |
 | 8 | `deposit_confidential` / `apply_treasury_pending` | Done, tested | `invoke_signed` with vault seeds. |
-| 9 | `pay_employee` | Done, tested in litesvm and on surfpool (UC1, REQ01 to REQ07) | Signer == `Vault.authority` (REQ03, `Unauthorized`) is checked before `paused == false` (REQ02, `PayrollPaused`) because `admin` is declared before `vault`. Treasury -> one employee confidential `Transfer`, `invoke_signed` with vault seeds (REQ04), three context-state proofs (REQ05). `PayEmployeeEvent` carries the auditor ciphertexts lo/hi taken **from the instruction args** (Token-2022 requires them to match the validity-proof context, so no need to read the context account); the auditor recovers the amount as `lo + hi * 2^16`. `tests/pay_employee.rs` proves this by decrypting the event with the auditor's secret key. On surfpool and devnet the same decryption works against the burned demo auditor key (see `DEVNET_DEMO_AUDITOR_KEY.md`, whose secret is on record). |
+| 9 | `pay_employee` | Done, tested in litesvm and on surfpool (UC1, REQ01 to REQ07) | Signer must be `Vault.authority` **or the vault's unexpired operator** (REQ03, `Unauthorized` / `OperatorExpired`); that check runs in the handler and comes **before** `paused == false` (REQ02, `PayrollPaused`) (it used to be an account constraint on `admin`; the signer account is now named `signer`). Treasury -> one employee confidential `Transfer`, `invoke_signed` with vault seeds (REQ04), three context-state proofs (REQ05). `PayEmployeeEvent` carries the auditor ciphertexts lo/hi taken **from the instruction args** (Token-2022 requires them to match the validity-proof context, so no need to read the context account); the auditor recovers the amount as `lo + hi * 2^16`. `tests/pay_employee.rs` proves this by decrypting the event with the auditor's secret key. On surfpool and devnet the same decryption works against the burned demo auditor key (see `DEVNET_DEMO_AUDITOR_KEY.md`, whose secret is on record). |
+| 9b | `set_operator` | Done, tested (2026-10-06, `tests/operator.rs`) | Admin-only. Authorizes (or revokes, with the default key) one operator key and an optional expiry. See "Payroll operator". **Not deployed to devnet yet** (needs a go-ahead and an upgrade). |
 | 10 | `batch_pay` | **Client pipeline, not a monolithic instruction** (D3) | Lives in `web/`. On-chain you only need `pay_employee` (optionally a small `PayrollRun` state account for idempotency/resume if the team wants it). |
 | 11 | `employee_apply_pending` | **Not needed as a vault instruction** | Employee calls Token-2022 `ApplyPendingBalance` directly. |
 | 12 | payroll `withdraw_confidential` | **Not needed** (decision 9) | Existing P2P `withdraw_confidential` covers UC2 (REQ08 to REQ10); employees are wallet-owned. |

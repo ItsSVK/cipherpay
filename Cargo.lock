@@ -6306,6 +6306,7 @@ dependencies = [
  "confidential-token-helpers",
  "litesvm",
  "solana-address 2.7.0",
+ "solana-clock 3.2.1",
  "solana-instruction 3.5.1",
  "solana-instructions-sysvar 3.0.1",
  "solana-keypair",

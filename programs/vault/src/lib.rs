@@ -86,8 +86,8 @@ pub mod vault {
         )
     }
 
-    /// UC1 (REQ01 to REQ07): pays one employee from the encrypted treasury.
-    /// See `instructions/pay_employee.rs`.
+    /// UC1 (REQ01 to REQ07): pays one employee from the encrypted treasury. Signed by the vault's admin or its authorized
+    /// operator. See `instructions/pay_employee.rs`.
     pub fn pay_employee(
         ctx: Context<PayEmployee>,
         new_source_decryptable_available_balance: [u8; 36],
@@ -100,6 +100,12 @@ pub mod vault {
             transfer_amount_auditor_ciphertext_lo,
             transfer_amount_auditor_ciphertext_hi,
         )
+    }
+
+    /// Authorizes or revokes the payroll operator: a key allowed to call `pay_employee` (and nothing else) for this vault,
+    /// so payroll doesn't need the admin's wallet to approve every payment. Admin only. See `instructions/set_operator.rs`.
+    pub fn set_operator(ctx: Context<SetOperator>, operator: Pubkey, expires_at: i64) -> Result<()> {
+        crate::instructions::set_operator::handle_set_operator(ctx, operator, expires_at)
     }
 
     /// UC3 (REQ11): blocks `pay_employee`; withdrawals stay open.

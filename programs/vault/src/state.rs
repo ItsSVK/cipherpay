@@ -30,3 +30,24 @@ impl Vault {
         ]
     }
 }
+
+/// Optional delegation for payroll. The vault's admin can authorize one `operator` key to call `pay_employee` (and nothing else)
+/// on the admin's behalf, so a payroll run doesn't need the admin's wallet to approve every payment.
+///
+/// This is deliberately a separate PDA (`[OPERATOR_SEED, vault]`) rather than extra fields on `Vault`: `Vault`'s layout stays
+/// exactly as it was, so vaults created before this existed keep deserializing and keep working with no migration.
+///
+/// The operator can pay any employee account that is set up to receive confidential pay, and the amounts are encrypted, so the
+/// program cannot cap them. That is the trade-off of delegating. The admin limits the exposure with `expires_at` and by revoking
+/// (setting the operator to the default key). Pausing the vault blocks the operator too.
+#[account]
+#[derive(InitSpace)]
+pub struct OperatorConfig {
+    /// The vault this delegation belongs to (also in the PDA seeds; stored so an account read on its own is self-describing).
+    pub vault: Pubkey,
+    /// The key allowed to call `pay_employee`. `Pubkey::default()` means no operator (revoked).
+    pub operator: Pubkey,
+    /// Unix timestamp after which the operator can no longer pay. 0 means it never expires.
+    pub expires_at: i64,
+    pub bump: u8,
+}

@@ -6,6 +6,7 @@
 //! - [`zk`]: ElGamal/AES key material and the `VerifyPubkeyValidity` proof.
 //! - [`mint`]: creating a Token-2022 mint with confidential transfers enabled.
 //! - [`pda`]: deriving the program's PDAs.
+//! - [`payroll`]: a funded vault plus an activated employee, shared by the payment suites.
 //! - [`ix`]: building + sending the vault program's own instructions.
 //! - [`token_state`]: reading raw Token-2022 account state for assertions.
 //!
@@ -18,6 +19,7 @@ pub mod confidential_proof;
 pub mod env;
 pub mod ix;
 pub mod mint;
+pub mod payroll;
 pub mod pda;
 pub mod token_state;
 pub mod token_wrap;
