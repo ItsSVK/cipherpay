@@ -19,14 +19,18 @@ export const VAULT_ERROR__TREASURY_NOT_CONFIGURED = 0x1772; // 6002
 export const VAULT_ERROR__PAYROLL_PAUSED = 0x1773; // 6003
 /** OperatorExpired: The vault's operator authorization has expired */
 export const VAULT_ERROR__OPERATOR_EXPIRED = 0x1774; // 6004
-/** InvalidOperatorExpiry: An operator expiry must be 0 (never) or a time in the future */
+/** InvalidOperatorExpiry: An operator expiry must be in the future and no more than 24 hours away */
 export const VAULT_ERROR__INVALID_OPERATOR_EXPIRY = 0x1775; // 6005
+/** InvalidOperatorLimit: An operator must be allowed at least one payment */
+export const VAULT_ERROR__INVALID_OPERATOR_LIMIT = 0x1776; // 6006
+/** OperatorLimitReached: The operator has used all the payments it was allowed */
+export const VAULT_ERROR__OPERATOR_LIMIT_REACHED = 0x1777; // 6007
 
-export type VaultError = typeof VAULT_ERROR__INVALID_OPERATOR_EXPIRY | typeof VAULT_ERROR__OPERATOR_EXPIRED | typeof VAULT_ERROR__PAYROLL_PAUSED | typeof VAULT_ERROR__TREASURY_ALREADY_CONFIGURED | typeof VAULT_ERROR__TREASURY_NOT_CONFIGURED | typeof VAULT_ERROR__UNAUTHORIZED;
+export type VaultError = typeof VAULT_ERROR__INVALID_OPERATOR_EXPIRY | typeof VAULT_ERROR__INVALID_OPERATOR_LIMIT | typeof VAULT_ERROR__OPERATOR_EXPIRED | typeof VAULT_ERROR__OPERATOR_LIMIT_REACHED | typeof VAULT_ERROR__PAYROLL_PAUSED | typeof VAULT_ERROR__TREASURY_ALREADY_CONFIGURED | typeof VAULT_ERROR__TREASURY_NOT_CONFIGURED | typeof VAULT_ERROR__UNAUTHORIZED;
 
 let vaultErrorMessages: Record<VaultError, string> | undefined;
 if (process.env['NODE_ENV'] !== 'production') {
-  vaultErrorMessages = { [VAULT_ERROR__INVALID_OPERATOR_EXPIRY]: `An operator expiry must be 0 (never) or a time in the future`, [VAULT_ERROR__OPERATOR_EXPIRED]: `The vault's operator authorization has expired`, [VAULT_ERROR__PAYROLL_PAUSED]: `Payroll is paused for this vault`, [VAULT_ERROR__TREASURY_ALREADY_CONFIGURED]: `The vault's treasury account has already been configured`, [VAULT_ERROR__TREASURY_NOT_CONFIGURED]: `The vault's treasury account has not been configured yet`, [VAULT_ERROR__UNAUTHORIZED]: `Only the vault's authority can perform this action` };
+  vaultErrorMessages = { [VAULT_ERROR__INVALID_OPERATOR_EXPIRY]: `An operator expiry must be in the future and no more than 24 hours away`, [VAULT_ERROR__INVALID_OPERATOR_LIMIT]: `An operator must be allowed at least one payment`, [VAULT_ERROR__OPERATOR_EXPIRED]: `The vault's operator authorization has expired`, [VAULT_ERROR__OPERATOR_LIMIT_REACHED]: `The operator has used all the payments it was allowed`, [VAULT_ERROR__PAYROLL_PAUSED]: `Payroll is paused for this vault`, [VAULT_ERROR__TREASURY_ALREADY_CONFIGURED]: `The vault's treasury account has already been configured`, [VAULT_ERROR__TREASURY_NOT_CONFIGURED]: `The vault's treasury account has not been configured yet`, [VAULT_ERROR__UNAUTHORIZED]: `Only the vault's authority can perform this action` };
 }
 
 export function getVaultErrorMessage(code: VaultError): string {

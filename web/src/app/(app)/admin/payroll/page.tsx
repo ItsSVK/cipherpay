@@ -11,6 +11,7 @@ import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
 import { WalletCountdown } from "@/components/app/wallet-countdown";
+import { DEFAULT_AUTO_SETTINGS, OperatorPanel, type AutoPayrollSettings } from "@/components/app/operator-panel";
 import { PayrollGate } from "@/components/data/payroll-gate";
 import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
@@ -20,7 +21,7 @@ import { PIPELINE_STAGES, TRANSFER_STAGE, type Employee, type RunStatus } from "
 import { shortToday } from "@/lib/mock/store";
 import { formatUsdc, shortAddress } from "@/lib/format";
 import { useAccountStatus } from "@/components/app/employee-context";
-import { useLiveRun } from "@/lib/payroll/use-live-run";
+import { useLiveRun, type RunSettings } from "@/lib/payroll/use-live-run";
 import { useRunSimulation } from "@/lib/payroll/use-run-simulation";
 import { cn } from "@/lib/utils";
 
@@ -57,6 +58,7 @@ function RunPayroll() {
   const [phaseState, setPhase] = useState<Phase>("review");
   const [checks, setChecks] = useState<Check[]>([]);
   const [failDemo, setFailDemo] = useState(false);
+  const [auto, setAuto] = useState<AutoPayrollSettings>(DEFAULT_AUTO_SETTINGS);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const credited = useRef(new Set<string>());
   const recorded = useRef(false);
@@ -68,7 +70,9 @@ function RunPayroll() {
   const liveItems = useMemo(() => included.map((e) => ({ id: e.id, name: e.name, wallet: e.wallet, amount: e.salary })), [included]);
   // Demo wallets run the animated engine; real wallets run the real pipeline (pay_employee, one recipient at a time).
   const mockSim = useRunSimulation(ids, PIPELINE_STAGES.length, TRANSFER_STAGE);
-  const liveSim = useLiveRun(liveItems, PIPELINE_STAGES.length);
+  const maxPayments = Math.max(auto.maxPayments ?? included.length, included.length);
+  const runSettings = useMemo<RunSettings>(() => (auto.enabled ? { mode: "automatic", terms: { ttlSeconds: auto.ttlSeconds, maxPayments } } : { mode: "manual" }), [auto.enabled, auto.ttlSeconds, maxPayments]);
+  const liveSim = useLiveRun(liveItems, PIPELINE_STAGES.length, runSettings);
   const sim = v.isLive ? liveSim : mockSim;
   const phase: Phase = phaseState === "executing" && sim.done ? "done" : phaseState;
   const halted = phase === "executing" && !sim.running && sim.failedCount > 0;
@@ -243,6 +247,8 @@ function RunPayroll() {
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[1fr_320px]">
           <div className="grid gap-5">
+            {v.isLive ? <OperatorPanel settings={auto} onChange={setAuto} recipients={included.length} locked={phase === "simulating" || phase === "executing" && !halted} /> : null}
+
             {(phase === "review" || phase === "simulating" || phase === "simulated") && (
               <section className="plate enter overflow-hidden" style={{ ["--i" as string]: 2 }} aria-label="Recipients">
                 <ul>
@@ -349,6 +355,7 @@ function RunPayroll() {
               <div className="flex justify-between"><dt className="text-muted-foreground">Recipients</dt><dd className="tnum font-medium">{included.length}</dd></div>
               <div className="flex justify-between"><dt className="text-muted-foreground">Total</dt><dd className="font-mono font-medium tnum">{formatUsdc(total)} USDC</dd></div>
               <div className="flex justify-between"><dt className="text-muted-foreground">Transactions</dt><dd className="tnum font-medium">about {included.length * (v.isLive ? 6 : 7)}</dd></div>
+              {v.isLive ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Wallet approvals</dt><dd className="tnum text-right font-medium">{auto.enabled ? "1 for the whole run, or none if still authorized" : `${included.length}, one per payment`}</dd></div> : null}
             </dl>
             <div className="mt-5" aria-label={`Progress ${Math.round(sim.progress * 100)}%`}>
               <div className="h-1.5 overflow-hidden rounded-full bg-secondary">

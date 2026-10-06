@@ -16,7 +16,7 @@ export const PAY_EMPLOYEE_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([20
 export function getPayEmployeeDiscriminatorBytes(): ReadonlyUint8Array { return fixEncoderSize(getBytesEncoder(), 8).encode(PAY_EMPLOYEE_DISCRIMINATOR); }
 
 export type PayEmployeeInstruction<TProgram extends string = typeof VAULT_PROGRAM_ADDRESS, TAccountSigner extends string | AccountMeta<string> = string, TAccountVault extends string | AccountMeta<string> = string, TAccountMint extends string | AccountMeta<string> = string, TAccountTreasuryTokenAccount extends string | AccountMeta<string> = string, TAccountEmployeeTokenAccount extends string | AccountMeta<string> = string, TAccountEqualityProofContext extends string | AccountMeta<string> = string, TAccountCiphertextValidityProofContext extends string | AccountMeta<string> = string, TAccountRangeProofContext extends string | AccountMeta<string> = string, TAccountTokenProgram extends string | AccountMeta<string> = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", TAccountOperatorConfig extends string | AccountMeta<string> = string, TRemainingAccounts extends readonly AccountMeta<string>[] = []> =
-Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array> & InstructionWithAccounts<[TAccountSigner extends string ? ReadonlySignerAccount<TAccountSigner> & AccountSignerMeta<TAccountSigner> : TAccountSigner, TAccountVault extends string ? ReadonlyAccount<TAccountVault> : TAccountVault, TAccountMint extends string ? ReadonlyAccount<TAccountMint> : TAccountMint, TAccountTreasuryTokenAccount extends string ? WritableAccount<TAccountTreasuryTokenAccount> : TAccountTreasuryTokenAccount, TAccountEmployeeTokenAccount extends string ? WritableAccount<TAccountEmployeeTokenAccount> : TAccountEmployeeTokenAccount, TAccountEqualityProofContext extends string ? ReadonlyAccount<TAccountEqualityProofContext> : TAccountEqualityProofContext, TAccountCiphertextValidityProofContext extends string ? ReadonlyAccount<TAccountCiphertextValidityProofContext> : TAccountCiphertextValidityProofContext, TAccountRangeProofContext extends string ? ReadonlyAccount<TAccountRangeProofContext> : TAccountRangeProofContext, TAccountTokenProgram extends string ? ReadonlyAccount<TAccountTokenProgram> : TAccountTokenProgram, TAccountOperatorConfig extends string ? ReadonlyAccount<TAccountOperatorConfig> : TAccountOperatorConfig, ...TRemainingAccounts]>;
+Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array> & InstructionWithAccounts<[TAccountSigner extends string ? ReadonlySignerAccount<TAccountSigner> & AccountSignerMeta<TAccountSigner> : TAccountSigner, TAccountVault extends string ? ReadonlyAccount<TAccountVault> : TAccountVault, TAccountMint extends string ? ReadonlyAccount<TAccountMint> : TAccountMint, TAccountTreasuryTokenAccount extends string ? WritableAccount<TAccountTreasuryTokenAccount> : TAccountTreasuryTokenAccount, TAccountEmployeeTokenAccount extends string ? WritableAccount<TAccountEmployeeTokenAccount> : TAccountEmployeeTokenAccount, TAccountEqualityProofContext extends string ? ReadonlyAccount<TAccountEqualityProofContext> : TAccountEqualityProofContext, TAccountCiphertextValidityProofContext extends string ? ReadonlyAccount<TAccountCiphertextValidityProofContext> : TAccountCiphertextValidityProofContext, TAccountRangeProofContext extends string ? ReadonlyAccount<TAccountRangeProofContext> : TAccountRangeProofContext, TAccountTokenProgram extends string ? ReadonlyAccount<TAccountTokenProgram> : TAccountTokenProgram, TAccountOperatorConfig extends string ? WritableAccount<TAccountOperatorConfig> : TAccountOperatorConfig, ...TRemainingAccounts]>;
 
 export type PayEmployeeInstructionData = { discriminator: ReadonlyUint8Array; newSourceDecryptableAvailableBalance: ReadonlyUint8Array; transferAmountAuditorCiphertextLo: ReadonlyUint8Array; transferAmountAuditorCiphertextHi: ReadonlyUint8Array;  };
 
@@ -52,7 +52,8 @@ ciphertextValidityProofContext: TAccountCiphertextValidityProofContext;
 rangeProofContext: TAccountRangeProofContext;
 tokenProgram?: TAccountTokenProgram;
 /**
- * its address), but only read when the signer is not the admin: it may not
+ * its address), but only read (and, for an operator payment, written: it
+ * counts the payment) when the signer is not the admin: it may not
  * exist (no operator was ever set), and an admin-signed payment never needs
  * it. Its address is pinned by the seeds constraint, and the owner and
  * discriminator are checked before the data is trusted.
@@ -71,7 +72,7 @@ const programAddress = config?.programAddress ?? VAULT_PROGRAM_ADDRESS;
 const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
 
  // Original accounts.
-const originalAccounts = { signer: { value: input.signer ?? null, isSigner: true, isWritable: false }, vault: { value: input.vault ?? null, isSigner: false, isWritable: false }, mint: { value: input.mint ?? null, isSigner: false, isWritable: false }, treasuryTokenAccount: { value: input.treasuryTokenAccount ?? null, isSigner: false, isWritable: true }, employeeTokenAccount: { value: input.employeeTokenAccount ?? null, isSigner: false, isWritable: true }, equalityProofContext: { value: input.equalityProofContext ?? null, isSigner: false, isWritable: false }, ciphertextValidityProofContext: { value: input.ciphertextValidityProofContext ?? null, isSigner: false, isWritable: false }, rangeProofContext: { value: input.rangeProofContext ?? null, isSigner: false, isWritable: false }, tokenProgram: { value: input.tokenProgram ?? null, isSigner: false, isWritable: false }, operatorConfig: { value: input.operatorConfig ?? null, isSigner: false, isWritable: false } }
+const originalAccounts = { signer: { value: input.signer ?? null, isSigner: true, isWritable: false }, vault: { value: input.vault ?? null, isSigner: false, isWritable: false }, mint: { value: input.mint ?? null, isSigner: false, isWritable: false }, treasuryTokenAccount: { value: input.treasuryTokenAccount ?? null, isSigner: false, isWritable: true }, employeeTokenAccount: { value: input.employeeTokenAccount ?? null, isSigner: false, isWritable: true }, equalityProofContext: { value: input.equalityProofContext ?? null, isSigner: false, isWritable: false }, ciphertextValidityProofContext: { value: input.ciphertextValidityProofContext ?? null, isSigner: false, isWritable: false }, rangeProofContext: { value: input.rangeProofContext ?? null, isSigner: false, isWritable: false }, tokenProgram: { value: input.tokenProgram ?? null, isSigner: false, isWritable: false }, operatorConfig: { value: input.operatorConfig ?? null, isSigner: false, isWritable: true } }
 const accounts = originalAccounts as Record<keyof typeof originalAccounts, ResolvedInstructionAccount>;
 
 
@@ -108,7 +109,8 @@ ciphertextValidityProofContext: TAccountCiphertextValidityProofContext;
 rangeProofContext: TAccountRangeProofContext;
 tokenProgram?: TAccountTokenProgram;
 /**
- * its address), but only read when the signer is not the admin: it may not
+ * its address), but only read (and, for an operator payment, written: it
+ * counts the payment) when the signer is not the admin: it may not
  * exist (no operator was ever set), and an admin-signed payment never needs
  * it. Its address is pinned by the seeds constraint, and the owner and
  * discriminator are checked before the data is trusted.
@@ -127,7 +129,7 @@ const programAddress = config?.programAddress ?? VAULT_PROGRAM_ADDRESS;
 const getAccountMeta = getAccountMetaFactory(programAddress, 'programId');
 
  // Original accounts.
-const originalAccounts = { signer: { value: input.signer ?? null, isSigner: true, isWritable: false }, vault: { value: input.vault ?? null, isSigner: false, isWritable: false }, mint: { value: input.mint ?? null, isSigner: false, isWritable: false }, treasuryTokenAccount: { value: input.treasuryTokenAccount ?? null, isSigner: false, isWritable: true }, employeeTokenAccount: { value: input.employeeTokenAccount ?? null, isSigner: false, isWritable: true }, equalityProofContext: { value: input.equalityProofContext ?? null, isSigner: false, isWritable: false }, ciphertextValidityProofContext: { value: input.ciphertextValidityProofContext ?? null, isSigner: false, isWritable: false }, rangeProofContext: { value: input.rangeProofContext ?? null, isSigner: false, isWritable: false }, tokenProgram: { value: input.tokenProgram ?? null, isSigner: false, isWritable: false }, operatorConfig: { value: input.operatorConfig ?? null, isSigner: false, isWritable: false } }
+const originalAccounts = { signer: { value: input.signer ?? null, isSigner: true, isWritable: false }, vault: { value: input.vault ?? null, isSigner: false, isWritable: false }, mint: { value: input.mint ?? null, isSigner: false, isWritable: false }, treasuryTokenAccount: { value: input.treasuryTokenAccount ?? null, isSigner: false, isWritable: true }, employeeTokenAccount: { value: input.employeeTokenAccount ?? null, isSigner: false, isWritable: true }, equalityProofContext: { value: input.equalityProofContext ?? null, isSigner: false, isWritable: false }, ciphertextValidityProofContext: { value: input.ciphertextValidityProofContext ?? null, isSigner: false, isWritable: false }, rangeProofContext: { value: input.rangeProofContext ?? null, isSigner: false, isWritable: false }, tokenProgram: { value: input.tokenProgram ?? null, isSigner: false, isWritable: false }, operatorConfig: { value: input.operatorConfig ?? null, isSigner: false, isWritable: true } }
 const accounts = originalAccounts as Record<keyof typeof originalAccounts, ResolvedInstructionAccount>;
 
 
@@ -162,7 +164,8 @@ ciphertextValidityProofContext: TAccountMetas[6];
 rangeProofContext: TAccountMetas[7];
 tokenProgram: TAccountMetas[8];
 /**
- * its address), but only read when the signer is not the admin: it may not
+ * its address), but only read (and, for an operator payment, written: it
+ * counts the payment) when the signer is not the admin: it may not
  * exist (no operator was ever set), and an admin-signed payment never needs
  * it. Its address is pinned by the seeds constraint, and the owner and
  * discriminator are checked before the data is trusted.

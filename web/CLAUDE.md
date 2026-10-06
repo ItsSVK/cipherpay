@@ -362,12 +362,23 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   map multiple inputs to one `signAllTransactions` approval, unconfirmed); blockhash lifetime if the user sits on the approval for more
   than ~60-90s (the run fails safely with "expired", nothing sent); leftover context accounts if a run dies after step 1 (rent only, not yet
   auto-closed). Split payout stays on the demo engine (its tax/fee destinations are demo wallets). Pause/resume still guarded.
-- **Operator key, no per-payment wallet prompt (2026-10-06).** The contract (`set_operator`, `OperatorConfig` PDA `["operator", vault]`, `pay_employee` accepts
-  the admin OR an unexpired operator as `signer`) is on `main` and deployed to devnet. The app makes the payroll helper key the operator: `lib/chain/operator.ts`
-  (`readOperator`, `buildAuthorizeInstruction` for 1 hour, `buildRevokeInstruction`), `ensureHelperReady` in `helper-signer.ts` does ONE wallet approval per run
-  (SOL top-up + `set_operator` in a single transaction) and none while the authorization has more than 5 minutes left. `payOne` then sends all six transactions
-  signed by the helper. The helper is no longer swept after a run (`sweepHelper` and `revokeHelper` exist but have no button yet). **Slow popup root cause:**
-  it was the Helium browser (Phantom popup took ~40 s there, instant in Chrome), not our transactions. Still to do: authorize/revoke/reclaim panel, e2e on devnet.
+- **Automatic vs manual payroll (2026-10-06).** The Run payroll page has an **Automatic payroll** switch (`components/app/operator-panel.tsx`),
+  off by default. **Off (manual):** the old flow, the admin's wallet approves every `pay_employee` (the helper only does the proof accounts, and
+  is topped up with SOL when short). **On (automatic):** one wallet approval per run (SOL top-up + `set_operator` in one transaction, built by
+  `ensureHelperReady` in `helper-signer.ts`), after which the payroll helper signs all six transactions of every payment, so no popups. No
+  approval at all while a previous authorization still covers the run (>5 min left and enough payments). The admin picks the expiry (15 min,
+  1 h, 6 h; the program allows at most 24 h) and a payment cap (at least the people in the run; amounts are encrypted, so the program caps
+  the COUNT, not the value). The authorization lives on-chain (`OperatorConfig`, PDA `["operator_v2", vault]`), so the panel reads it
+  (`readOperator`) and shows "Authorized: N payments left, ends in X". **Revoke and reclaim SOL** (`revokeAndReclaim`): one wallet approval
+  for `set_operator(default)`, then the helper's SOL is swept back silently; it also turns the switch off. Flipping the switch off does NOT
+  revoke by itself (no surprise popup): a still-live authorization stays visible with its Revoke button. The helper holds ~0.011 SOL
+  (`HELPER_TOPUP_LAMPORTS`; 3 proof accounts cost ~0.0063 SOL of rent on devnet and ~0.0086 on surfpool, refunded on close) and is no longer swept after
+  a run. **Contract:** `main` (`set_operator(operator, expires_at, max_payments)`, `pay_employee` spends one payment per operator-signed call,
+  `OperatorLimitReached`); **the devnet program must be upgraded to this version before the app works**. **Slow popup root cause (earlier saga):**
+  the Helium browser (Phantom popup ~40 s there, instant in Chrome), not our transactions. **Verified** on a devnet-forked surfpool through the
+  real UI with the new binary loaded (`surfnet_writeProgram`): automatic run = 1 wallet request, both payments, treasury 10 -> 2.5 and employees
+  decrypt exactly; 1 of 3 payments left afterwards; Revoke and reclaim = 1 request, on-chain operator cleared, helper SOL 0; manual run = 3
+  requests (1 top-up + 2 payments) and the operator stays cleared. Not yet run on real devnet with the new program.
 - **Send errors and blockhash handling (2026-10-06).** A payment failed on a real network with only "The network rejected the transaction
   before sending it". Cause of the vagueness: for a rejected preflight, kit puts the real reason in **`error.cause`** (e.g. "Blockhash not
   found") and the `context.logs` are EMPTY in that case, so a log-only message says nothing. `toTxError` (`lib/chain/send.ts`) now keeps

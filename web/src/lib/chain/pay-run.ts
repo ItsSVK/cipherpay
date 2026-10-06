@@ -1,13 +1,14 @@
 // Runs ONE payment end to end against the chain: read fresh state, build proofs, set up and verify the proof accounts with the
-// payroll helper, send pay_employee as the helper (the vault's authorized operator, so no wallet prompt), then clean up. Client-only.
-import { address, type Address, type KeyPairSigner } from "@solana/kit";
+// payroll helper, then send pay_employee: signed by the helper in AUTOMATIC mode (it is the vault's authorized operator, so no wallet
+// prompt), or approved in the admin's wallet in MANUAL mode. Then clean up. Client-only.
+import { address, type Address, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
 import type { DerivedKeys } from "@/lib/crypto/keys";
 import { decryptAccountBalance } from "./decrypt";
 import { readOperator } from "./operator";
 import { buildPaymentPlan } from "./pay";
 import { readAuditorPubkey, readConfidentialAccount, readVaultState } from "./read";
 import type { AppRpc } from "./rpc";
-import { signAndSend, TxError } from "./send";
+import { signAndSend, TxError, type SignAndSendOptions } from "./send";
 
 export type PayStage = "prove" | "create" | "verify" | "transfer" | "close";
 
@@ -26,14 +27,20 @@ export class PaymentError extends Error {
 
 export interface PayOneInput {
   rpc: AppRpc;
-  /** The vault admin's address. Its wallet is not involved in a payment. */
-  admin: Address;
-  /** The payroll helper (already funded and authorized as the vault's operator): signs every transaction without a wallet prompt. */
+  /** The vault admin's wallet. In manual mode it approves pay_employee; in automatic mode it is not involved. */
+  admin: TransactionSigner;
+  /** The payroll helper (already funded; in automatic mode also authorized as the vault's operator). */
   helper: KeyPairSigner;
+  /** "automatic": the helper signs pay_employee, no prompt. "manual": the admin's wallet approves each pay_employee. */
+  mode: "automatic" | "manual";
   keys: DerivedKeys;
   employee: Address;
   amount: bigint;
   onStage?: (stage: PayStage) => void;
+  /** Manual mode: fires each time the wallet is asked to approve the payment (again, if the first window closed). */
+  onPrompt?: SignAndSendOptions["onPrompt"];
+  /** Manual mode: fires once the wallet has approved. */
+  onSigned?: () => void;
 }
 
 export interface PayOneResult {
@@ -46,7 +53,8 @@ export interface PayOneResult {
 const describe = (e: unknown) => (e instanceof Error ? e.message : "The transaction failed.");
 
 export async function payOne(input: PayOneInput): Promise<PayOneResult> {
-  const { rpc, admin, helper, keys, employee, amount, onStage } = input;
+  const { rpc, admin: adminWallet, helper, mode, keys, employee, amount, onStage, onPrompt, onSigned } = input;
+  const admin = address(adminWallet.address);
   const stage = (s: PayStage) => onStage?.(s);
   stage("prove");
 
@@ -55,8 +63,8 @@ export async function payOne(input: PayOneInput): Promise<PayOneResult> {
   if (!vault.exists || !vault.treasuryConfigured || !vault.treasury) throw new PaymentError("Set up your company before paying.", "prove", false);
   if (vault.paused) throw new PaymentError("Payroll is paused. Resume it to pay.", "prove", false);
 
-  const operator = await readOperator(rpc, admin, helper.address);
-  if (!operator.authorized) throw new PaymentError("The payroll helper isn't authorized (or its authorization has run out). Authorize it and try again.", "prove", false);
+  const operator = mode === "automatic" ? await readOperator(rpc, admin, helper.address) : null;
+  if (operator && !operator.authorized) throw new PaymentError("Automatic payroll isn't authorized any more (it expired, was revoked or used up its payments). Run again to authorize it.", "prove", false);
 
   const recipient = await readConfidentialAccount(rpc, employee);
   if (!recipient || !recipient.confidential) throw new PaymentError("This person hasn't set up their account yet, so they can't receive pay.", "prove", false);
@@ -71,6 +79,7 @@ export async function payOne(input: PayOneInput): Promise<PayOneResult> {
       rpc,
       admin,
       helper,
+      payer: mode === "automatic" ? helper : adminWallet,
       keys,
       treasury: vault.treasury,
       treasuryAvailable: treasuryBalance.available,
@@ -103,11 +112,13 @@ export async function payOne(input: PayOneInput): Promise<PayOneResult> {
   // Once the proofs exist, a failure still leaves three funded accounts behind. The helper can close them without any prompt.
   const closeContexts = () => withHelper(plan.close.instructions);
 
-  // ---- pay_employee, signed by the helper as the authorized operator: no wallet prompt, so nothing here waits on a human.
+  // ---- pay_employee. Automatic: signed by the helper as the authorized operator, so nothing waits on a human. Manual: the ONE wallet
+  // approval of this payment (its blockhash is fetched right before the prompt, and the wallet's simulation passes because the proofs
+  // are already verified on-chain).
   stage("transfer");
   let signature: string;
   try {
-    ({ signature } = await signAndSend({ rpc, signer: helper, instructions: plan.transfer.instructions }));
+    ({ signature } = await signAndSend({ rpc, signer: mode === "automatic" ? helper : adminWallet, instructions: plan.transfer.instructions, onPrompt, onSigned }));
   } catch (e) {
     // Rejected up front (preflight) or expired before sending: nothing moved. If it may have reached the network
     // (a timeout, a dropped connection) we cannot know, so the row says to check before retrying.

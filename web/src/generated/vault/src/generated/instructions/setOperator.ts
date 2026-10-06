@@ -6,7 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
-import { combineCodec, fixDecoderSize, fixEncoderSize, getAddressDecoder, getAddressEncoder, getBytesDecoder, getBytesEncoder, getI64Decoder, getI64Encoder, getStructDecoder, getStructEncoder, SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS, SolanaError, transformEncoder, type AccountMeta, type AccountSignerMeta, type Address, type FixedSizeCodec, type FixedSizeDecoder, type FixedSizeEncoder, type Instruction, type InstructionWithAccounts, type InstructionWithData, type ReadonlyAccount, type ReadonlyUint8Array, type WritableAccount, type WritableSignerAccount } from '@solana/kit';
+import { combineCodec, fixDecoderSize, fixEncoderSize, getAddressDecoder, getAddressEncoder, getBytesDecoder, getBytesEncoder, getI64Decoder, getI64Encoder, getStructDecoder, getStructEncoder, getU32Decoder, getU32Encoder, SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS, SolanaError, transformEncoder, type AccountMeta, type AccountSignerMeta, type Address, type FixedSizeCodec, type FixedSizeDecoder, type FixedSizeEncoder, type Instruction, type InstructionWithAccounts, type InstructionWithData, type ReadonlyAccount, type ReadonlyUint8Array, type WritableAccount, type WritableSignerAccount } from '@solana/kit';
 import { getAccountMetaFactory, getAddressFromResolvedInstructionAccount, type InstructionAccountInput, type InstructionAccountInputAddress, type InstructionSignerInput, type ResolvedInstructionAccount, type ResolvedInstructionAccountMeta } from '@solana/program-client-core';
 import { findOperatorConfigPda } from '../pdas';
 import { VAULT_PROGRAM_ADDRESS } from '../programs';
@@ -18,16 +18,16 @@ export function getSetOperatorDiscriminatorBytes(): ReadonlyUint8Array { return 
 export type SetOperatorInstruction<TProgram extends string = typeof VAULT_PROGRAM_ADDRESS, TAccountAdmin extends string | AccountMeta<string> = string, TAccountVault extends string | AccountMeta<string> = string, TAccountOperatorConfig extends string | AccountMeta<string> = string, TAccountSystemProgram extends string | AccountMeta<string> = "11111111111111111111111111111111", TRemainingAccounts extends readonly AccountMeta<string>[] = []> =
 Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array> & InstructionWithAccounts<[TAccountAdmin extends string ? WritableSignerAccount<TAccountAdmin> & AccountSignerMeta<TAccountAdmin> : TAccountAdmin, TAccountVault extends string ? ReadonlyAccount<TAccountVault> : TAccountVault, TAccountOperatorConfig extends string ? WritableAccount<TAccountOperatorConfig> : TAccountOperatorConfig, TAccountSystemProgram extends string ? ReadonlyAccount<TAccountSystemProgram> : TAccountSystemProgram, ...TRemainingAccounts]>;
 
-export type SetOperatorInstructionData = { discriminator: ReadonlyUint8Array; operator: Address; expiresAt: bigint;  };
+export type SetOperatorInstructionData = { discriminator: ReadonlyUint8Array; operator: Address; expiresAt: bigint; maxPayments: number;  };
 
-export type SetOperatorInstructionDataArgs = { operator: Address; expiresAt: number | bigint;  };
+export type SetOperatorInstructionDataArgs = { operator: Address; expiresAt: number | bigint; maxPayments: number;  };
 
 export function getSetOperatorInstructionDataEncoder(): FixedSizeEncoder<SetOperatorInstructionDataArgs> {
-    return transformEncoder(getStructEncoder([['discriminator', fixEncoderSize(getBytesEncoder(), 8)], ['operator', getAddressEncoder()], ['expiresAt', getI64Encoder()]]), (value) => ({ ...value, discriminator: SET_OPERATOR_DISCRIMINATOR }));
+    return transformEncoder(getStructEncoder([['discriminator', fixEncoderSize(getBytesEncoder(), 8)], ['operator', getAddressEncoder()], ['expiresAt', getI64Encoder()], ['maxPayments', getU32Encoder()]]), (value) => ({ ...value, discriminator: SET_OPERATOR_DISCRIMINATOR }));
 }
 
 export function getSetOperatorInstructionDataDecoder(): FixedSizeDecoder<SetOperatorInstructionData> {
-    return getStructDecoder([['discriminator', fixDecoderSize(getBytesDecoder(), 8)], ['operator', getAddressDecoder()], ['expiresAt', getI64Decoder()]]);
+    return getStructDecoder([['discriminator', fixDecoderSize(getBytesDecoder(), 8)], ['operator', getAddressDecoder()], ['expiresAt', getI64Decoder()], ['maxPayments', getU32Decoder()]]);
 }
 
 export function getSetOperatorInstructionDataCodec(): FixedSizeCodec<SetOperatorInstructionDataArgs, SetOperatorInstructionData> {
@@ -41,6 +41,7 @@ operatorConfig?: TAccountOperatorConfig;
 systemProgram?: TAccountSystemProgram;
 operator: SetOperatorInstructionDataArgs["operator"];
 expiresAt: SetOperatorInstructionDataArgs["expiresAt"];
+maxPayments: SetOperatorInstructionDataArgs["maxPayments"];
 }
 
 export async function getSetOperatorInstructionAsync<TAccountAdmin extends InstructionSignerInput, TAccountVault extends InstructionAccountInput, TAccountOperatorConfig extends InstructionAccountInput, TAccountSystemProgram extends InstructionAccountInput, TProgramAddress extends Address = typeof VAULT_PROGRAM_ADDRESS>(input: SetOperatorAsyncInput<TAccountAdmin, TAccountVault, TAccountOperatorConfig, TAccountSystemProgram>, config?: { programAddress?: TProgramAddress } ): Promise<SetOperatorInstruction<TProgramAddress, ResolvedInstructionAccountMeta<TAccountAdmin, InstructionAccountInputAddress<TAccountAdmin>>, ResolvedInstructionAccountMeta<TAccountVault, InstructionAccountInputAddress<TAccountVault>>, ResolvedInstructionAccountMeta<TAccountOperatorConfig, InstructionAccountInputAddress<TAccountOperatorConfig>>, ResolvedInstructionAccountMeta<TAccountSystemProgram, InstructionAccountInputAddress<TAccountSystemProgram>>>> {
@@ -77,6 +78,7 @@ operatorConfig: TAccountOperatorConfig;
 systemProgram?: TAccountSystemProgram;
 operator: SetOperatorInstructionDataArgs["operator"];
 expiresAt: SetOperatorInstructionDataArgs["expiresAt"];
+maxPayments: SetOperatorInstructionDataArgs["maxPayments"];
 }
 
 export function getSetOperatorInstruction<TAccountAdmin extends InstructionSignerInput, TAccountVault extends InstructionAccountInput, TAccountOperatorConfig extends InstructionAccountInput, TAccountSystemProgram extends InstructionAccountInput, TProgramAddress extends Address = typeof VAULT_PROGRAM_ADDRESS>(input: SetOperatorInput<TAccountAdmin, TAccountVault, TAccountOperatorConfig, TAccountSystemProgram>, config?: { programAddress?: TProgramAddress } ): SetOperatorInstruction<TProgramAddress, ResolvedInstructionAccountMeta<TAccountAdmin, InstructionAccountInputAddress<TAccountAdmin>>, ResolvedInstructionAccountMeta<TAccountVault, InstructionAccountInputAddress<TAccountVault>>, ResolvedInstructionAccountMeta<TAccountOperatorConfig, InstructionAccountInputAddress<TAccountOperatorConfig>>, ResolvedInstructionAccountMeta<TAccountSystemProgram, InstructionAccountInputAddress<TAccountSystemProgram>>> {

@@ -14,5 +14,5 @@ vault: Address;
 
 export async function findOperatorConfigPda(seeds: OperatorConfigSeeds, config: { programAddress?: Address | undefined } = {}): Promise<ProgramDerivedAddress> {
   const { programAddress = 'ELChxVFAiE5jv1SV3v3gprWeWxmbgX7ATWingW5VcB48' as Address<'ELChxVFAiE5jv1SV3v3gprWeWxmbgX7ATWingW5VcB48'> } = config;
-  return await getProgramDerivedAddress({ programAddress, seeds: [getBytesEncoder().encode(new Uint8Array([111, 112, 101, 114, 97, 116, 111, 114])), getAddressEncoder().encode(seeds.vault)]});
+  return await getProgramDerivedAddress({ programAddress, seeds: [getBytesEncoder().encode(new Uint8Array([111, 112, 101, 114, 97, 116, 111, 114, 95, 118, 50])), getAddressEncoder().encode(seeds.vault)]});
 }

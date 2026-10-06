@@ -5,10 +5,11 @@
 // its proof (litesvm hides this; the TS client in ../client learned it the hard way).
 //   1. create the three context accounts          (the helper pays; the new context keypairs co-sign)
 //   2-4. verify equality, ciphertext-validity and range proofs, one transaction each   (the helper)
-//   5. pay_employee, which references the three contexts                               (the helper, as the vault's authorized operator)
+//   5. pay_employee, which references the three contexts                               (`payer`: the helper in automatic mode, the ADMIN's wallet in manual mode)
 //   6. close the three contexts, rent back to the helper                               (the helper)
-// All six are signed by the helper key (see helper-signer.ts), so a payment needs no wallet prompt. The admin's wallet approves
-// once, beforehand, with `set_operator` (see operator.ts).
+// Everything except step 5 is always signed by the helper key (see helper-signer.ts). In automatic mode the helper is the vault's
+// authorized operator (operator.ts), so it signs step 5 too and a payment needs no wallet prompt; in manual mode the admin's wallet
+// approves each pay_employee.
 import { address, getAddressEncoder, generateKeyPairSigner, unwrapOption, type Address, type Instruction, type TransactionSigner } from "@solana/kit";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import {
@@ -54,8 +55,10 @@ export interface PaymentInput {
   rpc: Pick<AppRpc, "getMinimumBalanceForRentExemption">;
   /** The vault admin's address (it only seeds the vault PDA here; it signs nothing in a payment). */
   admin: Address;
-  /** The payroll helper: the vault's authorized operator. Pays for and signs every transaction of the payment. */
+  /** The payroll helper: pays for and signs the proof-account transactions. */
   helper: TransactionSigner;
+  /** Who signs `pay_employee`: the helper (automatic mode, it is the vault's operator) or the admin's wallet (manual mode). */
+  payer: TransactionSigner;
   keys: DerivedKeys;
   /** The vault's treasury token account as just read from the chain. */
   treasury: ConfidentialAccountView;
@@ -105,7 +108,7 @@ export async function buildPaymentPlan(input: PaymentInput): Promise<PaymentPlan
 
   const [operatorConfig] = await findOperatorConfigPda({ vault });
   const pay = getPayEmployeeInstruction({
-    signer: helper,
+    signer: input.payer,
     vault,
     mint: WUSDC,
     treasuryTokenAccount: treasury.address,

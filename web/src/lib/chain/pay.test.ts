@@ -79,7 +79,7 @@ const wireSize = (feePayer: Awaited<ReturnType<typeof generateKeyPairSigner>>, s
 describe("buildPaymentPlan", () => {
   test("every transaction belongs to the helper (pay_employee as the operator, the admin's wallet is in none); every transaction fits the real 1232-byte limit", async () => {
     const f = await fixture(9_000_000n);
-    const plan = await buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer.address, helper: f.helper, keys: f.keys, treasury: f.treasury, treasuryAvailable: 9_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 1_250_000n });
+    const plan = await buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer.address, helper: f.helper, payer: f.helper, keys: f.keys, treasury: f.treasury, treasuryAvailable: 9_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 1_250_000n });
     const { equality, validity, range } = plan.contextAddresses;
 
     // 1. three createAccount instructions paid for by the HELPER, with the three new context accounts as signers
@@ -126,8 +126,17 @@ describe("buildPaymentPlan", () => {
     expect(plan.newBalance).toBe(9_000_000n - 1_250_000n);
   }, 90_000);
 
+  test("manual mode: the admin's wallet signs pay_employee, the helper still does everything else, and it still fits", async () => {
+    const f = await fixture(9_000_000n);
+    const plan = await buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer.address, helper: f.helper, payer: f.signer, keys: f.keys, treasury: f.treasury, treasuryAvailable: 9_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 1_000_000n });
+    const pay = plan.transfer.instructions[1];
+    expect(pay.accounts![0].address).toBe(f.signer.address);
+    expect(plan.create.instructions.flatMap((i) => i.accounts!.map((a) => a.address))).not.toContain(f.signer.address);
+    expect(wireSize(f.signer, plan.transfer)).toBeLessThanOrEqual(MAX_TX_BYTES);
+  }, 90_000);
+
   test("refuses to pay more than the treasury holds", async () => {
     const f = await fixture(1_000_000n);
-    await expect(buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer.address, helper: f.helper, keys: f.keys, treasury: f.treasury, treasuryAvailable: 1_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 2_000_000n })).rejects.toThrow();
+    await expect(buildPaymentPlan({ rpc: f.rpc as never, admin: f.signer.address, helper: f.helper, payer: f.helper, keys: f.keys, treasury: f.treasury, treasuryAvailable: 1_000_000n, employeeTokenAccount: f.employeeToken, employeeElgamalPubkey: f.employeePub, auditorElgamalPubkey: f.auditorPub, amount: 2_000_000n })).rejects.toThrow();
   }, 30_000);
 });
