@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
 import { StepList, type Step } from "@/components/crypto/step-list";
+import { useWithdraw } from "@/components/chain/use-receive";
 import { useEmployee } from "@/components/app/employee-context";
 import { useLiveGuard } from "@/components/app/live-guard";
 import { SolNotice } from "@/components/app/sol-notice";
@@ -29,27 +30,43 @@ export function WithdrawSheet() {
   const [pct, setPct] = useState(25);
   const [unwrap, setUnwrap] = useState(true);
 
-  const needsApply = emp.pending > 0n;
+  // Once a withdrawal starts, freeze what it was started with: the chain poll refreshes balances while it runs (applying pending pay and
+  // then withdrawing both change them), and the step list and amount must not shift under the user mid-run.
+  const live = useWithdraw();
+  const [started, setStarted] = useState<{ needsApply: boolean; amount: bigint; remaining: bigint } | null>(null);
+  // A failed attempt unfreezes, so the person can change the amount and try again.
+  const frozen = started && !(emp.isLive && live.phase === "error") ? started : null;
   const spendable = emp.available + emp.pending;
-  const amount = (spendable * BigInt(pct)) / 100n;
-  const remaining = spendable - amount;
+  const amount = frozen?.amount ?? (spendable * BigInt(pct)) / 100n;
+  const needsApply = frozen?.needsApply ?? emp.pending > 0n;
+  const remaining = frozen?.remaining ?? spendable - amount;
 
   const steps: Step[] = [
     ...(needsApply ? [{ label: "Apply pending balance", detail: "Moves new payments into your spendable balance.", visibility: "encrypted" as const }] : []),
     { label: "Prove you can cover it", detail: "Two proofs are built in your browser (the balance matches, the amount is in range) and stored in short-lived accounts.", visibility: "encrypted" as const },
     { label: "Withdraw from your confidential balance", detail: `${formatUsdc(amount)} USDC leaves the encrypted balance and becomes visible on-chain.`, visibility: "public" as const },
-    ...(unwrap ? [{ label: "Unwrap to USDC", detail: "Converts the wrapped token back to plain USDC in your wallet.", visibility: "public" as const }] : []),
+    ...(unwrap ? [{ label: "Unwrap to USDC", detail: emp.isLive ? "In the same approval as the withdrawal: converts the wrapped token back to plain USDC in your wallet." : "Converts the wrapped token back to plain USDC in your wallet.", visibility: "public" as const }] : []),
   ];
 
-  const stepper = useStepper(steps.length, 1000, () => {
+  const demo = useStepper(steps.length, 1000, () => {
     if (needsApply) emp.applyPending();
     emp.withdraw(amount, unwrap);
     toast.success(`${formatUsdc(amount)} ${unwrap ? "USDC" : "WUSDC"} withdrawn`, { description: "The rest of your balance stays encrypted." });
   });
+  // Real wallets: the stages of lib/chain/withdraw-run.ts mapped onto the steps above. The proof accounts are part of "Prove".
+  const base = needsApply ? 1 : 0;
+  const liveCompleted = live.phase === "done" ? steps.length : live.stage === "withdraw" ? base + 1 : live.stage === "close" ? steps.length : live.stage === "create" || live.stage === "verify" ? base : live.stage === "prove" && live.applied ? base : 0;
+  const stepper = emp.isLive ? { running: live.running, done: live.phase === "done", completed: liveCompleted } : demo;
   const locked = stepper.running || stepper.done;
+  const closeSheet = () => {
+    if (emp.isLive) live.reset();
+    else demo.reset();
+    setStarted(null);
+    setOpen(false);
+  };
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !stepper.running && setOpen(o)}>
+    <Sheet open={open} onOpenChange={(o) => { if (stepper.running) return; setOpen(o); if (!o) { setStarted(null); if (emp.isLive && live.phase !== "idle") live.reset(); } }}>
       <SheetTrigger render={<Button className="gap-1.5" />}>
         <ArrowDownToLineIcon /> Withdraw
       </SheetTrigger>
@@ -102,11 +119,34 @@ export function WithdrawSheet() {
             <StepList steps={steps} completed={stepper.completed} running={stepper.running} />
           </div>
 
+          {emp.isLive && live.error ? (
+            <p role="alert" className="rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">
+              {live.error}
+              {live.maybeSent ? " The withdrawal may have gone through: check your balance before trying again so you don't send it twice." : ""}
+            </p>
+          ) : null}
+          {emp.isLive && live.phase === "done" ? <p role="status" className="rounded-lg bg-verified-soft px-3 py-2 text-[13px] text-verified">Confirmed on devnet. Your balances update in a moment.</p> : null}
+          {emp.isLive && live.warning ? <p role="status" className="rounded-lg bg-pending-soft px-3 py-2 text-[13px] text-pending">{live.warning}</p> : null}
+          {emp.isLive && !live.canSign ? <p className="text-[13px] text-muted-foreground">{live.cannotSignReason}</p> : null}
+
           {stepper.done ? (
-            <Button variant="outline" className="h-10" onClick={() => { stepper.reset(); setOpen(false); }}>Done</Button>
+            <Button variant="outline" className="h-10" onClick={closeSheet}>Done</Button>
           ) : (
-            <Button className="h-10" disabled={amount === 0n || stepper.running || !emp.hasSol} onClick={() => { if (!keys.requireKeys()) return; if (!guard()) return; stepper.run(); }}>
-              {stepper.running ? "Sending…" : keys.ready ? `Withdraw ${formatUsdc(amount)} USDC` : "Unlock keys to withdraw"}
+            <Button
+              className="h-10"
+              disabled={amount === 0n || stepper.running || !emp.hasSol || (emp.isLive && !live.canSign)}
+              onClick={() => {
+                if (!keys.requireKeys()) return;
+                setStarted({ needsApply, amount, remaining });
+                if (emp.isLive) {
+                  void live.run(amount, unwrap);
+                  return;
+                }
+                if (!guard()) return;
+                demo.run();
+              }}
+            >
+              {stepper.running ? "Working…" : emp.isLive && live.error ? "Try again" : keys.ready ? `Withdraw ${formatUsdc(amount)} USDC` : "Unlock keys to withdraw"}
             </Button>
           )}
           <p className="text-xs leading-relaxed text-muted-foreground">

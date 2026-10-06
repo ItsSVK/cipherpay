@@ -176,7 +176,7 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
           {stage === "draft" && v.vault.paused ? (
             <div className="plate flex flex-wrap items-center justify-between gap-3 border-pending/25 bg-pending-soft p-4 text-[13.5px] text-pending" role="alert">
               <p>Payroll is paused, so payouts would be rejected. Resume it to continue.</p>
-              <Button size="sm" variant="outline" onClick={() => { if (!guard()) return; v.setPaused(false); toast("Payroll resumed", { description: "Payouts can run again." }); }}>Resume payroll</Button>
+              <Button size="sm" variant="outline" disabled={v.pauseBusy} onClick={() => { void (async () => { if (!v.isLive && !guard()) return; if (!(await v.setPaused(false))) return; toast("Payroll resumed", { description: "Payouts can run again." }); })(); }}>{v.pauseBusy ? "Waiting for your wallet…" : "Resume payroll"}</Button>
             </div>
           ) : null}
           {stage === "draft" && parts && !treasuryOk ? (

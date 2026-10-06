@@ -7,6 +7,7 @@ import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
 import { StepList, type Step } from "@/components/crypto/step-list";
 import { useActivation } from "@/components/chain/use-activation";
+import { useApplyPending } from "@/components/chain/use-receive";
 import { useEmployee } from "@/components/app/employee-context";
 import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
@@ -24,6 +25,12 @@ const ACTIVATE_STEPS: Step[] = [
 ];
 
 const APPLY_STEPS: Step[] = [{ label: "Apply pending balance", detail: "Moves new payments into your spendable balance.", visibility: "encrypted" }];
+const LIVE_APPLY_STEPS: Step[] = [
+  { label: "Prepare in your browser", detail: "Reads your account and works out your new encrypted balance. Nothing leaves this tab.", visibility: "encrypted" },
+  { label: "Approve in your wallet", detail: "One transaction. Your wallet shows it to you before you sign." },
+  { label: "Apply pending balance", detail: "Moves new payments into your spendable balance.", visibility: "encrypted" },
+];
+const LIVE_APPLY_STEP: Record<string, number> = { idle: 0, preparing: 0, signing: 1, confirming: 2, done: 3, error: 0 };
 
 /** Personal side of the app: balances, payments and withdrawal, for any wallet that gets paid. */
 export default function MyPay() {
@@ -36,6 +43,8 @@ export default function MyPay() {
   const live = useActivation();
   const act = emp.isLive ? live : activation;
   const apply = useStepper(1, 1100, () => { emp.applyPending(); toast.success("Pending balance applied"); });
+  const liveApply = useApplyPending();
+  const applying = emp.isLive ? liveApply.running : apply.running;
 
   if (emp.loading) return <PageLoading />;
 
@@ -98,12 +107,26 @@ export default function MyPay() {
             <div className="mt-4 flex min-h-8 items-center justify-between gap-3">
               <p className="text-[13px] text-muted-foreground">{b.note}</p>
               {b.id === "pending" && emp.pending > 0n ? (
-                <Button size="sm" disabled={apply.running || !emp.hasSol} onClick={() => { if (!keys.requireKeys()) return; if (!guard()) return; apply.run(); }}>
-                  {apply.running ? "Applying…" : "Apply"}
+                <Button
+                  size="sm"
+                  disabled={applying || !emp.hasSol || (emp.isLive && !liveApply.canSign)}
+                  onClick={() => {
+                    if (!keys.requireKeys()) return;
+                    if (emp.isLive) {
+                      void liveApply.run();
+                      return;
+                    }
+                    if (!guard()) return;
+                    apply.run();
+                  }}
+                >
+                  {applying ? "Applying…" : emp.isLive && liveApply.error ? "Try again" : "Apply"}
                 </Button>
               ) : null}
             </div>
-            {b.id === "pending" && apply.running ? <StepList className="mt-3" steps={APPLY_STEPS} completed={apply.completed} running={apply.running} /> : null}
+            {b.id === "pending" && !emp.isLive && apply.running ? <StepList className="mt-3" steps={APPLY_STEPS} completed={apply.completed} running={apply.running} /> : null}
+            {b.id === "pending" && emp.isLive && (liveApply.running || liveApply.phase === "done") ? <StepList className="mt-3" steps={LIVE_APPLY_STEPS} completed={LIVE_APPLY_STEP[liveApply.phase]} running={liveApply.running} /> : null}
+            {b.id === "pending" && emp.isLive && liveApply.error ? <p role="alert" className="mt-3 rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">{liveApply.error}</p> : null}
           </section>
         ))}
       </div>

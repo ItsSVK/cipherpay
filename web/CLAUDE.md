@@ -361,7 +361,24 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   the failed one, final balances exact (no double payment). **Not verified:** a real wallet app's batch `signTransaction` (Phantom should
   map multiple inputs to one `signAllTransactions` approval, unconfirmed); blockhash lifetime if the user sits on the approval for more
   than ~60-90s (the run fails safely with "expired", nothing sent); leftover context accounts if a run dies after step 1 (rent only, not yet
-  auto-closed). Split payout stays on the demo engine (its tax/fee destinations are demo wallets). Pause/resume still guarded.
+  auto-closed). Split payout stays on the demo engine (its tax/fee destinations are demo wallets). Pause/resume is real (see the employee-side entry below).
+- **Employee side is real: apply pending, withdraw, unwrap (2026-10-06), and pause/resume.** `lib/chain/receive.ts` builds Token-2022 `ApplyPendingBalance`
+  (the library helper reads the pending-credit counter and AES-encrypts available + pending), `vault::withdraw_confidential` and `vault::unwrap_confidential`;
+  `lib/chain/withdraw-proofs.ts` composes the two withdraw proofs (equality + 64-bit range; port of the client's `withdrawProofData`, tested to verify
+  for partial, tiny and full amounts); `lib/chain/withdraw-run.ts` (`withdrawOnce`) runs it. **Wallet approvals: ONE for [helper top-up if short +
+  apply pending] and ONE for [withdraw + unwrap in the same transaction]** (the two proof accounts are created, verified and closed silently by the same
+  derived **helper key** as payroll, so a slow wallet popup can only delay a step). The proof is built against the account AFTER the apply lands (apply
+  changes the available ciphertext). Employees' helper is topped up to 0.010 SOL when under 0.008 (`WITHDRAW_HELPER_*`), not swept (same key as the
+  admin's helper, which may be the operator). Hooks: `components/chain/use-receive.ts` (`useApplyPending`, `useWithdraw`); the My pay Apply button and
+  the Withdraw sheet use them for real wallets (the sheet freezes amount and steps once started, and unfreezes on error). Pause/resume:
+  `lib/chain/pause.ts` + `use-pause-payroll.ts`, surfaced as `useVault().setPaused` (now async, resolves true on confirmation) and `pauseBusy` / `pauseError`;
+  one admin wallet approval, no keys needed. **Verified on a devnet-forked surfpool through our own lib code (throwaway keypairs; NOT through the
+  browser UI):** setup, fund 10, activate, pay 4.00, standalone apply, pay 1.00 more, withdraw 1.25 + unwrap (stages prove > apply > prove > create > verify
+  > withdraw > close, helper top-up path included): confidential 3.75, plain USDC 1.25, proof accounts closed; withdraw 0.50 without unwrap leaves 0.50 public
+  WUSDC; over-withdraw refused up front; pause on-chain, payment refused while paused, **employee withdraw still works while paused**, resume, payment works.
+  Tests: `withdraw-proofs.test.ts`, `receive.test.ts` (accounts, who signs what, every transaction under 1232 bytes including withdraw + unwrap),
+  `pause.test.ts`. **Not done:** the per-payment history list (needs the indexer; the chain only holds the combined balance and the payment event is encrypted for
+  the auditor, not the employee), a browser run of the new UI, and a real wallet app.
 - **The slow-wallet-popup investigation, 2026-10-06 (measured; it is NOT the front end).** Symptom: Phantom's popup appears ~30-40 s after the
   request, so the transaction's ~39 s window has closed by the time it is approved; intermittent, worse after a session has been running a while.
   **Measured in headless Chrome with the real UI instrumented** (main-thread lag probe, PerformanceObserver longtask, hooked `WebAssembly.instantiate`,

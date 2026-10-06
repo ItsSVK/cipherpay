@@ -3,6 +3,7 @@
 import { useChain } from "@/components/chain/chain-state";
 import { usePayrollData } from "@/components/data/payroll-data";
 import { useConfidentialBalance, type BalanceStatus } from "@/components/chain/use-confidential-balance";
+import { usePausePayroll } from "@/components/chain/use-pause-payroll";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
 import { VAULT_ADDRESS, type Employee, type VaultState } from "@/lib/mock/data";
@@ -30,6 +31,7 @@ export function useVault() {
   const chain = useChain();
   const status = useCompanyStatus();
   const data = usePayrollData();
+  const pause = usePausePayroll();
   const treasury = useConfidentialBalance(isDemo ? null : (chain.vault?.treasury ?? null));
   const admin = address ?? "";
   const mock = store.vaultOf(admin);
@@ -54,7 +56,17 @@ export function useVault() {
     initialize: () => store.createVault(admin),
     configureTreasury: () => store.configureTreasury(admin),
     fund: (amount: bigint) => store.fundTreasury(admin, amount),
-    setPaused: (paused: boolean) => store.setPaused(admin, paused),
+    /** Resolves true when the change took effect. Real wallets send `pause_payroll` / `resume_payroll` (one wallet approval) and resolve once it confirms. */
+    setPaused: async (paused: boolean): Promise<boolean> => {
+      if (isDemo) {
+        store.setPaused(admin, paused);
+        return true;
+      }
+      return pause.run(paused);
+    },
+    /** True while a real pause / resume is waiting on the wallet or the network. */
+    pauseBusy: pause.busy,
+    pauseError: pause.error,
     /** Real wallets save to the database (and may reject: duplicate wallet, signed out). Demo wallets use the in-memory list. */
     addEmployee: async (e: Employee): Promise<void> => {
       if (isDemo) store.addEmployee(admin, e);

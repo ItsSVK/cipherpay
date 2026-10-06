@@ -96,13 +96,17 @@ export default function AdminOverview() {
             <Switch
               checked={vault.paused}
               aria-label="Pause payroll"
+              disabled={v.pauseBusy}
               onCheckedChange={(on) => {
-                if (!guard()) return;
-                v.setPaused(on);
-                toast(on ? "Payroll paused" : "Payroll resumed", { description: on ? "Withdrawals stay open." : "Payouts can run again." });
+                void (async () => {
+                  if (!v.isLive && !guard()) return;
+                  if (!(await v.setPaused(on))) return;
+                  toast(on ? "Payroll paused" : "Payroll resumed", { description: on ? "Withdrawals stay open." : "Payouts can run again." });
+                })();
               }}
             />
           </div>
+          {v.pauseError ? <p role="alert" className="mt-3 rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">{v.pauseError}</p> : null}
           <dl className="mt-5 grid gap-3 text-sm">
             <div className="flex items-center justify-between gap-3">
               <dt className="text-muted-foreground">Vault</dt>

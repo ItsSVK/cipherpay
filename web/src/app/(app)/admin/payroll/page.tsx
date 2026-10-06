@@ -177,10 +177,12 @@ function RunPayroll() {
       setExcluded(ids);
       runSimulation(employees.filter((e) => !ids.has(e.id)));
     } else {
-      if (!guard()) return;
-      v.setPaused(false);
-      toast("Payroll resumed", { description: "Payouts can run again." });
-      runSimulation(included, false);
+      void (async () => {
+        if (!v.isLive && !guard()) return;
+        if (!(await v.setPaused(false))) return;
+        toast("Payroll resumed", { description: "Payouts can run again." });
+        runSimulation(included, false);
+      })();
     }
   };
 
