@@ -77,17 +77,18 @@ pub struct PayEmployee<'info> {
     pub token_program: Interface<'info, TokenInterface>,
 
     /// CHECK: this vault's `OperatorConfig` PDA. Always passed (clients can derive
-    /// its address), but only read when the signer is not the admin: it may not
+    /// its address), but only read (and, for an operator payment, written: it
+    /// counts the payment) when the signer is not the admin: it may not
     /// exist (no operator was ever set), and an admin-signed payment never needs
     /// it. Its address is pinned by the seeds constraint, and the owner and
     /// discriminator are checked before the data is trusted.
-    #[account(seeds = [OPERATOR_SEED, vault.key().as_ref()], bump)]
+    #[account(mut, seeds = [OPERATOR_SEED, vault.key().as_ref()], bump)]
     pub operator_config: UncheckedAccount<'info>,
 }
 
 impl<'info> PayEmployee<'info> {
     /// REQ03: the admin always may sign. Anyone else must be this vault's current,
-    /// unexpired operator.
+    /// unexpired operator with payments left (each operator payment uses one).
     fn authorize_signer(&self) -> Result<()> {
         let signer = self.signer.key();
         if signer == self.vault.authority {
@@ -100,7 +101,7 @@ impl<'info> PayEmployee<'info> {
             info.owner == &crate::ID && !info.data_is_empty(),
             VaultError::Unauthorized
         );
-        let config = OperatorConfig::try_deserialize(&mut &info.try_borrow_data()?[..])?;
+        let mut config = OperatorConfig::try_deserialize(&mut &info.try_borrow_data()?[..])?;
 
         require_keys_eq!(config.vault, self.vault.key(), VaultError::Unauthorized);
         require!(
@@ -111,6 +112,11 @@ impl<'info> PayEmployee<'info> {
             config.expires_at == 0 || Clock::get()?.unix_timestamp <= config.expires_at,
             VaultError::OperatorExpired
         );
+        require!(config.payments_left > 0, VaultError::OperatorLimitReached);
+
+        // Spend one payment. The write is undone with the rest of the transaction if the transfer below fails.
+        config.payments_left -= 1;
+        config.try_serialize(&mut &mut info.try_borrow_mut_data()?[..])?;
         Ok(())
     }
 

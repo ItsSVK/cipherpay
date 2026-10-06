@@ -679,8 +679,9 @@ pub fn resume_payroll(svm: &mut LiteSVM, admin: &Keypair, vault: Address) {
     send(svm, &[build_resume_payroll_ix(admin, vault)], admin, &[]);
 }
 
-/// Builds `set_operator`. `operator` = `Address::default()` revokes; `expires_at` of 0 never expires.
-pub fn build_set_operator_ix(admin: &Keypair, vault: Address, operator: Address, expires_at: i64) -> Instruction {
+/// Builds `set_operator`. `operator` = `Address::default()` revokes. A real operator needs a future `expires_at` within 24 hours
+/// and `max_payments` of at least 1.
+pub fn build_set_operator_ix(admin: &Keypair, vault: Address, operator: Address, expires_at: i64, max_payments: u32) -> Instruction {
     let accounts = vault::accounts::SetOperator {
         admin: to_anchor_pubkey(admin.pubkey()),
         vault: to_anchor_pubkey(vault),
@@ -695,12 +696,13 @@ pub fn build_set_operator_ix(admin: &Keypair, vault: Address, operator: Address,
         data: vault::instruction::SetOperator {
             operator: to_anchor_pubkey(operator),
             expires_at,
+            max_payments,
         }
         .data(),
     }
 }
 
 /// Sends `set_operator`.
-pub fn set_operator(svm: &mut LiteSVM, admin: &Keypair, vault: Address, operator: Address, expires_at: i64) {
-    send(svm, &[build_set_operator_ix(admin, vault, operator, expires_at)], admin, &[]);
+pub fn set_operator(svm: &mut LiteSVM, admin: &Keypair, vault: Address, operator: Address, expires_at: i64, max_payments: u32) {
+    send(svm, &[build_set_operator_ix(admin, vault, operator, expires_at, max_payments)], admin, &[]);
 }

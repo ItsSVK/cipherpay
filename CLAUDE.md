@@ -161,10 +161,15 @@ After changing any instruction, account, event, error, or PDA seed:
 
 ### Payroll operator (added 2026-10-06)
 
-- **What:** `set_operator(operator: Pubkey, expires_at: i64)`, admin-only. Stores `OperatorConfig { vault, operator, expires_at, bump }`
-  in its own PDA `[b"operator", vault]` (seed constant `OPERATOR_SEED`). `operator = Pubkey::default()` revokes (and clears the
-  expiry); `expires_at = 0` never expires; a real operator needs `expires_at` of 0 or in the future (`InvalidOperatorExpiry`).
-  Emits `SetOperatorEvent`.
+- **What:** `set_operator(operator: Pubkey, expires_at: i64, max_payments: u32)`, admin-only. Stores
+  `OperatorConfig { vault, operator, expires_at, payments_left, bump }` in its own PDA `[b"operator_v2", vault]` (`OPERATOR_SEED`; the
+  `_v2` seed is because adding `payments_left` changed the account size, so an older 81-byte config under `"operator"` is simply left
+  behind). `operator = Pubkey::default()` revokes (clears expiry and count). A real operator needs `expires_at` in the future and at
+  most `MAX_OPERATOR_TTL_SECONDS` (24 h) away (`InvalidOperatorExpiry`; never-expiring is no longer allowed) and `max_payments >= 1`
+  (`InvalidOperatorLimit`). Emits `SetOperatorEvent` (with `payments_left`).
+- **Count cap (2026-10-06):** each operator-signed `pay_employee` spends one payment (`OperatorLimitReached` at 0); admin-signed ones
+  don't. The program can cap the NUMBER of payments, not their value (amounts are encrypted). `pay_employee`'s `operator_config` is now
+  **writable**. Tests: `tests/operator.rs` (13).
 - **`pay_employee` rule:** the signer must be `Vault.authority`, or the vault's operator if one is set and unexpired. The operator
   cannot pause, resume, fund, or call `set_operator`; it can pay, that is all. A paused vault blocks the operator too.
 - **Why a separate PDA, not fields on `Vault`:** `Vault`'s layout is unchanged, so every vault already on devnet (including funded ones)
@@ -187,7 +192,7 @@ After changing any instruction, account, event, error, or PDA seed:
    (verified with Codama: `getPayEmployeeInstructionAsync` derives it from the vault; the sync `getPayEmployeeInstruction` that
    `lib/chain/pay.ts` uses needs it passed, e.g. `(await findOperatorConfigPda({ vault }))[0]`, a finder Codama generates).
    `lib/chain/pay.ts` passes `admin: adminSigner` today and must pass `signer:`. Nothing else in that file changes.
-3. New instruction `setOperator({ operator, expiresAt })` (accounts: `admin`, `vault`, `operatorConfig`, `systemProgram`).
+3. New instruction `setOperator({ operator, expiresAt, maxPayments })` (accounts: `admin`, `vault`, `operatorConfig`, `systemProgram`).
 4. `PayEmployeeEvent` gained `signer`; `SetOperatorEvent` is new.
 5. Redeploy `vault` to devnet (needs an explicit go-ahead: costs SOL, upgrade authority is the default local wallet) before `web/` can
    use it; existing devnet vaults keep working.

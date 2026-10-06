@@ -104,8 +104,8 @@ pub mod vault {
 
     /// Authorizes or revokes the payroll operator: a key allowed to call `pay_employee` (and nothing else) for this vault,
     /// so payroll doesn't need the admin's wallet to approve every payment. Admin only. See `instructions/set_operator.rs`.
-    pub fn set_operator(ctx: Context<SetOperator>, operator: Pubkey, expires_at: i64) -> Result<()> {
-        crate::instructions::set_operator::handle_set_operator(ctx, operator, expires_at)
+    pub fn set_operator(ctx: Context<SetOperator>, operator: Pubkey, expires_at: i64, max_payments: u32) -> Result<()> {
+        crate::instructions::set_operator::handle_set_operator(ctx, operator, expires_at, max_payments)
     }
 
     /// UC3 (REQ11): blocks `pay_employee`; withdrawals stay open.

@@ -47,7 +47,10 @@ pub struct OperatorConfig {
     pub vault: Pubkey,
     /// The key allowed to call `pay_employee`. `Pubkey::default()` means no operator (revoked).
     pub operator: Pubkey,
-    /// Unix timestamp after which the operator can no longer pay. 0 means it never expires.
+    /// Unix timestamp after which the operator can no longer pay. Never 0 for a live operator (see `MAX_OPERATOR_TTL_SECONDS`).
     pub expires_at: i64,
+    /// How many more payments the operator may make. Each operator-signed `pay_employee` uses one; admin-signed ones don't. The
+    /// amounts are encrypted so the program can't cap value, but it can cap the number of payments.
+    pub payments_left: u32,
     pub bump: u8,
 }
