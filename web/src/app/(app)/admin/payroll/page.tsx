@@ -355,7 +355,7 @@ function RunPayroll() {
               <div className="flex justify-between"><dt className="text-muted-foreground">Recipients</dt><dd className="tnum font-medium">{included.length}</dd></div>
               <div className="flex justify-between"><dt className="text-muted-foreground">Total</dt><dd className="font-mono font-medium tnum">{formatUsdc(total)} USDC</dd></div>
               <div className="flex justify-between"><dt className="text-muted-foreground">Transactions</dt><dd className="tnum font-medium">about {included.length * (v.isLive ? 6 : 7)}</dd></div>
-              {v.isLive ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Wallet approvals</dt><dd className="tnum text-right font-medium">{auto.enabled ? "1 for the whole run, or none if still authorized" : `${included.length}, one per payment`}</dd></div> : null}
+              {v.isLive ? <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Wallet approvals</dt><dd className="tnum text-right font-medium">{auto.enabled ? "None, automatic payroll is on" : `${included.length}, one per payment`}</dd></div> : null}
             </dl>
             <div className="mt-5" aria-label={`Progress ${Math.round(sim.progress * 100)}%`}>
               <div className="h-1.5 overflow-hidden rounded-full bg-secondary">

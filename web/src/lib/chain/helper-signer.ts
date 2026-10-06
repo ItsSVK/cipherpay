@@ -56,6 +56,8 @@ export interface HelperReadyInput {
   terms?: OperatorTerms;
   /** How many payments this run will make (the authorization must cover them). */
   needPayments?: number;
+  /** Authorize with `terms` even if a live authorization already covers `needPayments` (the admin just chose new terms). */
+  force?: boolean;
   /** Called just before the wallet is asked, saying what the one approval contains, so the UI can explain the popup. */
   onNeedApproval?: (what: { topUpLamports: bigint; authorize: boolean }) => void;
 }
@@ -67,10 +69,10 @@ export interface HelperReadyInput {
  * Returns true if it asked the wallet.
  */
 export async function ensureHelperReady(input: HelperReadyInput): Promise<boolean> {
-  const { rpc, admin, helper, onPrompt, onSigned, onNeedApproval, terms, needPayments = 1 } = input;
-  const [balance, operator] = await Promise.all([balanceOf(rpc, helper), terms ? readOperator(rpc, admin.address, helper.address, needPayments) : null]);
+  const { rpc, admin, helper, onPrompt, onSigned, onNeedApproval, terms, needPayments = 1, force = false } = input;
+  const [balance, operator] = await Promise.all([balanceOf(rpc, helper), terms && !force ? readOperator(rpc, admin.address, helper.address, needPayments) : null]);
   const topUp = balance >= HELPER_MIN_LAMPORTS ? 0n : HELPER_TOPUP_LAMPORTS - balance;
-  const authorize = !!terms && !!operator && !operator.authorized;
+  const authorize = !!terms && (force || (!!operator && !operator.authorized));
   if (topUp === 0n && !authorize) return false;
   const instructions: Instruction[] = [];
   if (topUp > 0n) instructions.push(getTransferSolInstruction({ source: admin, destination: helper.address, amount: topUp }));

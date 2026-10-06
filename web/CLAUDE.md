@@ -362,23 +362,23 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   map multiple inputs to one `signAllTransactions` approval, unconfirmed); blockhash lifetime if the user sits on the approval for more
   than ~60-90s (the run fails safely with "expired", nothing sent); leftover context accounts if a run dies after step 1 (rent only, not yet
   auto-closed). Split payout stays on the demo engine (its tax/fee destinations are demo wallets). Pause/resume still guarded.
-- **Automatic vs manual payroll (2026-10-06).** The Run payroll page has an **Automatic payroll** switch (`components/app/operator-panel.tsx`),
-  off by default. **Off (manual):** the old flow, the admin's wallet approves every `pay_employee` (the helper only does the proof accounts, and
-  is topped up with SOL when short). **On (automatic):** one wallet approval per run (SOL top-up + `set_operator` in one transaction, built by
-  `ensureHelperReady` in `helper-signer.ts`), after which the payroll helper signs all six transactions of every payment, so no popups. No
-  approval at all while a previous authorization still covers the run (>5 min left and enough payments). The admin picks the expiry (15 min,
-  1 h, 6 h; the program allows at most 24 h) and a payment cap (at least the people in the run; amounts are encrypted, so the program caps
-  the COUNT, not the value). The authorization lives on-chain (`OperatorConfig`, PDA `["operator_v2", vault]`), so the panel reads it
-  (`readOperator`) and shows "Authorized: N payments left, ends in X". **Revoke and reclaim SOL** (`revokeAndReclaim`): one wallet approval
-  for `set_operator(default)`, then the helper's SOL is swept back silently; it also turns the switch off. Flipping the switch off does NOT
-  revoke by itself (no surprise popup): a still-live authorization stays visible with its Revoke button. The helper holds ~0.011 SOL
-  (`HELPER_TOPUP_LAMPORTS`; 3 proof accounts cost ~0.0063 SOL of rent on devnet and ~0.0086 on surfpool, refunded on close) and is no longer swept after
-  a run. **Contract:** `main` (`set_operator(operator, expires_at, max_payments)`, `pay_employee` spends one payment per operator-signed call,
-  `OperatorLimitReached`); **the devnet program must be upgraded to this version before the app works**. **Slow popup root cause (earlier saga):**
-  the Helium browser (Phantom popup ~40 s there, instant in Chrome), not our transactions. **Verified** on a devnet-forked surfpool through the
-  real UI with the new binary loaded (`surfnet_writeProgram`): automatic run = 1 wallet request, both payments, treasury 10 -> 2.5 and employees
-  decrypt exactly; 1 of 3 payments left afterwards; Revoke and reclaim = 1 request, on-chain operator cleared, helper SOL 0; manual run = 3
-  requests (1 top-up + 2 payments) and the operator stays cleared. Not yet run on real devnet with the new program.
+- **Automatic vs manual payroll (2026-10-06).** The Run payroll page has an **Automatic payroll** switch (`components/app/operator-panel.tsx`).
+  **Turning it ON asks the wallet right then**, once (SOL top-up for the payroll helper + `set_operator`, built by `ensureHelperReady` with
+  `force`), so a slow wallet popup happens before the run, not during it; the switch only flips on after that confirms. While on, a live
+  **countdown (m:ss) and "N payments left"** show, and a run is signed entirely by the helper: no popups. The admin picks, before turning it on,
+  how long it stays on (**1, 5 or 15 minutes**, default 5; the program allows at most 24 h) and a payment cap (at least the people in the run;
+  amounts are encrypted, so the program caps the COUNT, not the value). A short window shows a warning when the run may need longer (we assume
+  roughly 30 s per person on devnet; that figure is an estimate, not measured precisely). **The switch mirrors the chain** (`readOperator`, polled
+  every 20 s): it is on exactly while an authorization is live, and flips off by itself (with a toast) when the time or the payments run out.
+  **Turning it OFF = revoke and reclaim**: one wallet approval for `set_operator(default)`, then the helper's SOL is swept back silently. If a
+  run starts while it is off, it runs **manual**: the admin's wallet approves every `pay_employee` (the helper only does the proof accounts and is
+  topped up when short). A "Reclaim SOL" button appears when the helper still holds SOL while off. The helper holds ~0.011 SOL
+  (`HELPER_TOPUP_LAMPORTS`; 3 proof accounts cost ~0.0063 SOL of rent on devnet and ~0.0086 on surfpool, refunded on close). `OPERATOR_MARGIN_SECONDS`
+  is 10 s (a payment doesn't start on an authorization about to lapse). **Contract:** `main`, **deployed to devnet 2026-10-06** (`set_operator(operator,
+  expires_at, max_payments)`, PDA `["operator_v2", vault]`, `OperatorLimitReached`). **Slow popup root cause (earlier saga):** the Helium browser
+  (Phantom popup ~40 s there, instant in Chrome). **Verified** on a devnet-forked surfpool through the real UI: ON = 1 wallet request, timer
+  4:45 and 3 payments; automatic run = 0 requests, exact balances, timer running (4:06 -> 4:03), 1 payment left; OFF = 1 request, chain operator
+  cleared, helper SOL 0; manual run = 3 requests (1 top-up + 2 payments), operator stays cleared. Also confirmed by the user on real devnet.
 - **Send errors and blockhash handling (2026-10-06).** A payment failed on a real network with only "The network rejected the transaction
   before sending it". Cause of the vagueness: for a rejected preflight, kit puts the real reason in **`error.cause`** (e.g. "Blockhash not
   found") and the `context.logs` are EMPTY in that case, so a log-only message says nothing. `toTxError` (`lib/chain/send.ts`) now keeps

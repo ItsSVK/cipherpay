@@ -8,14 +8,13 @@ import { fetchMaybeOperatorConfig, findOperatorConfigPda, findVaultPda, getSetOp
 import { DEVNET_WUSDC_MINT } from "./constants";
 import type { AppRpc } from "./rpc";
 
-/** The choices offered for how long an authorization lasts (the program refuses more than 24 h; we stay well under it so a
- *  skewed local clock can't trip that). */
+/** The choices offered for how long an authorization lasts (the program refuses more than 24 h). */
 export const OPERATOR_TTL_OPTIONS = [
+  { seconds: 60, label: "1 minute" },
+  { seconds: 5 * 60, label: "5 minutes" },
   { seconds: 15 * 60, label: "15 minutes" },
-  { seconds: 60 * 60, label: "1 hour" },
-  { seconds: 6 * 60 * 60, label: "6 hours" },
 ] as const;
-export const DEFAULT_OPERATOR_TTL_SECONDS = 60 * 60;
+export const DEFAULT_OPERATOR_TTL_SECONDS = 5 * 60;
 
 /** What the admin chose for an authorization. */
 export interface OperatorTerms {
@@ -23,8 +22,8 @@ export interface OperatorTerms {
   /** How many payments the operator may make before it needs authorizing again. */
   maxPayments: number;
 }
-/** Treat an authorization as gone this long before it expires, so a run never starts on one that lapses mid-payment. */
-export const OPERATOR_MARGIN_SECONDS = 5 * 60;
+/** Treat an authorization as gone this long before it expires, so a payment never starts on one that is about to lapse. */
+export const OPERATOR_MARGIN_SECONDS = 10;
 const SYSTEM_PROGRAM_DEFAULT = address("11111111111111111111111111111111");
 
 export interface OperatorStatus {
