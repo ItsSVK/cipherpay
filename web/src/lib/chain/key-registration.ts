@@ -19,13 +19,18 @@ export async function buildKeyRegistration(input: { rpc: AppRpc; signer: Transac
   const keypair = ElGamalKeypair.fromSecretKey(secret);
   const ae = AeKey.fromBytes(keys.aeKey);
   const proof = new PubkeyValidityProofData(keypair);
+  // .pubkey() and .encrypt() each hand back a new WASM object, so they are freed here too, not just their owners.
+  const pubkey = keypair.pubkey();
+  const zero = ae.encrypt(0n);
   try {
     return {
       verify: await verifyPubkeyValidity({ rpc, payer: signer, proofData: proof.toBytes() }),
-      elgamalPubkey: keypair.pubkey().toBytes(),
-      decryptableZeroBalance: ae.encrypt(0n).toBytes(),
+      elgamalPubkey: pubkey.toBytes(),
+      decryptableZeroBalance: zero.toBytes(),
     };
   } finally {
+    zero.free();
+    pubkey.free();
     proof.free();
     keypair.free();
     secret.free();

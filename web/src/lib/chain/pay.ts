@@ -100,9 +100,11 @@ export async function buildPaymentPlan(input: PaymentInput): Promise<PaymentPlan
   const { AeKey } = await import("@solana/zk-sdk/bundler");
   const ae = AeKey.fromBytes(keys.aeKey);
   let newDecryptable: Uint8Array;
+  const ct = ae.encrypt(proofs.newBalance);
   try {
-    newDecryptable = ae.encrypt(proofs.newBalance).toBytes();
+    newDecryptable = ct.toBytes();
   } finally {
+    ct.free();
     ae.free();
   }
 

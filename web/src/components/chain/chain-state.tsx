@@ -6,6 +6,7 @@ import { usePayrollData } from "@/components/data/payroll-data";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
 import { rpc } from "@/lib/chain/rpc";
+import { onWalletPromptChange, walletPromptOpen } from "@/lib/chain/send";
 import { readActivation, readVaultState, readWalletState, type VaultChainState, type WalletChainState } from "@/lib/chain/read";
 
 type ChainStatus = "idle" | "loading" | "ready" | "error";
@@ -68,8 +69,27 @@ export function ChainProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!connected || isDemo) return;
-    const id = setInterval(() => { if (document.visibilityState === "visible") setTick((n) => n + 1); }, POLL_MS);
-    return () => clearInterval(id);
+    // A wallet popup does not hide the page, so without this the poll (6 RPC calls, and a main-thread decrypt whenever a
+    // ciphertext changed) keeps firing exactly while the wallet is trying to open. Stand down, then catch up once it closes.
+    let missed = false;
+    const id = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      if (walletPromptOpen()) {
+        missed = true;
+        return;
+      }
+      setTick((n) => n + 1);
+    }, POLL_MS);
+    const off = onWalletPromptChange((open) => {
+      if (!open && missed) {
+        missed = false;
+        setTick((n) => n + 1);
+      }
+    });
+    return () => {
+      clearInterval(id);
+      off();
+    };
   }, [connected, isDemo]);
 
   const refresh = useCallback(() => setTick((n) => n + 1), []);

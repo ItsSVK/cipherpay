@@ -184,6 +184,29 @@ export interface SignAndSendOptions {
  * Signs with the wallet, sends through our RPC, and waits for `confirmed`. If the wallet takes longer than the network keeps the
  * blockhash valid, the transaction is rebuilt with a fresh blockhash and the wallet is asked again, up to `retryOnExpiry` times.
  */
+/**
+ * How many wallet approvals are open right now. A browser wallet's popup does NOT hide the page, so our polling and the
+ * decryption it triggers would otherwise keep running on the main thread exactly while the wallet is trying to open and
+ * simulate. Background work stands down while this is above zero.
+ */
+let promptsOpen = 0;
+const promptListeners = new Set<(open: boolean) => void>();
+
+export const walletPromptOpen = () => promptsOpen > 0;
+
+/** Subscribes to "is a wallet approval open". Returns an unsubscribe. */
+export function onWalletPromptChange(fn: (open: boolean) => void): () => void {
+  promptListeners.add(fn);
+  return () => void promptListeners.delete(fn);
+}
+
+function setPromptOpen(delta: number) {
+  const before = promptsOpen > 0;
+  promptsOpen = Math.max(0, promptsOpen + delta);
+  const after = promptsOpen > 0;
+  if (before !== after) for (const fn of promptListeners) fn(after);
+}
+
 export async function signAndSend(input: SignAndSendOptions): Promise<{ signature: string }> {
   const { rpc, signer, instructions, onSigned, onPrompt, retryOnExpiry = 1 } = input;
   for (let attempt = 0; ; attempt++) {
@@ -196,9 +219,15 @@ export async function signAndSend(input: SignAndSendOptions): Promise<{ signatur
         (m) => setTransactionMessageLifetimeUsingBlockhash({ blockhash: life.blockhash, lastValidBlockHeight: life.lastValidBlockHeight }, m),
         (m) => appendTransactionMessageInstructions(instructions, m),
       );
+      setPromptOpen(1);
       onPrompt?.({ attempt, expiresAtMs: Date.now() + (Number(life.lifeBlocks) / BLOCKS_PER_SECOND) * 1000 });
       const signStart = Date.now();
-      const signed = await signTransactionMessageWithSigners(message);
+      let signed;
+      try {
+        signed = await signTransactionMessageWithSigners(message);
+      } finally {
+        setPromptOpen(-1);
+      }
       const signSeconds = Math.round((Date.now() - signStart) / 1000);
       const signature = getSignatureFromTransaction(signed);
       onSigned?.();

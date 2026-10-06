@@ -10,6 +10,23 @@ export type BalanceStatus = "none" | "locked" | "decrypting" | "ready" | "error"
 const hex = (b: ArrayLike<number> | undefined) => (b ? Array.from(b as ArrayLike<number>, (n) => n.toString(16).padStart(2, "0")).join("") : "");
 
 /**
+ * Decryption is ~370 ms of MAIN-THREAD work, and several hooks (useVault, useEmployee) ask for the same account on the same
+ * page. Keyed by the exact ciphertexts, so one decrypt is shared instead of two or three identical ones running back to back.
+ */
+const inFlight = new Map<string, Promise<DecryptedBalance>>();
+
+function decryptOnce(key: string, view: ConfidentialAccountView, keys: Parameters<typeof decryptAccountBalance>[1]): Promise<DecryptedBalance> {
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+  const p = decryptAccountBalance(view, keys).finally(() => {
+    // Only dedupes work that overlaps: the hook already remembers the result for a key that has not changed.
+    setTimeout(() => inFlight.delete(key), 2_000);
+  });
+  inFlight.set(key, p);
+  return p;
+}
+
+/**
  * Decrypts one confidential account's balances while keys are unlocked. Locking drops the plaintext.
  * `none` = no confidential account to decrypt; `locked` = keys not unlocked.
  */
@@ -35,7 +52,7 @@ export function useConfidentialBalance(view: ConfidentialAccountView | null): { 
       const k = getKeys();
       if (!k) return;
       try {
-        const balance = await decryptAccountBalance(view, k);
+        const balance = await decryptOnce(key, view, k);
         if (!cancelled) setResult({ key, balance, error: null });
       } catch (e) {
         if (!cancelled) setResult({ key, balance: null, error: e instanceof Error ? e.message : "Could not decrypt." });

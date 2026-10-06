@@ -362,6 +362,29 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   map multiple inputs to one `signAllTransactions` approval, unconfirmed); blockhash lifetime if the user sits on the approval for more
   than ~60-90s (the run fails safely with "expired", nothing sent); leftover context accounts if a run dies after step 1 (rent only, not yet
   auto-closed). Split payout stays on the demo engine (its tax/fee destinations are demo wallets). Pause/resume still guarded.
+- **The slow-wallet-popup investigation, 2026-10-06 (measured; it is NOT the front end).** Symptom: Phantom's popup appears ~30-40 s after the
+  request, so the transaction's ~39 s window has closed by the time it is approved; intermittent, worse after a session has been running a while.
+  **Measured in headless Chrome with the real UI instrumented** (main-thread lag probe, PerformanceObserver longtask, hooked `WebAssembly.instantiate`,
+  hooked `fetch`, live-interval census): idle on `/admin/payroll` = **1-4 ms** max main-thread lag, 0 long tasks, 2 intervals, WASM heap flat at
+  **10 MB**, JS heap 27 MB; **click on the switch -> the wallet received the sign request in 18 ms**. 300 consecutive balance decrypts in Bun did not
+  grow RSS at all (wasm-bindgen registers finalizers), and one decrypt costs a flat **~370 ms** regardless of the amount (it is not a value-dependent
+  DLog search). So nothing in our page accounts for a 30-40 s delay. **What does:** `api.devnet.solana.com` was returning **HTTP 429 "Too many requests
+  from your IP" to every single request** from this network, and one account read through a public-devnet-backed endpoint took **52 s**. A wallet
+  simulates on ITS OWN RPC (our `NEXT_PUBLIC_SOLANA_RPC_URL` does not apply to it), and Phantom's default devnet RPC is the public one, so a
+  rate-limited IP delays the popup by exactly this much. **Fix for the user:** point the wallet at a dedicated devnet RPC (Phantom: Settings ->
+  Developer Settings -> Solana devnet RPC). **Note for us:** a devnet-forked surfpool pulls accounts through public devnet and burns that same shared
+  IP quota, so running these e2e tests makes the browser wallet slower on the same network. **Structural fix if it must not matter:** a durable nonce
+  for the wallet-signed transaction (then it never expires); untested with Phantom, which may warn on nonce transactions.
+- **Front-end work done anyway from that audit (2026-10-06).** Real but smaller costs, all fixed: (a) **WASM objects we allocated were not freed** -
+  `.pubkey()`, `.encrypt()` and friends each return a NEW wasm object, so `key-registration.ts`, `pay.ts` and `fund.ts` now free the returned
+  ciphertext/pubkey, not just its owner; (b) **polling no longer runs while a wallet approval is open** - `send.ts` exports `walletPromptOpen()` /
+  `onWalletPromptChange()` (a counter around the wallet call), and `chain-state.tsx` skips its tick and catches up afterwards, because a wallet popup
+  does NOT hide the page, so the 6-call poll and its decrypt used to fire exactly while the wallet was opening; (c) **one decrypt shared between
+  consumers** - `useVault()` and `useEmployee()` each created their own `useConfidentialBalance` for the same account (2-3 identical 370 ms decrypts),
+  now deduped by ciphertext key in `use-confidential-balance.ts`; (d) the operator panel's **1 s countdown clock only runs while something is counting
+  down**. Known and NOT fixed: proof generation and decryption still run on the **main thread** (no Web Worker; `next.config.ts` deliberately empty) -
+  a payroll run shows ~5 long tasks, max ~340 ms; `@solana-program/token-2022`'s own `decryptConfidentialTransferBalance` leaks 3 wasm objects per
+  call inside `node_modules`; `useVault()`/`useEmployee()` still return fresh object literals every render.
 - **Automatic vs manual payroll (2026-10-06).** The Run payroll page has an **Automatic payroll** switch (`components/app/operator-panel.tsx`).
   **Turning it ON asks the wallet right then**, once (SOL top-up for the payroll helper + `set_operator`, built by `ensureHelperReady` with
   `force`), so a slow wallet popup happens before the run, not during it; the switch only flips on after that confirms. While on, a live

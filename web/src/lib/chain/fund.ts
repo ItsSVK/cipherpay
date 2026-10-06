@@ -76,9 +76,11 @@ export async function buildFundTreasuryInstructions(input: {
   const { AeKey } = await import("@solana/zk-sdk/bundler");
   const ae = AeKey.fromBytes(keys.aeKey);
   let newDecryptableAvailableBalance: Uint8Array;
+  const ct = ae.encrypt(treasury.available + treasury.pending + amount);
   try {
-    newDecryptableAvailableBalance = ae.encrypt(treasury.available + treasury.pending + amount).toBytes();
+    newDecryptableAvailableBalance = ct.toBytes();
   } finally {
+    ct.free();
     ae.free();
   }
 

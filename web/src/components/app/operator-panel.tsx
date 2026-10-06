@@ -12,6 +12,7 @@ import { useKeys } from "@/components/crypto/key-context";
 import { deriveHelperSigner, ensureHelperReady, helperBalance, revokeAndReclaim, sweepHelper } from "@/lib/chain/helper-signer";
 import { OPERATOR_TTL_OPTIONS, readOperator, type OperatorStatus } from "@/lib/chain/operator";
 import { rpc } from "@/lib/chain/rpc";
+import { walletPromptOpen } from "@/lib/chain/send";
 import { cn } from "@/lib/utils";
 
 /** What the admin chose on the payroll page. `enabled` mirrors the chain: it is true exactly while an authorization is live. */
@@ -71,13 +72,17 @@ export function OperatorPanel({ settings, onChange, recipients, locked }: { sett
       return;
     }
     void refresh();
-    const poll = setInterval(() => document.visibilityState === "visible" && void refresh(), 20_000);
-    const tick = setInterval(() => setNow(Date.now()), 1000);
-    return () => {
-      clearInterval(poll);
-      clearInterval(tick);
-    };
+    const poll = setInterval(() => document.visibilityState === "visible" && !walletPromptOpen() && void refresh(), 20_000);
+    return () => clearInterval(poll);
   }, [ready, refresh, locked]);
+
+  // The countdown's 1 s clock runs only while something is actually counting down.
+  const counting = !!status?.operator && status.paymentsLeft > 0;
+  useEffect(() => {
+    if (!counting) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [counting]);
 
   const shown = ready ? status : null;
   const secondsLeft = shown?.operator ? Math.max(0, Number(shown.expiresAt) - Math.floor(now / 1000)) : 0;
