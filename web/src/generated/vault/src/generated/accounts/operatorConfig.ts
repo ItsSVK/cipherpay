@@ -6,7 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
-import { assertAccountExists, assertAccountsExist, combineCodec, decodeAccount, fetchEncodedAccount, fetchEncodedAccounts, fixDecoderSize, fixEncoderSize, getAddressDecoder, getAddressEncoder, getBytesDecoder, getBytesEncoder, getI64Decoder, getI64Encoder, getStructDecoder, getStructEncoder, getU32Decoder, getU32Encoder, getU8Decoder, getU8Encoder, transformEncoder, type Account, type Address, type EncodedAccount, type FetchAccountConfig, type FetchAccountsConfig, type FixedSizeCodec, type FixedSizeDecoder, type FixedSizeEncoder, type MaybeAccount, type MaybeEncodedAccount, type ReadonlyUint8Array } from '@solana/kit';
+import { assertAccountExists, assertAccountsExist, combineCodec, decodeAccount, fetchEncodedAccount, fetchEncodedAccounts, fixDecoderSize, fixEncoderSize, getAddressDecoder, getAddressEncoder, getBytesDecoder, getBytesEncoder, getI64Decoder, getI64Encoder, getStructDecoder, getStructEncoder, getU32Decoder, getU32Encoder, getU64Decoder, getU64Encoder, getU8Decoder, getU8Encoder, transformEncoder, type Account, type Address, type EncodedAccount, type FetchAccountConfig, type FetchAccountsConfig, type FixedSizeCodec, type FixedSizeDecoder, type FixedSizeEncoder, type MaybeAccount, type MaybeEncodedAccount, type ReadonlyUint8Array } from '@solana/kit';
 
 export const OPERATOR_CONFIG_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([56, 238, 78, 9, 49, 239, 154, 18]);
 
@@ -23,7 +23,12 @@ expiresAt: bigint;
  * How many more payments the operator may make. Each operator-signed `pay_employee` uses one; admin-signed ones don't. The
  * amounts are encrypted so the program can't cap value, but it can cap the number of payments.
  */
-paymentsLeft: number; bump: number;  };
+paymentsLeft: number; 
+/**
+ * Replay counter for offline authorizations. A signed message must carry this exact value, and every change to this
+ * config increments it, so one signed message can be used exactly once. See `authorize_operator`.
+ */
+seq: bigint; bump: number;  };
 
 export type OperatorConfigArgs = { 
 /** The vault this delegation belongs to (also in the PDA seeds; stored so an account read on its own is self-describing). */
@@ -36,16 +41,21 @@ expiresAt: number | bigint;
  * How many more payments the operator may make. Each operator-signed `pay_employee` uses one; admin-signed ones don't. The
  * amounts are encrypted so the program can't cap value, but it can cap the number of payments.
  */
-paymentsLeft: number; bump: number;  };
+paymentsLeft: number; 
+/**
+ * Replay counter for offline authorizations. A signed message must carry this exact value, and every change to this
+ * config increments it, so one signed message can be used exactly once. See `authorize_operator`.
+ */
+seq: number | bigint; bump: number;  };
 
 /** Gets the encoder for {@link OperatorConfigArgs} account data. */
 export function getOperatorConfigEncoder(): FixedSizeEncoder<OperatorConfigArgs> {
-    return transformEncoder(getStructEncoder([['discriminator', fixEncoderSize(getBytesEncoder(), 8)], ['vault', getAddressEncoder()], ['operator', getAddressEncoder()], ['expiresAt', getI64Encoder()], ['paymentsLeft', getU32Encoder()], ['bump', getU8Encoder()]]), (value) => ({ ...value, discriminator: OPERATOR_CONFIG_DISCRIMINATOR }));
+    return transformEncoder(getStructEncoder([['discriminator', fixEncoderSize(getBytesEncoder(), 8)], ['vault', getAddressEncoder()], ['operator', getAddressEncoder()], ['expiresAt', getI64Encoder()], ['paymentsLeft', getU32Encoder()], ['seq', getU64Encoder()], ['bump', getU8Encoder()]]), (value) => ({ ...value, discriminator: OPERATOR_CONFIG_DISCRIMINATOR }));
 }
 
 /** Gets the decoder for {@link OperatorConfig} account data. */
 export function getOperatorConfigDecoder(): FixedSizeDecoder<OperatorConfig> {
-    return getStructDecoder([['discriminator', fixDecoderSize(getBytesDecoder(), 8)], ['vault', getAddressDecoder()], ['operator', getAddressDecoder()], ['expiresAt', getI64Decoder()], ['paymentsLeft', getU32Decoder()], ['bump', getU8Decoder()]]);
+    return getStructDecoder([['discriminator', fixDecoderSize(getBytesDecoder(), 8)], ['vault', getAddressDecoder()], ['operator', getAddressDecoder()], ['expiresAt', getI64Decoder()], ['paymentsLeft', getU32Decoder()], ['seq', getU64Decoder()], ['bump', getU8Decoder()]]);
 }
 
 /** Gets the codec for {@link OperatorConfig} account data. */
@@ -98,5 +108,5 @@ export async function fetchAllMaybeOperatorConfig(
 }
 
 export function getOperatorConfigSize(): number {
-  return 85;
+  return 93;
 }

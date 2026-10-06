@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useChain } from "@/components/chain/chain-state";
 import { useTxSigner } from "@/components/chain/tx-signer";
 import { useKeys } from "@/components/crypto/key-context";
-import { deriveHelperSigner, ensureHelperReady } from "@/lib/chain/helper-signer";
+import { deriveHelperSigner, topUpHelperIfShort } from "@/lib/chain/helper-signer";
 import type { OperatorTerms } from "@/lib/chain/operator";
 import { PaymentError, payOne, type PayStage } from "@/lib/chain/pay-run";
 import { rpc } from "@/lib/chain/rpc";
@@ -28,8 +28,8 @@ export type RunSettings = { mode: "automatic"; terms: OperatorTerms } | { mode: 
 /**
  * The real payout engine: pays each recipient in turn through pay_employee. Recipients are strictly sequential, which is
  * exactly what the protocol needs, since each equality proof is built against the treasury's current balance ciphertext
- * and so payment N must land before payment N+1 is proved. The wallet approves at most ONCE per run (it authorizes the
- * payroll helper key as the vault's operator and tops it up with a little SOL); every transaction of every payment is then signed by the helper.
+ * and so payment N must land before payment N+1 is proved. In automatic mode the wallet is not asked at all (the operator
+ * authorization is a message the admin signed beforehand, via the switch); every transaction of every payment is signed by the helper.
  * Same return shape as the demo engine (`useRunSimulation`), so the payroll page can use either.
  */
 export function useLiveRun(items: LiveItem[], stageCount: number, settings: RunSettings) {
@@ -79,36 +79,33 @@ export function useLiveRun(items: LiveItem[], stageCount: number, settings: RunS
       if (!signer) return;
       setRunning(true);
       const helper = await deriveHelperSigner(k);
-      // ONE wallet approval for the whole run, and none while a recent authorization is live: it tops the helper up with SOL if short
-      // and authorizes it to pay as the vault's operator. After that every payment is signed by the helper, with no popup.
+      // In automatic mode the operator authorization was already given by the switch, from a message the admin signed, so
+      // nothing below waits on a wallet popup. The one thing the wallet may still sign is topping the helper up with SOL for
+      // the temporary proof accounts' rent, and only when it has actually run low.
       const sol = (lamports: bigint) => (Number(lamports) / 1e9).toFixed(4);
       const shortHelper = `${helper.address.slice(0, 4)}…${helper.address.slice(-4)}`;
-      let what = { topUpLamports: 0n, authorize: false };
+      let topUp = 0n;
       const first = ids[0];
       const cfg = settingsRef.current;
-      const hours = cfg.mode === "automatic" ? cfg.terms.ttlSeconds / 3600 : 0;
-      const forHow = hours >= 1 ? `${hours} hour${hours === 1 ? "" : "s"}` : cfg.mode === "automatic" ? `${Math.round(cfg.terms.ttlSeconds / 60)} minutes` : "";
       try {
-        await ensureHelperReady({
+        await topUpHelperIfShort({
           rpc,
           admin: signer,
           helper,
-          terms: cfg.mode === "automatic" ? cfg.terms : undefined,
-          needPayments: ids.length,
-          onNeedApproval: (w) => {
-            what = w;
+          onNeedTopUp: (lamports) => {
+            topUp = lamports;
           },
           onPrompt: ({ attempt, expiresAtMs }) =>
             first &&
             patch(first, {
               status: "running",
               deadline: expiresAtMs,
-              note: `${attempt > 0 ? "That took longer than devnet allows, so we're asking again. " : ""}Your wallet will show one transaction${what.topUpLamports > 0n ? `: a SOL transfer of ${sol(what.topUpLamports)} SOL to your payroll helper (${shortHelper}), which pays the rent for the temporary proof accounts` : ""}${what.authorize ? `${what.topUpLamports > 0n ? ", plus" : ":"} a Cipherpay call that lets the helper pay up to ${cfg.mode === "automatic" ? cfg.terms.maxPayments : 0} payments over the next ${forHow} (it can't do anything else)` : ""}.${cfg.mode === "automatic" ? " After this, payments need no more approvals." : " Each payment is then approved in your wallet, one at a time."}`,
+              note: `${attempt > 0 ? "That took longer than devnet allows, so we're asking again. " : ""}Your payroll helper has run low, so your wallet will show one plain SOL transfer of ${sol(topUp)} SOL to it (${shortHelper}). It pays the rent for the temporary proof accounts, which comes back when they close.`,
             }),
           onSigned: () => first && patch(first, { deadline: undefined, note: undefined }),
         });
       } catch (e) {
-        for (const id of ids) patch(id, { status: "failed", error: `Couldn't authorize payroll: ${e instanceof Error ? e.message : "The approval failed."}`, uncertain: false, note: undefined, deadline: undefined });
+        for (const id of ids) patch(id, { status: "failed", error: `Couldn't top up the payroll helper: ${e instanceof Error ? e.message : "The approval failed."}`, uncertain: false, note: undefined, deadline: undefined });
         if (alive.current) setRunning(false);
         return;
       }

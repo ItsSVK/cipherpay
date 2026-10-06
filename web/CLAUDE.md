@@ -385,15 +385,30 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   down**. Known and NOT fixed: proof generation and decryption still run on the **main thread** (no Web Worker; `next.config.ts` deliberately empty) -
   a payroll run shows ~5 long tasks, max ~340 ms; `@solana-program/token-2022`'s own `decryptConfidentialTransferBalance` leaks 3 wasm objects per
   call inside `node_modules`; `useVault()`/`useEmployee()` still return fresh object literals every render.
+- **The admin signs a MESSAGE, not a transaction, to turn automatic payroll on or off (2026-10-06).** This is the fix for the slow-wallet
+  problem below. `lib/chain/authorization.ts` builds the exact text the admin signs (`authorizationMessage`, which **must match
+  `authorization_message` in `../programs/vault/src/instructions/authorize_operator.rs` byte for byte** -- both sides pin the literals in
+  tests) and Solana's Ed25519 precompile instruction (`ed25519VerifyInstruction`); `buildAuthorization` asks the wallet via `signMessage`,
+  checks the wallet returned the text unaltered, and returns `[Ed25519 verify, authorize_operator]` **paid for and signed by the payroll
+  helper**. `authorizeHelper` / `revokeAndReclaim` in `helper-signer.ts` wrap it; the panel calls them. Why it works: a signed message has
+  no ~40 s validity window and nothing for the wallet to simulate, so a slow popup cannot invalidate it. `signMessage` reaches components
+  through `useTxSigner()` (passed down from `WalletKeyProvider`, which already holds the wallet's `useSignMessage`). The replay counter
+  `seq` is read from `OperatorConfig` as late as possible; `readOperator` returns it. **Verified on a devnet-forked surfpool with a wallet
+  deliberately made 92 s slow: the authorization still succeeded** (0 transaction signatures, 1 message signature), the payroll run then
+  needed 0 wallet interactions of any kind, and turning it off with a 60 s slow wallet also succeeded (1 message signature), clearing the
+  operator on-chain and returning the helper's SOL. **The one wallet-signed transaction left is topping the helper up with SOL**
+  (`topUpHelperIfShort`), which is deadline-bound like any transaction but now rare: the helper holds ~0.022 SOL
+  (`HELPER_TOPUP_LAMPORTS`, raised because the helper also pays the one-off rent for the `OperatorConfig` account it creates), it is not
+  swept after a run, and funding the treasury tops it up in the same transaction. **Needs the devnet program upgraded** (new instruction,
+  and the config PDA seed moved to `operator_v3`, so any earlier devnet authorization is ignored).
 - **Automatic vs manual payroll (2026-10-06).** The Run payroll page has an **Automatic payroll** switch (`components/app/operator-panel.tsx`).
-  **Turning it ON asks the wallet right then**, once (SOL top-up for the payroll helper + `set_operator`, built by `ensureHelperReady` with
-  `force`), so a slow wallet popup happens before the run, not during it; the switch only flips on after that confirms. While on, a live
+  **Turning it ON asks the wallet right then** (a SOL top-up only if the helper is low, then the authorization itself, which since the entry above is a SIGNED MESSAGE, not a transaction), so a slow wallet popup happens before the run, not during it; the switch only flips on after that confirms. While on, a live
   **countdown (m:ss) and "N payments left"** show, and a run is signed entirely by the helper: no popups. The admin picks, before turning it on,
   how long it stays on (**1, 5 or 15 minutes**, default 5; the program allows at most 24 h) and a payment cap (at least the people in the run;
   amounts are encrypted, so the program caps the COUNT, not the value). A short window shows a warning when the run may need longer (we assume
   roughly 30 s per person on devnet; that figure is an estimate, not measured precisely). **The switch mirrors the chain** (`readOperator`, polled
   every 20 s): it is on exactly while an authorization is live, and flips off by itself (with a toast) when the time or the payments run out.
-  **Turning it OFF = revoke and reclaim**: one wallet approval for `set_operator(default)`, then the helper's SOL is swept back silently. If a
+  **Turning it OFF = revoke and reclaim**: the admin signs a revoke MESSAGE, then the helper's SOL is swept back silently. If a
   run starts while it is off, it runs **manual**: the admin's wallet approves every `pay_employee` (the helper only does the proof accounts and is
   topped up when short). A "Reclaim SOL" button appears when the helper still holds SOL while off. The helper holds ~0.011 SOL
   (`HELPER_TOPUP_LAMPORTS`; 3 proof accounts cost ~0.0063 SOL of rent on devnet and ~0.0086 on surfpool, refunded on close). `OPERATOR_MARGIN_SECONDS`

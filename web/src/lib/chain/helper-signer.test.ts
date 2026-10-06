@@ -35,8 +35,8 @@ describe("payroll helper key", () => {
     expect(sig[h.address]).toBeDefined();
   }, 30_000);
 
-  test("the funding threshold is above the proof accounts' rent (about 0.0086 SOL on the most expensive cluster we test on) and the top-up is above the threshold", () => {
-    expect(HELPER_MIN_LAMPORTS).toBeGreaterThan(8_700_000n);
+  test("the funding threshold is above the proof accounts' rent (proof accounts plus the operator config's own rent) and the top-up is above the threshold", () => {
+    expect(HELPER_MIN_LAMPORTS).toBeGreaterThan(10_600_000n);
     expect(HELPER_TOPUP_LAMPORTS).toBeGreaterThan(HELPER_MIN_LAMPORTS);
   });
 });

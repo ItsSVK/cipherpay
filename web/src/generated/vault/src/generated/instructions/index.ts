@@ -7,6 +7,7 @@
  */
 
 export * from './applyTreasuryPending';
+export * from './authorizeOperator';
 export * from './configureTreasuryAccount';
 export * from './createConfidentialAccount';
 export * from './depositConfidential';

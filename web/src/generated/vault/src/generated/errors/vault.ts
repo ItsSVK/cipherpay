@@ -25,12 +25,16 @@ export const VAULT_ERROR__INVALID_OPERATOR_EXPIRY = 0x1775; // 6005
 export const VAULT_ERROR__INVALID_OPERATOR_LIMIT = 0x1776; // 6006
 /** OperatorLimitReached: The operator has used all the payments it was allowed */
 export const VAULT_ERROR__OPERATOR_LIMIT_REACHED = 0x1777; // 6007
+/** InvalidAuthorization: This transaction does not carry a valid Ed25519 signature from the vault's admin over this exact authorization */
+export const VAULT_ERROR__INVALID_AUTHORIZATION = 0x1778; // 6008
+/** AuthorizationSeqMismatch: This authorization has already been used, or is not the next one expected */
+export const VAULT_ERROR__AUTHORIZATION_SEQ_MISMATCH = 0x1779; // 6009
 
-export type VaultError = typeof VAULT_ERROR__INVALID_OPERATOR_EXPIRY | typeof VAULT_ERROR__INVALID_OPERATOR_LIMIT | typeof VAULT_ERROR__OPERATOR_EXPIRED | typeof VAULT_ERROR__OPERATOR_LIMIT_REACHED | typeof VAULT_ERROR__PAYROLL_PAUSED | typeof VAULT_ERROR__TREASURY_ALREADY_CONFIGURED | typeof VAULT_ERROR__TREASURY_NOT_CONFIGURED | typeof VAULT_ERROR__UNAUTHORIZED;
+export type VaultError = typeof VAULT_ERROR__AUTHORIZATION_SEQ_MISMATCH | typeof VAULT_ERROR__INVALID_AUTHORIZATION | typeof VAULT_ERROR__INVALID_OPERATOR_EXPIRY | typeof VAULT_ERROR__INVALID_OPERATOR_LIMIT | typeof VAULT_ERROR__OPERATOR_EXPIRED | typeof VAULT_ERROR__OPERATOR_LIMIT_REACHED | typeof VAULT_ERROR__PAYROLL_PAUSED | typeof VAULT_ERROR__TREASURY_ALREADY_CONFIGURED | typeof VAULT_ERROR__TREASURY_NOT_CONFIGURED | typeof VAULT_ERROR__UNAUTHORIZED;
 
 let vaultErrorMessages: Record<VaultError, string> | undefined;
 if (process.env['NODE_ENV'] !== 'production') {
-  vaultErrorMessages = { [VAULT_ERROR__INVALID_OPERATOR_EXPIRY]: `An operator expiry must be in the future and no more than 24 hours away`, [VAULT_ERROR__INVALID_OPERATOR_LIMIT]: `An operator must be allowed at least one payment`, [VAULT_ERROR__OPERATOR_EXPIRED]: `The vault's operator authorization has expired`, [VAULT_ERROR__OPERATOR_LIMIT_REACHED]: `The operator has used all the payments it was allowed`, [VAULT_ERROR__PAYROLL_PAUSED]: `Payroll is paused for this vault`, [VAULT_ERROR__TREASURY_ALREADY_CONFIGURED]: `The vault's treasury account has already been configured`, [VAULT_ERROR__TREASURY_NOT_CONFIGURED]: `The vault's treasury account has not been configured yet`, [VAULT_ERROR__UNAUTHORIZED]: `Only the vault's authority can perform this action` };
+  vaultErrorMessages = { [VAULT_ERROR__AUTHORIZATION_SEQ_MISMATCH]: `This authorization has already been used, or is not the next one expected`, [VAULT_ERROR__INVALID_AUTHORIZATION]: `This transaction does not carry a valid Ed25519 signature from the vault's admin over this exact authorization`, [VAULT_ERROR__INVALID_OPERATOR_EXPIRY]: `An operator expiry must be in the future and no more than 24 hours away`, [VAULT_ERROR__INVALID_OPERATOR_LIMIT]: `An operator must be allowed at least one payment`, [VAULT_ERROR__OPERATOR_EXPIRED]: `The vault's operator authorization has expired`, [VAULT_ERROR__OPERATOR_LIMIT_REACHED]: `The operator has used all the payments it was allowed`, [VAULT_ERROR__PAYROLL_PAUSED]: `Payroll is paused for this vault`, [VAULT_ERROR__TREASURY_ALREADY_CONFIGURED]: `The vault's treasury account has already been configured`, [VAULT_ERROR__TREASURY_NOT_CONFIGURED]: `The vault's treasury account has not been configured yet`, [VAULT_ERROR__UNAUTHORIZED]: `Only the vault's authority can perform this action` };
 }
 
 export function getVaultErrorMessage(code: VaultError): string {

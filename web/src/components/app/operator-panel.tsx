@@ -9,7 +9,7 @@ import { Segmented } from "@/components/app/segmented";
 import { WalletCountdown } from "@/components/app/wallet-countdown";
 import { useTxSigner } from "@/components/chain/tx-signer";
 import { useKeys } from "@/components/crypto/key-context";
-import { deriveHelperSigner, ensureHelperReady, helperBalance, revokeAndReclaim, sweepHelper } from "@/lib/chain/helper-signer";
+import { authorizeHelper, deriveHelperSigner, helperBalance, revokeAndReclaim, sweepHelper, topUpHelperIfShort } from "@/lib/chain/helper-signer";
 import { OPERATOR_TTL_OPTIONS, readOperator, type OperatorStatus } from "@/lib/chain/operator";
 import { rpc } from "@/lib/chain/rpc";
 import { walletPromptOpen } from "@/lib/chain/send";
@@ -36,19 +36,21 @@ const mmss = (secs: number) => `${Math.floor(secs / 60)}:${String(secs % 60).pad
  */
 export function OperatorPanel({ settings, onChange, recipients, locked }: { settings: AutoPayrollSettings; onChange: (next: AutoPayrollSettings) => void; recipients: number; locked: boolean }) {
   const keys = useKeys();
-  const { signer } = useTxSigner();
+  const { signer, signMessage } = useTxSigner();
   const [status, setStatus] = useState<OperatorStatus | null>(null);
   const [balance, setBalance] = useState<bigint | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [busy, setBusy] = useState<null | "authorizing" | "revoking">(null);
-  const [wallet, setWallet] = useState<{ deadline: number; note: string } | null>(null);
+  // `deadline` is set only for the SOL top-up, the one thing here the wallet signs as a (time-limited) transaction. The
+  // authorization itself is a signed message, which never expires, so it shows a note with no countdown.
+  const [wallet, setWallet] = useState<{ deadline?: number; note: string } | null>(null);
   const helperRef = useRef<Awaited<ReturnType<typeof deriveHelperSigner>> | null>(null);
   const settingsRef = useRef(settings);
   useEffect(() => {
     settingsRef.current = settings;
   });
 
-  const ready = keys.ready && !!signer;
+  const ready = keys.ready && !!signer && !!signMessage;
   const cap = settings.maxPayments ?? recipients;
 
   const refresh = useCallback(async () => {
@@ -100,28 +102,35 @@ export function OperatorPanel({ settings, onChange, recipients, locked }: { sett
   const turnOn = async () => {
     const k = keys.getKeys();
     if (!k) return void keys.requireKeys();
-    if (!signer) return;
+    if (!signer || !signMessage) return;
     setBusy("authorizing");
     try {
       helperRef.current ??= await deriveHelperSigner(k);
-      let what = { topUpLamports: 0n, authorize: true };
-      await ensureHelperReady({
+      const helper = helperRef.current;
+
+      // 1. The helper pays for its own transactions, including the authorization below. This is the only step the wallet signs
+      //    as a transaction, so it is the only one with a deadline, and it only happens when the helper is actually low.
+      let topUp = 0n;
+      await topUpHelperIfShort({
         rpc,
         admin: signer,
-        helper: helperRef.current,
-        terms: { ttlSeconds: settings.ttlSeconds, maxPayments: cap },
-        needPayments: cap,
-        force: true,
-        onNeedApproval: (w) => {
-          what = w;
+        helper,
+        onNeedTopUp: (lamports) => {
+          topUp = lamports;
         },
         onPrompt: ({ attempt, expiresAtMs }) =>
           setWallet({
             deadline: expiresAtMs,
-            note: `${attempt > 0 ? "That took longer than devnet allows, so we're asking again. " : ""}Approve in your wallet${what.topUpLamports > 0n ? `: it sends ${sol(what.topUpLamports)} SOL to your payroll helper (for temporary proof-account rent, returned later)` : ""} and lets the helper make up to ${cap} payment${cap === 1 ? "" : "s"} for ${OPERATOR_TTL_OPTIONS.find((o) => o.seconds === settings.ttlSeconds)?.label ?? "a while"}. It can't do anything else.`,
+            note: `${attempt > 0 ? "That took longer than devnet allows, so we're asking again. " : ""}First, your wallet will show a plain SOL transfer of ${sol(topUp)} SOL to your payroll helper. It pays the rent for the temporary proof accounts, and comes back when they close.`,
           }),
         onSigned: () => setWallet(null),
       });
+
+      // 2. The authorization itself: the admin signs a short message, NOT a transaction. It has no expiry and nothing for the
+      //    wallet to simulate, so a slow popup cannot invalidate it. The helper then submits and pays for it.
+      setWallet({ note: `Approve the authorization in your wallet. It is a plain message, not a transaction, so there is no time limit: take as long as you need. It lets your payroll helper make up to ${cap} payment${cap === 1 ? "" : "s"} for ${OPERATOR_TTL_OPTIONS.find((o) => o.seconds === settings.ttlSeconds)?.label ?? "a while"}, and nothing else.` });
+      await authorizeHelper({ rpc, admin: address(signer.address), helper, signMessage, terms: { ttlSeconds: settings.ttlSeconds, maxPayments: cap } });
+
       await refresh();
       toast.success("Automatic payroll is on", { description: "Run payroll now: no wallet approvals are needed until the timer ends." });
     } catch (e) {
@@ -134,16 +143,12 @@ export function OperatorPanel({ settings, onChange, recipients, locked }: { sett
 
   const turnOff = async () => {
     const helper = helperRef.current;
-    if (!signer || !helper) return;
+    if (!signer || !signMessage || !helper) return;
     setBusy("revoking");
     try {
-      const back = await revokeAndReclaim({
-        rpc,
-        admin: signer,
-        helper,
-        onPrompt: ({ expiresAtMs }) => setWallet({ deadline: expiresAtMs, note: "Approve the revoke in your wallet. It only ends the authorization." }),
-        onSigned: () => setWallet(null),
-      });
+      // Also a signed message, so turning it off has no deadline either.
+      setWallet({ note: "Approve the revoke in your wallet. It is a plain message with no time limit, and it only ends the authorization." });
+      const back = await revokeAndReclaim({ rpc, admin: signer, helper, signMessage });
       toast.success("Automatic payroll is off", { description: back > 0n ? `${sol(back)} SOL returned from the payroll helper to your wallet.` : "The helper had no SOL to return." });
     } catch (e) {
       toast.error("Couldn't turn it off", { description: e instanceof Error ? e.message : "The approval failed. It is still on." });
@@ -234,7 +239,7 @@ export function OperatorPanel({ settings, onChange, recipients, locked }: { sett
           <Button size="sm" variant="outline" onClick={reclaim} disabled={!!busy || locked}>Reclaim SOL</Button>
         </div>
       ) : null}
-      {wallet ? <div className="mt-2"><WalletCountdown deadline={wallet.deadline} note={wallet.note} /></div> : null}
+      {wallet ? <div className="mt-2">{wallet.deadline ? <WalletCountdown deadline={wallet.deadline} note={wallet.note} /> : <p className="enter-fade text-xs font-medium text-primary" role="status">{wallet.note}</p>}</div> : null}
       {!ready ? <p className="mt-3 text-xs text-muted-foreground">Unlock your keys to turn this on or see its status.</p> : null}
     </section>
   );

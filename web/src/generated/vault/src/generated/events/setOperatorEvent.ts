@@ -6,7 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
-import { combineCodec, containsBytes, fixEncoderSize, getAddressDecoder, getAddressEncoder, getBytesEncoder, getConstantDecoder, getConstantEncoder, getHiddenPrefixDecoder, getHiddenPrefixEncoder, getI64Decoder, getI64Encoder, getStructDecoder, getStructEncoder, getU32Decoder, getU32Encoder, type Address, type FixedSizeCodec, type FixedSizeDecoder, type FixedSizeEncoder, type ReadonlyUint8Array } from '@solana/kit';
+import { combineCodec, containsBytes, fixEncoderSize, getAddressDecoder, getAddressEncoder, getBytesEncoder, getConstantDecoder, getConstantEncoder, getHiddenPrefixDecoder, getHiddenPrefixEncoder, getI64Decoder, getI64Encoder, getStructDecoder, getStructEncoder, getU32Decoder, getU32Encoder, getU64Decoder, getU64Encoder, type Address, type FixedSizeCodec, type FixedSizeDecoder, type FixedSizeEncoder, type ReadonlyUint8Array } from '@solana/kit';
 
 export const SET_OPERATOR_EVENT_EVENT_DISCRIMINATOR: ReadonlyUint8Array = new Uint8Array([19, 54, 171, 110, 83, 207, 102, 139]);
 
@@ -14,20 +14,24 @@ export function getSetOperatorEventEventDiscriminatorBytes(): ReadonlyUint8Array
 
 export type SetOperatorEventEvent = { vault: Address; admin: Address; operator: Address; expiresAt: bigint; 
 /** Payments the operator may still make (0 when revoked). */
-paymentsLeft: number;  };
+paymentsLeft: number; 
+/** The config's replay counter AFTER this change (see `authorize_operator`). */
+seq: bigint;  };
 
 export type SetOperatorEventEventArgs = { vault: Address; admin: Address; operator: Address; expiresAt: number | bigint; 
 /** Payments the operator may still make (0 when revoked). */
-paymentsLeft: number;  };
+paymentsLeft: number; 
+/** The config's replay counter AFTER this change (see `authorize_operator`). */
+seq: number | bigint;  };
 
 /** Gets the encoder for {@link SetOperatorEventEventArgs} event data. */
 export function getSetOperatorEventEventEncoder(): FixedSizeEncoder<SetOperatorEventEventArgs> {
-    return getHiddenPrefixEncoder(getStructEncoder([['vault', getAddressEncoder()], ['admin', getAddressEncoder()], ['operator', getAddressEncoder()], ['expiresAt', getI64Encoder()], ['paymentsLeft', getU32Encoder()]]), [getConstantEncoder(SET_OPERATOR_EVENT_EVENT_DISCRIMINATOR)]);
+    return getHiddenPrefixEncoder(getStructEncoder([['vault', getAddressEncoder()], ['admin', getAddressEncoder()], ['operator', getAddressEncoder()], ['expiresAt', getI64Encoder()], ['paymentsLeft', getU32Encoder()], ['seq', getU64Encoder()]]), [getConstantEncoder(SET_OPERATOR_EVENT_EVENT_DISCRIMINATOR)]);
 }
 
 /** Gets the decoder for {@link SetOperatorEventEvent} event data. */
 export function getSetOperatorEventEventDecoder(): FixedSizeDecoder<SetOperatorEventEvent> {
-    return getHiddenPrefixDecoder(getStructDecoder([['vault', getAddressDecoder()], ['admin', getAddressDecoder()], ['operator', getAddressDecoder()], ['expiresAt', getI64Decoder()], ['paymentsLeft', getU32Decoder()]]), [getConstantDecoder(SET_OPERATOR_EVENT_EVENT_DISCRIMINATOR)]);
+    return getHiddenPrefixDecoder(getStructDecoder([['vault', getAddressDecoder()], ['admin', getAddressDecoder()], ['operator', getAddressDecoder()], ['expiresAt', getI64Decoder()], ['paymentsLeft', getU32Decoder()], ['seq', getU64Decoder()]]), [getConstantDecoder(SET_OPERATOR_EVENT_EVENT_DISCRIMINATOR)]);
 }
 
 /** Gets the codec for {@link SetOperatorEventEvent} event data. */

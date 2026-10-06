@@ -6,21 +6,31 @@
 // fail), and the whole batch shared one blockhash, so a slow approval closed the window. Nothing about those five transactions
 // needs the admin: the program only checks that the proofs are verified, not who created the proof accounts.
 //
-// The helper is also the vault's authorized OPERATOR (operator.ts): after one `set_operator` approval it signs pay_employee itself.
+// The helper is also the vault's authorized OPERATOR: once the admin has SIGNED A MESSAGE authorizing it (authorization.ts),
+// it signs pay_employee itself. The admin's wallet signs no transaction for that, so no wallet delay can invalidate it.
 //
 // The helper is derived from the wallet's own confidential keys (so the same wallet always gets the same helper, and any SOL left
 // in it is recoverable), holds only a few thousandths of a SOL, and is never persisted or sent anywhere.
-import { createKeyPairSignerFromPrivateKeyBytes, type Instruction, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
+import { address, createKeyPairSignerFromPrivateKeyBytes, type Address, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
+import { findVaultPda } from "@/generated/vault/src/generated";
+import { DEVNET_WUSDC_MINT } from "./constants";
+import type { WalletSignMessage } from "@/lib/crypto/keys";
 import { getTransferSolInstruction } from "@solana-program/system";
 import type { DerivedKeys } from "@/lib/crypto/keys";
 import type { AppRpc } from "./rpc";
-import { buildAuthorizeInstruction, buildRevokeInstruction, readOperator, type OperatorTerms } from "./operator";
+import { buildAuthorization, NO_OPERATOR } from "./authorization";
+import { readOperator, type OperatorTerms } from "./operator";
 import { signAndSend, type SignAndSendOptions } from "./send";
 
-/** Rent for the three proof accounts (about 0.0063 SOL on devnet, 0.0086 on a surfpool fork; refunded when they close) plus fees, with headroom. */
-export const HELPER_MIN_LAMPORTS = 9_000_000n;
+/**
+ * What the helper needs on hand: rent for the three proof accounts per payment (about 0.0063 SOL on devnet, 0.0086 on a
+ * surfpool fork, refunded when they close), the one-off rent for the `OperatorConfig` account it creates when it is first
+ * authorized (about 0.002 SOL, not refunded), and fees. Deliberately generous: topping the helper up is the only thing the
+ * admin's wallet still signs as a transaction, so the rarer it is, the better.
+ */
+export const HELPER_MIN_LAMPORTS = 15_000_000n;
 /** What the helper is topped up to. */
-export const HELPER_TOPUP_LAMPORTS = 11_000_000n;
+export const HELPER_TOPUP_LAMPORTS = 22_000_000n;
 /** One signature's fee, kept back when sweeping so the sweep itself can pay. */
 const FEE_LAMPORTS = 5_000n;
 
@@ -43,49 +53,39 @@ async function balanceOf(rpc: AppRpc, helper: KeyPairSigner): Promise<bigint> {
   return (await rpc.getBalance(helper.address, { commitment: "confirmed" }).send()).value;
 }
 
-export interface HelperReadyInput {
-  rpc: AppRpc;
-  admin: TransactionSigner;
-  helper: KeyPairSigner;
-  onPrompt?: SignAndSendOptions["onPrompt"];
-  onSigned?: () => void;
-  /**
-   * Automatic mode: authorize the helper as the vault's operator with these terms if it isn't already (or can't cover `needPayments`).
-   * Leave undefined for manual mode, where only the SOL top-up is ever needed.
-   */
-  terms?: OperatorTerms;
-  /** How many payments this run will make (the authorization must cover them). */
-  needPayments?: number;
-  /** Authorize with `terms` even if a live authorization already covers `needPayments` (the admin just chose new terms). */
-  force?: boolean;
-  /** Called just before the wallet is asked, saying what the one approval contains, so the UI can explain the popup. */
-  onNeedApproval?: (what: { topUpLamports: bigint; authorize: boolean }) => void;
-}
-
 /**
- * Makes the helper ready to run payroll with ONE wallet approval, and none when it already is: tops it up with SOL if short, and
- * authorizes it as the vault's operator (`set_operator`) if it is not, or the authorization is about to lapse. Both go in the same
- * transaction, so the wallet is asked at most once per run (and not at all while a recent authorization is still live).
- * Returns true if it asked the wallet.
+ * Tops the helper up from the admin's wallet if it is short. This is the ONE thing left that the admin's wallet signs as a
+ * transaction, so it is deadline-bound like any other; it only happens when the helper is actually low, which is rare now that
+ * the helper is not swept after every run. Returns true if it asked the wallet.
  */
-export async function ensureHelperReady(input: HelperReadyInput): Promise<boolean> {
-  const { rpc, admin, helper, onPrompt, onSigned, onNeedApproval, terms, needPayments = 1, force = false } = input;
-  const [balance, operator] = await Promise.all([balanceOf(rpc, helper), terms && !force ? readOperator(rpc, admin.address, helper.address, needPayments) : null]);
-  const topUp = balance >= HELPER_MIN_LAMPORTS ? 0n : HELPER_TOPUP_LAMPORTS - balance;
-  const authorize = !!terms && (force || (!!operator && !operator.authorized));
-  if (topUp === 0n && !authorize) return false;
-  const instructions: Instruction[] = [];
-  if (topUp > 0n) instructions.push(getTransferSolInstruction({ source: admin, destination: helper.address, amount: topUp }));
-  if (authorize) instructions.push(await buildAuthorizeInstruction(admin, helper.address, terms!));
-  onNeedApproval?.({ topUpLamports: topUp, authorize });
-  await signAndSend({ rpc, signer: admin, instructions, onPrompt, onSigned });
+export async function topUpHelperIfShort(input: { rpc: AppRpc; admin: TransactionSigner; helper: KeyPairSigner; onPrompt?: SignAndSendOptions["onPrompt"]; onSigned?: () => void; onNeedTopUp?: (lamports: bigint) => void }): Promise<boolean> {
+  const { rpc, admin, helper, onPrompt, onSigned, onNeedTopUp } = input;
+  const balance = await balanceOf(rpc, helper);
+  if (balance >= HELPER_MIN_LAMPORTS) return false;
+  const amount = HELPER_TOPUP_LAMPORTS - balance;
+  onNeedTopUp?.(amount);
+  await signAndSend({ rpc, signer: admin, instructions: [getTransferSolInstruction({ source: admin, destination: helper.address, amount })], onPrompt, onSigned });
   return true;
 }
 
-/** Ends the helper's authorization (the admin signs once). Anything the helper holds stays recoverable with `sweepHelper`. */
-export async function revokeHelper(input: { rpc: AppRpc; admin: TransactionSigner; onPrompt?: SignAndSendOptions["onPrompt"]; onSigned?: () => void }): Promise<void> {
-  const { rpc, admin, onPrompt, onSigned } = input;
-  await signAndSend({ rpc, signer: admin, instructions: [await buildRevokeInstruction(admin)], onPrompt, onSigned });
+/**
+ * Authorizes the helper as the vault's operator, or revokes it, from a message the admin signs. No transaction deadline applies
+ * to the admin: they can take as long as their wallet needs. The helper signs and pays for the transaction itself.
+ */
+export async function authorizeHelper(input: { rpc: AppRpc; admin: Address; helper: KeyPairSigner; signMessage: WalletSignMessage; terms?: OperatorTerms }): Promise<void> {
+  const { rpc, admin, helper, signMessage, terms } = input;
+  const [vault] = await findVaultPda({ admin, mint: address(DEVNET_WUSDC_MINT) });
+  // The sequence must be the config's current one, so read it as late as possible.
+  const { seq } = await readOperator(rpc, admin, helper.address);
+  const instructions = await buildAuthorization({
+    admin,
+    payer: helper,
+    signMessage,
+    terms: terms
+      ? { vault, operator: helper.address, expiresAt: BigInt(Math.floor(Date.now() / 1000) + terms.ttlSeconds), maxPayments: terms.maxPayments, seq }
+      : { vault, operator: NO_OPERATOR, expiresAt: 0n, maxPayments: 0, seq },
+  });
+  await signAndSend({ rpc, signer: helper, instructions });
 }
 
 /** What the helper holds now, in lamports. */
@@ -101,8 +101,9 @@ export async function sweepHelper(input: { rpc: AppRpc; admin: TransactionSigner
   return amount;
 }
 
-/** Ends the authorization (one wallet approval), then returns the helper's SOL to the admin (silent). Returns the lamports returned. */
-export async function revokeAndReclaim(input: { rpc: AppRpc; admin: TransactionSigner; helper: KeyPairSigner; onPrompt?: SignAndSendOptions["onPrompt"]; onSigned?: () => void }): Promise<bigint> {
-  await revokeHelper(input);
-  return sweepHelper(input).catch(() => 0n);
+/** Ends the authorization (the admin signs a message, not a transaction), then returns the helper's SOL. Returns the lamports returned. */
+export async function revokeAndReclaim(input: { rpc: AppRpc; admin: TransactionSigner; helper: KeyPairSigner; signMessage: WalletSignMessage }): Promise<bigint> {
+  const { rpc, admin, helper, signMessage } = input;
+  await authorizeHelper({ rpc, admin: address(admin.address), helper, signMessage });
+  return sweepHelper({ rpc, admin, helper }).catch(() => 0n);
 }

@@ -13,9 +13,10 @@ import { KeyProvider } from "./key-context";
  * a `key` of the wallet address) whenever the wallet changes so old keys are dropped.
  */
 export function WalletKeyProvider({ account, children }: { account: UiWalletAccount; children: React.ReactNode }) {
-  const signMessage = useSignMessage(account);
+  const sign = useSignMessage(account);
+  const signMessage = useCallback((message: Uint8Array) => sign({ message }), [sign]);
   const deriver = useCallback(async () => {
-    const keys = await deriveWalletKeys(toMessagePartialSigner(account.address, (message) => signMessage({ message })));
+    const keys = await deriveWalletKeys(toMessagePartialSigner(account.address, signMessage));
     if (checkKeyContinuity(account.address, keys.elgamalKeypair.elgamalPubkey) === "changed") {
       toast.warning("This wallet derived different keys than last time", {
         description: "Its signatures are not repeatable, so anything encrypted under your earlier key can't be read. Don't put funds behind this wallet's confidential account.",
@@ -26,7 +27,7 @@ export function WalletKeyProvider({ account, children }: { account: UiWalletAcco
   }, [account.address, signMessage]);
   return (
     <KeyProvider mode="signature" deriver={deriver}>
-      <TxSignerProvider account={account}>{children}</TxSignerProvider>
+      <TxSignerProvider account={account} signMessage={signMessage}>{children}</TxSignerProvider>
     </KeyProvider>
   );
 }
