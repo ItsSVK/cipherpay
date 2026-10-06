@@ -5,14 +5,24 @@ use solana_zk_sdk_pod::encryption::{auth_encryption::PodAeCiphertext, elgamal::P
 use spl_token_2022_interface::extension::confidential_transfer::instruction::inner_transfer;
 use spl_token_confidential_transfer_proof_extraction::instruction::ProofLocation;
 
-use crate::{error::VaultError, events::PayEmployeeEvent, Vault, VAULT_SEED};
+use crate::{
+    error::VaultError, events::PayEmployeeEvent, OperatorConfig, Vault, OPERATOR_SEED, VAULT_SEED,
+};
 
 /// UC1 (REQ01 to REQ07): pays one employee from the encrypted treasury. The
 /// amount is never revealed on-chain; only the auditor can read it.
 ///
-/// Account order matters: Anchor validates accounts in declaration order, so
-/// `admin` (signer must equal `Vault.authority`, REQ03) is checked before
-/// `vault` (`paused` must be false, REQ02).
+/// Who may sign (REQ03): the vault's `authority` (the admin), or the vault's
+/// authorized operator (see `set_operator`), if one is set and has not
+/// expired. Anyone else is rejected with `Unauthorized`, before the paused
+/// check and before any proof is looked at. The operator can do this and
+/// nothing else: pause, resume, funding and `set_operator` stay admin-only.
+///
+/// Check order is part of the contract (REQ03 before REQ02): who signed, then
+/// whether payroll is paused. The authorization check lives in the handler
+/// (not in an account constraint) because deciding whether the signer is the
+/// operator needs the `operator_config` account too, and the expired case has
+/// its own error.
 ///
 /// The treasury's Token-2022 owner is the vault PDA, so the `Transfer` CPI
 /// needs `invoke_signed` with the vault's seeds (REQ04); a wallet-owned
@@ -28,16 +38,16 @@ use crate::{error::VaultError, events::PayEmployeeEvent, Vault, VAULT_SEED};
 /// encrypted to the auditor) and never the plaintext (REQ07). They come from
 /// the instruction arguments, which Token-2022 requires to match the
 /// ciphertext-validity proof context, so they cannot differ from what was
-/// actually proven.
+/// actually proven. It also records who signed, so an auditor can tell an
+/// admin payment from an operator payment.
 #[derive(Accounts)]
 pub struct PayEmployee<'info> {
-    #[account(address = vault.authority @ VaultError::Unauthorized)]
-    pub admin: Signer<'info>,
+    /// The vault's admin, or its authorized operator. Checked in the handler.
+    pub signer: Signer<'info>,
 
     #[account(
         seeds = [VAULT_SEED, vault.authority.key().as_ref(), vault.mint.key().as_ref()],
         bump = vault.bump,
-        constraint = !vault.paused @ VaultError::PayrollPaused,
         constraint = vault.treasury_configured @ VaultError::TreasuryNotConfigured,
     )]
     pub vault: Account<'info, Vault>,
@@ -65,9 +75,45 @@ pub struct PayEmployee<'info> {
     pub range_proof_context: UncheckedAccount<'info>,
 
     pub token_program: Interface<'info, TokenInterface>,
+
+    /// CHECK: this vault's `OperatorConfig` PDA. Always passed (clients can derive
+    /// its address), but only read when the signer is not the admin: it may not
+    /// exist (no operator was ever set), and an admin-signed payment never needs
+    /// it. Its address is pinned by the seeds constraint, and the owner and
+    /// discriminator are checked before the data is trusted.
+    #[account(seeds = [OPERATOR_SEED, vault.key().as_ref()], bump)]
+    pub operator_config: UncheckedAccount<'info>,
 }
 
 impl<'info> PayEmployee<'info> {
+    /// REQ03: the admin always may sign. Anyone else must be this vault's current,
+    /// unexpired operator.
+    fn authorize_signer(&self) -> Result<()> {
+        let signer = self.signer.key();
+        if signer == self.vault.authority {
+            return Ok(());
+        }
+
+        let info = self.operator_config.to_account_info();
+        // No operator was ever set: the account is an empty system account.
+        require!(
+            info.owner == &crate::ID && !info.data_is_empty(),
+            VaultError::Unauthorized
+        );
+        let config = OperatorConfig::try_deserialize(&mut &info.try_borrow_data()?[..])?;
+
+        require_keys_eq!(config.vault, self.vault.key(), VaultError::Unauthorized);
+        require!(
+            config.operator != Pubkey::default() && config.operator == signer,
+            VaultError::Unauthorized
+        );
+        require!(
+            config.expires_at == 0 || Clock::get()?.unix_timestamp <= config.expires_at,
+            VaultError::OperatorExpired
+        );
+        Ok(())
+    }
+
     fn pay_employee(
         &self,
         new_source_decryptable_available_balance: [u8; 36],
@@ -118,6 +164,10 @@ pub fn handle_pay_employee(
     transfer_amount_auditor_ciphertext_lo: [u8; 64],
     transfer_amount_auditor_ciphertext_hi: [u8; 64],
 ) -> Result<()> {
+    // REQ03 first, then REQ02.
+    ctx.accounts.authorize_signer()?;
+    require!(!ctx.accounts.vault.paused, VaultError::PayrollPaused);
+
     ctx.accounts.pay_employee(
         new_source_decryptable_available_balance,
         transfer_amount_auditor_ciphertext_lo,
@@ -126,6 +176,7 @@ pub fn handle_pay_employee(
 
     emit!(PayEmployeeEvent {
         vault: ctx.accounts.vault.key(),
+        signer: ctx.accounts.signer.key(),
         employee: ctx.accounts.employee_token_account.owner,
         employee_token_account: ctx.accounts.employee_token_account.key(),
         auditor_ciphertext_lo: transfer_amount_auditor_ciphertext_lo,

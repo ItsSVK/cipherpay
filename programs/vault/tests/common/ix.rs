@@ -14,7 +14,7 @@ use solana_transaction::versioned::VersionedTransaction;
 
 use crate::common::{
     env::{to_address, to_anchor_pubkey},
-    pda::{escrow_address, vault_pda, wrapped_mint_authority_pda, wrapped_mint_pda},
+    pda::{escrow_address, operator_config_pda, vault_pda, wrapped_mint_authority_pda, wrapped_mint_pda},
     zk::ConfidentialKeys,
 };
 
@@ -597,8 +597,9 @@ pub fn unwrap_confidential(
 /// proof context-state accounts (see
 /// `confidential_proof::setup_transfer_proof_contexts`).
 #[allow(clippy::too_many_arguments)]
+/// `signer` is whoever signs the payment: the vault's admin, or its authorized operator.
 pub fn build_pay_employee_ix(
-    admin: &Keypair,
+    signer: &Keypair,
     vault: Address,
     mint: Address,
     treasury_token_account: Address,
@@ -612,7 +613,7 @@ pub fn build_pay_employee_ix(
     transfer_amount_auditor_ciphertext_hi: [u8; 64],
 ) -> Instruction {
     let accounts = vault::accounts::PayEmployee {
-        admin: to_anchor_pubkey(admin.pubkey()),
+        signer: to_anchor_pubkey(signer.pubkey()),
         vault: to_anchor_pubkey(vault),
         mint: to_anchor_pubkey(mint),
         treasury_token_account: to_anchor_pubkey(treasury_token_account),
@@ -621,6 +622,8 @@ pub fn build_pay_employee_ix(
         ciphertext_validity_proof_context: to_anchor_pubkey(ciphertext_validity_proof_context),
         range_proof_context: to_anchor_pubkey(range_proof_context),
         token_program: to_anchor_pubkey(token_program),
+        // Always passed; the program only reads it when the signer isn't the admin.
+        operator_config: to_anchor_pubkey(operator_config_pda(vault).0),
     }
     .to_account_metas(None);
 
@@ -674,4 +677,30 @@ pub fn build_resume_payroll_ix(admin: &Keypair, vault: Address) -> Instruction {
 /// Sends `resume_payroll`.
 pub fn resume_payroll(svm: &mut LiteSVM, admin: &Keypair, vault: Address) {
     send(svm, &[build_resume_payroll_ix(admin, vault)], admin, &[]);
+}
+
+/// Builds `set_operator`. `operator` = `Address::default()` revokes; `expires_at` of 0 never expires.
+pub fn build_set_operator_ix(admin: &Keypair, vault: Address, operator: Address, expires_at: i64) -> Instruction {
+    let accounts = vault::accounts::SetOperator {
+        admin: to_anchor_pubkey(admin.pubkey()),
+        vault: to_anchor_pubkey(vault),
+        operator_config: to_anchor_pubkey(operator_config_pda(vault).0),
+        system_program: anchor_lang::prelude::Pubkey::default(),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::SetOperator {
+            operator: to_anchor_pubkey(operator),
+            expires_at,
+        }
+        .data(),
+    }
+}
+
+/// Sends `set_operator`.
+pub fn set_operator(svm: &mut LiteSVM, admin: &Keypair, vault: Address, operator: Address, expires_at: i64) {
+    send(svm, &[build_set_operator_ix(admin, vault, operator, expires_at)], admin, &[]);
 }

@@ -12,6 +12,11 @@ pub fn vault_pda(authority: Address, mint: Address) -> (Address, u8) {
     )
 }
 
+/// Derives a vault's `OperatorConfig` PDA: `[OPERATOR_SEED, vault]`.
+pub fn operator_config_pda(vault: Address) -> (Address, u8) {
+    Address::find_program_address(&[vault::OPERATOR_SEED, vault.as_ref()], &to_address(vault::ID))
+}
+
 /// Derives `token_wrap_compliance`'s wrapped-mint PDA. Must mirror
 /// `native_programs/token_wrap_compliance/src/lib.rs`'s
 /// `get_wrapped_mint_address` exactly.

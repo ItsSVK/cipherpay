@@ -10,4 +10,8 @@ pub enum VaultError {
     TreasuryNotConfigured,
     #[msg("Payroll is paused for this vault")]
     PayrollPaused,
+    #[msg("The vault's operator authorization has expired")]
+    OperatorExpired,
+    #[msg("An operator expiry must be 0 (never) or a time in the future")]
+    InvalidOperatorExpiry,
 }
