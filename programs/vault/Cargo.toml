@@ -28,10 +28,11 @@ spl-token-2022 = { version = "11.0.0", features = ["no-entrypoint"] }
 spl-token-2022-interface = "3.0.0"
 spl-token-confidential-transfer-proof-extraction = "0.6.0"
 solana-instructions-sysvar = "3.0.1"
+solana-sdk-ids = "3.1.0"
 solana-zk-sdk-pod = "0.1.1"
 
 [dev-dependencies]
-litesvm = "0.10.0"
+litesvm = { version = "0.10.0", features = ["precompiles"] }
 solana-message = "3.0.1"
 solana-transaction = "3.0.2"
 solana-signer = "3.0.0"

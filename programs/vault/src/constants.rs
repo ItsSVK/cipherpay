@@ -3,10 +3,11 @@ use anchor_lang::prelude::*;
 #[constant]
 pub const VAULT_SEED: &[u8] = b"vault";
 
-/// Seed for a vault's `OperatorConfig` PDA: `[OPERATOR_SEED, vault]`. The `_v2` suffix marks the layout that added the payment
-/// count (an older 81-byte config under plain `"operator"` can't be read as the new struct, so it is simply left behind).
+/// Seed for a vault's `OperatorConfig` PDA: `[OPERATOR_SEED, vault]`. Each `_vN` bump abandons the previous config accounts rather than
+/// migrating them (a smaller old account can't be read as the bigger new struct): v2 added the payment count, v3 the replay
+/// sequence. Nothing real depended on them, so they are simply left behind.
 #[constant]
-pub const OPERATOR_SEED: &[u8] = b"operator_v2";
+pub const OPERATOR_SEED: &[u8] = b"operator_v3";
 
 /// The longest an operator authorization may last (24 hours). `set_operator` rejects a longer or a never-expiring one, so a
 /// forgotten operator can't stay live indefinitely.

@@ -52,5 +52,8 @@ pub struct OperatorConfig {
     /// How many more payments the operator may make. Each operator-signed `pay_employee` uses one; admin-signed ones don't. The
     /// amounts are encrypted so the program can't cap value, but it can cap the number of payments.
     pub payments_left: u32,
+    /// Replay counter for offline authorizations. A signed message must carry this exact value, and every change to this
+    /// config increments it, so one signed message can be used exactly once. See `authorize_operator`.
+    pub seq: u64,
     pub bump: u8,
 }

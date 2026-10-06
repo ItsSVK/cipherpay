@@ -113,4 +113,6 @@ pub struct SetOperatorEvent {
     pub expires_at: i64,
     /// Payments the operator may still make (0 when revoked).
     pub payments_left: u32,
+    /// The config's replay counter AFTER this change (see `authorize_operator`).
+    pub seq: u64,
 }

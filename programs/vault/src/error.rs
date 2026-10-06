@@ -18,4 +18,8 @@ pub enum VaultError {
     InvalidOperatorLimit,
     #[msg("The operator has used all the payments it was allowed")]
     OperatorLimitReached,
+    #[msg("This transaction does not carry a valid Ed25519 signature from the vault's admin over this exact authorization")]
+    InvalidAuthorization,
+    #[msg("This authorization has already been used, or is not the next one expected")]
+    AuthorizationSeqMismatch,
 }

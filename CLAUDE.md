@@ -161,15 +161,36 @@ After changing any instruction, account, event, error, or PDA seed:
 
 ### Payroll operator (added 2026-10-06)
 
-- **What:** `set_operator(operator: Pubkey, expires_at: i64, max_payments: u32)`, admin-only. Stores
-  `OperatorConfig { vault, operator, expires_at, payments_left, bump }` in its own PDA `[b"operator_v2", vault]` (`OPERATOR_SEED`; the
-  `_v2` seed is because adding `payments_left` changed the account size, so an older 81-byte config under `"operator"` is simply left
-  behind). `operator = Pubkey::default()` revokes (clears expiry and count). A real operator needs `expires_at` in the future and at
-  most `MAX_OPERATOR_TTL_SECONDS` (24 h) away (`InvalidOperatorExpiry`; never-expiring is no longer allowed) and `max_payments >= 1`
-  (`InvalidOperatorLimit`). Emits `SetOperatorEvent` (with `payments_left`).
-- **Count cap (2026-10-06):** each operator-signed `pay_employee` spends one payment (`OperatorLimitReached` at 0); admin-signed ones
-  don't. The program can cap the NUMBER of payments, not their value (amounts are encrypted). `pay_employee`'s `operator_config` is now
-  **writable**. Tests: `tests/operator.rs` (13).
+- **Two ways to authorize, same `OperatorConfig`:**
+  - `set_operator(operator, expires_at, max_payments)` -- **admin signs the transaction**. Still here for scripts/CLI.
+  - `authorize_operator(operator, expires_at, max_payments, seq)` -- **admin signs only a MESSAGE**; anyone (in practice the
+    helper being authorized) submits and pays. **This is what `web/` uses.** Why: a transaction is valid for ~150 blocks (~40 s
+    on devnet) and a browser wallet that simulates against a rate-limited RPC can take longer than that to show its popup, so
+    the admin approves something already dead. A signed message has no expiry and nothing to simulate.
+- **How `authorize_operator` is verified:** the transaction must be `[Ed25519 verify, authorize_operator]`. The program reads
+  the instruction at offset -1 through the instructions sysvar, requires it to be the Ed25519 precompile
+  (`Ed25519SigVerify111111111111111111111111111`), pulls out the public key and message, requires the key to be
+  `Vault.authority`, and compares the message against one it rebuilds itself from its own arguments. So the arguments can never
+  disagree with what the admin saw. The signature itself is checked by the **runtime**, before our program runs.
+  - Every "instruction index" field in the precompile data must be `u16::MAX` ("this instruction"), or the bytes the runtime
+    verified would not be the bytes we read. Tested.
+  - **`authorization_message` is a cross-language contract** with `web/src/lib/chain/authorization.ts`. Both sides pin the exact
+    literals in tests (`tests/authorize_operator.rs::the_message_text_is_exactly_what_the_client_builds` and
+    `web/src/lib/chain/operator.test.ts`). Change one, change both, or every authorization fails.
+  - **Replay protection is `seq`** on `OperatorConfig`: the message must carry the current value, and every change (including
+    `set_operator`) increments it, so a signed message works exactly once and an unsubmitted one dies when anything else changes.
+- **`litesvm` needs the `precompiles` feature** (`LiteSVM::new().with_precompiles()` in `tests/common/env.rs`). Without it any
+  transaction using Ed25519 fails with `InvalidProgramForExecution`, and the signature check would not actually be exercised.
+- **PDA seed is now `operator_v3`.** Each `_vN` bump abandons the old config accounts instead of migrating them (v2 added the
+  payment count, v3 the sequence). Devnet configs made under v2 are ignored; the admin just authorizes again.
+- **What:** `OperatorConfig { vault, operator, expires_at, payments_left, seq, bump }` in `[OPERATOR_SEED, vault]`.
+  `operator = Pubkey::default()` revokes. A real operator needs `expires_at` in the future and at most
+  `MAX_OPERATOR_TTL_SECONDS` (24 h) away (`InvalidOperatorExpiry`) and `max_payments >= 1` (`InvalidOperatorLimit`).
+  Errors added: `InvalidAuthorization`, `AuthorizationSeqMismatch`. Emits `SetOperatorEvent` (now carrying `payments_left`, `seq`).
+- **Count cap:** each operator-signed `pay_employee` spends one payment (`OperatorLimitReached` at 0); admin-signed ones don't.
+  The program can cap the NUMBER of payments, not their value (amounts are encrypted). `pay_employee`'s `operator_config` is writable.
+- **Tests:** `tests/operator.rs` (13) and `tests/authorize_operator.rs` (11, including a tampered signature, a tampered message,
+  arguments that disagree with the message, a cross-instruction reference, a replay and a missing precompile instruction).
 - **`pay_employee` rule:** the signer must be `Vault.authority`, or the vault's operator if one is set and unexpired. The operator
   cannot pause, resume, fund, or call `set_operator`; it can pay, that is all. A paused vault blocks the operator too.
 - **Why a separate PDA, not fields on `Vault`:** `Vault`'s layout is unchanged, so every vault already on devnet (including funded ones)
@@ -209,13 +230,13 @@ messages and test names. Don't add instructions outside this list without surfac
 instructions the client can already do directly. If code and PDF disagree on a name, fix the code (or fix
 both, deliberately).
 
-**One deliberate addition, decided 2026-10-06 (not in the PDF): `set_operator`** (13th instruction). It lets the
+**Two deliberate additions, decided 2026-10-06 (not in the PDF): `set_operator` and `authorize_operator`** (13th and 14th instructions). It lets the
 admin authorize a single "payroll operator" key that may call `pay_employee` and nothing else, so a payroll run does
 not need the admin's wallet to approve every payment (a wallet that is slow to show its popup missed devnet's
 ~40-second transaction window every time, so payroll was unusable). The architecture PDF cannot be edited from here:
 update it deliberately when convenient. Design below, in "Payroll operator".
 
-Codebase vs PDF right now: all 12 PDF instructions exist and match the PDF's names; the only extra is `set_operator`.
+Codebase vs PDF right now: all 12 PDF instructions exist and match the PDF's names; the extras are `set_operator` and `authorize_operator`.
 `create_user_account`/`UserAccount` and `transfer_confidential` have been removed (employees are wallet-owned;
 `pay_employee` replaced the wallet-signed transfer). Verified in litesvm and on a local surfpool validator.
 
@@ -248,6 +269,7 @@ Round-trip chain (current test): `initialize_vault` -> `configure_treasury_accou
 | 7 | `fund_treasury` | Done, tested | Plain `transfer_checked`, permissionless. |
 | 8 | `deposit_confidential` / `apply_treasury_pending` | Done, tested | `invoke_signed` with vault seeds. |
 | 9 | `pay_employee` | Done, tested in litesvm and on surfpool (UC1, REQ01 to REQ07) | Signer must be `Vault.authority` **or the vault's unexpired operator** (REQ03, `Unauthorized` / `OperatorExpired`); that check runs in the handler and comes **before** `paused == false` (REQ02, `PayrollPaused`) (it used to be an account constraint on `admin`; the signer account is now named `signer`). Treasury -> one employee confidential `Transfer`, `invoke_signed` with vault seeds (REQ04), three context-state proofs (REQ05). `PayEmployeeEvent` carries the auditor ciphertexts lo/hi taken **from the instruction args** (Token-2022 requires them to match the validity-proof context, so no need to read the context account); the auditor recovers the amount as `lo + hi * 2^16`. `tests/pay_employee.rs` proves this by decrypting the event with the auditor's secret key. On surfpool and devnet the same decryption works against the burned demo auditor key (see `DEVNET_DEMO_AUDITOR_KEY.md`, whose secret is on record). |
+| 9c | `authorize_operator` | Done, tested (2026-10-06, `tests/authorize_operator.rs`, 11 tests) | The offline-signed path: the admin signs a message, the helper submits. **Not deployed to devnet yet.** See "Payroll operator". |
 | 9b | `set_operator` | Done, tested (2026-10-06, `tests/operator.rs`) | Admin-only. Authorizes (or revokes, with the default key) one operator key and an optional expiry. See "Payroll operator". **Deployed to devnet 2026-10-06 (with count and TTL caps; binary verified identical to the tested build).** |
 | 10 | `batch_pay` | **Client pipeline, not a monolithic instruction** (D3) | Lives in `web/`. On-chain you only need `pay_employee` (optionally a small `PayrollRun` state account for idempotency/resume if the team wants it). |
 | 11 | `employee_apply_pending` | **Not needed as a vault instruction** | Employee calls Token-2022 `ApplyPendingBalance` directly. |

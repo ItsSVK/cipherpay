@@ -679,6 +679,81 @@ pub fn resume_payroll(svm: &mut LiteSVM, admin: &Keypair, vault: Address) {
     send(svm, &[build_resume_payroll_ix(admin, vault)], admin, &[]);
 }
 
+/// Builds the Ed25519 precompile instruction certifying that `signer` signed `message`.
+///
+/// Layout: [count=1, padding, 14 bytes of offsets, pubkey(32), signature(64), message]. The three "instruction index"
+/// fields are `u16::MAX`, meaning the data lives in this very instruction.
+pub fn build_ed25519_ix(signer: &Keypair, message: &[u8]) -> Instruction {
+    build_ed25519_ix_with(signer, message, u16::MAX, false)
+}
+
+/// The same, but able to produce the malformed variants the program must reject.
+pub fn build_ed25519_ix_with(signer: &Keypair, message: &[u8], message_instruction_index: u16, corrupt_signature: bool) -> Instruction {
+    let mut signature = signer.sign_message(message).as_ref().to_vec();
+    if corrupt_signature {
+        signature[0] ^= 0xff;
+    }
+    const PUBLIC_KEY_OFFSET: u16 = 16;
+    const SIGNATURE_OFFSET: u16 = 48;
+    const MESSAGE_OFFSET: u16 = 112;
+
+    let mut data = Vec::with_capacity(MESSAGE_OFFSET as usize + message.len());
+    data.push(1); // exactly one signature
+    data.push(0); // padding
+    data.extend_from_slice(&SIGNATURE_OFFSET.to_le_bytes());
+    data.extend_from_slice(&u16::MAX.to_le_bytes());
+    data.extend_from_slice(&PUBLIC_KEY_OFFSET.to_le_bytes());
+    data.extend_from_slice(&u16::MAX.to_le_bytes());
+    data.extend_from_slice(&MESSAGE_OFFSET.to_le_bytes());
+    data.extend_from_slice(&(message.len() as u16).to_le_bytes());
+    data.extend_from_slice(&message_instruction_index.to_le_bytes());
+    data.extend_from_slice(&signer.pubkey().to_bytes());
+    data.extend_from_slice(&signature);
+    data.extend_from_slice(message);
+
+    Instruction { program_id: to_address(vault::ED25519_PROGRAM_ID), accounts: vec![], data }
+}
+
+/// Builds `authorize_operator`: the offline-signed path. `payer` submits and pays; the admin's authority comes from the
+/// Ed25519 instruction that must sit immediately before this one.
+pub fn build_authorize_operator_ix(payer: &Keypair, vault: Address, operator: Address, expires_at: i64, max_payments: u32, seq: u64) -> Instruction {
+    let accounts = vault::accounts::AuthorizeOperator {
+        payer: to_anchor_pubkey(payer.pubkey()),
+        vault: to_anchor_pubkey(vault),
+        operator_config: to_anchor_pubkey(operator_config_pda(vault).0),
+        instructions_sysvar: to_anchor_pubkey(solana_instructions_sysvar_id()),
+        system_program: anchor_lang::prelude::Pubkey::default(),
+    }
+    .to_account_metas(None);
+
+    Instruction {
+        program_id: to_address(vault::ID),
+        accounts,
+        data: vault::instruction::AuthorizeOperator {
+            operator: to_anchor_pubkey(operator),
+            expires_at,
+            max_payments,
+            seq,
+        }
+        .data(),
+    }
+}
+
+/// The instructions sysvar's address. `anchor_lang`'s re-export doesn't carry it (see the workspace CLAUDE.md).
+pub fn solana_instructions_sysvar_id() -> Address {
+    Address::from_str_const("Sysvar1nstructions1111111111111111111111111")
+}
+
+/// Signs `message` as the admin and sends [ed25519 verify, authorize_operator] in one transaction, paid for by `payer`.
+pub fn authorize_operator(svm: &mut LiteSVM, admin: &Keypair, payer: &Keypair, vault: Address, operator: Address, expires_at: i64, max_payments: u32, seq: u64) -> TransactionMetadata {
+    let message = vault::authorization_message(&to_anchor_pubkey(vault), &to_anchor_pubkey(operator), expires_at, max_payments, seq);
+    let ixs = [
+        build_ed25519_ix(admin, message.as_bytes()),
+        build_authorize_operator_ix(payer, vault, operator, expires_at, max_payments, seq),
+    ];
+    send(svm, &ixs, payer, &[])
+}
+
 /// Builds `set_operator`. `operator` = `Address::default()` revokes. A real operator needs a future `expires_at` within 24 hours
 /// and `max_payments` of at least 1.
 pub fn build_set_operator_ix(admin: &Keypair, vault: Address, operator: Address, expires_at: i64, max_payments: u32) -> Instruction {
