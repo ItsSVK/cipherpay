@@ -1,7 +1,8 @@
 // Builds the treasury-funding transaction: wrap USDC -> WUSDC, move it into the treasury (both public),
 // deposit it into the treasury's encrypted pending balance, then apply it so payroll can spend it.
-import { address, unwrapOption, type Instruction, type TransactionSigner } from "@solana/kit";
+import { address, unwrapOption, type Address, type Instruction, type TransactionSigner } from "@solana/kit";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
+import { getTransferSolInstruction } from "@solana-program/system";
 import {
   findVaultPda,
   findWrappedMintAuthorityPda,
@@ -45,11 +46,21 @@ export function snapshotTreasury(view: ConfidentialAccountView, balance: Decrypt
 }
 
 /**
- * [SetComputeUnitLimit, wrap_confidential, fund_treasury, deposit_confidential, apply_treasury_pending] as one
+ * [SetComputeUnitLimit, (helper top-up transfer), wrap_confidential, fund_treasury, deposit_confidential, apply_treasury_pending] as one
  * transaction: one approval, and the money is never left half-way (wrapped but not deposited).
  */
-export async function buildFundTreasuryInstructions(input: { signer: TransactionSigner; keys: DerivedKeys; amount: bigint; treasury: TreasurySnapshot }): Promise<Instruction[]> {
-  const { signer, keys, amount, treasury } = input;
+export async function buildFundTreasuryInstructions(input: {
+  signer: TransactionSigner;
+  keys: DerivedKeys;
+  amount: bigint;
+  treasury: TreasurySnapshot;
+  /**
+   * Also tops up the payroll helper (see helper-signer.ts) in the same approval, so running payroll later needs only the payment prompt.
+   * Wallet approvals are the scarce, slow thing on devnet (a transaction is valid for about 40 s), so we spend them here, not there.
+   */
+  helperTopUp?: { helper: Address; lamports: bigint };
+}): Promise<Instruction[]> {
+  const { signer, keys, amount, treasury, helperTopUp } = input;
   if (amount <= 0n) throw new Error("Enter an amount greater than zero.");
   const admin = signer.address;
 
@@ -73,6 +84,7 @@ export async function buildFundTreasuryInstructions(input: { signer: Transaction
 
   return [
     setComputeUnitLimit(600_000),
+    ...(helperTopUp && helperTopUp.lamports > 0n ? [getTransferSolInstruction({ source: signer, destination: helperTopUp.helper, amount: helperTopUp.lamports })] : []),
     getWrapConfidentialInstruction({
       owner: signer,
       unwrappedMint: USDC,

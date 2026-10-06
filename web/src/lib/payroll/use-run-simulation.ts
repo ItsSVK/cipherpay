@@ -14,6 +14,12 @@ export interface RecipientRun {
   error?: string;
   /** True while this recipient is ready to transfer but another transfer is still in flight. */
   waiting?: boolean;
+  /** A short status line, e.g. "Approve in your wallet". */
+  note?: string;
+  /** Live runs: when the wallet request currently waiting for approval expires (ms since epoch). Drives a countdown. */
+  deadline?: number;
+  /** Live runs only: the payment was submitted but not confirmed either way. Check the explorer before retrying. */
+  uncertain?: boolean;
 }
 
 const CONCURRENCY = 3;

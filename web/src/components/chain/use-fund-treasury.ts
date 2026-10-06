@@ -7,6 +7,7 @@ import { useTxSigner } from "@/components/chain/tx-signer";
 import { useKeys } from "@/components/crypto/key-context";
 import { decryptAccountBalance } from "@/lib/chain/decrypt";
 import { buildFundTreasuryInstructions, snapshotTreasury } from "@/lib/chain/fund";
+import { deriveHelperSigner, HELPER_MIN_LAMPORTS, HELPER_TOPUP_LAMPORTS } from "@/lib/chain/helper-signer";
 import { readVaultState, readWalletState } from "@/lib/chain/read";
 import { rpc } from "@/lib/chain/rpc";
 import { signAndSend } from "@/lib/chain/send";
@@ -44,7 +45,11 @@ export function useFundTreasury() {
           );
         }
         const balance = await decryptAccountBalance(vault.treasury, k);
-        const instructions = await buildFundTreasuryInstructions({ signer, keys: k, amount, treasury: snapshotTreasury(vault.treasury, balance) });
+        // Top up the payroll helper in this same approval if it is short, so running payroll later needs only the payment prompt.
+        const helper = await deriveHelperSigner(k);
+        const helperBalance = (await rpc.getBalance(helper.address, { commitment: "confirmed" }).send()).value;
+        const helperTopUp = helperBalance < HELPER_MIN_LAMPORTS ? { helper: helper.address, lamports: HELPER_TOPUP_LAMPORTS - helperBalance } : undefined;
+        const instructions = await buildFundTreasuryInstructions({ signer, keys: k, amount, treasury: snapshotTreasury(vault.treasury, balance), helperTopUp });
         setState((s) => ({ ...s, phase: "signing" }));
         const { signature } = await signAndSend({ rpc, signer, instructions, onSigned: () => setState((s) => ({ ...s, phase: "confirming" })) });
         setState({ phase: "done", error: null, signature });

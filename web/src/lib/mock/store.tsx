@@ -22,6 +22,7 @@ interface Store {
   /** pause_payroll / resume_payroll */
   setPaused: (admin: string, paused: boolean) => void;
   addEmployee: (admin: string, employee: Employee) => void;
+  removeEmployee: (admin: string, id: string) => void;
   /** pay_employee, once per recipient: moves value from the treasury to the recipient's pending balance. */
   pay: (admin: string, wallet: string, amount: bigint, signature: string, label: string) => void;
   recordRun: (admin: string, run: Run) => void;
@@ -59,6 +60,7 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       fundTreasury: (admin, amount) => patchVault(admin, (v) => ({ ...v, treasury: v.treasury + amount })),
       setPaused: (admin, paused) => patchVault(admin, (v) => ({ ...v, paused })),
       addEmployee: (admin, employee) => patchVault(admin, (v) => ({ ...v, employees: [employee, ...v.employees] })),
+      removeEmployee: (admin, id) => patchVault(admin, (v) => ({ ...v, employees: v.employees.filter((e) => e.id !== id) })),
       pay: (admin, wallet, amount, signature, label) => {
         patchVault(admin, (v) => ({ ...v, treasury: v.treasury - amount }));
         patchAccount(wallet, (a) => ({

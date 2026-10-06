@@ -10,6 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
+import { WalletCountdown } from "@/components/app/wallet-countdown";
+import { PayrollGate } from "@/components/data/payroll-gate";
 import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -17,6 +19,8 @@ import { useVault } from "@/components/app/vault-context";
 import { PIPELINE_STAGES, TRANSFER_STAGE, type Employee, type RunStatus } from "@/lib/mock/data";
 import { shortToday } from "@/lib/mock/store";
 import { formatUsdc, shortAddress } from "@/lib/format";
+import { useAccountStatus } from "@/components/app/employee-context";
+import { useLiveRun } from "@/lib/payroll/use-live-run";
 import { useRunSimulation } from "@/lib/payroll/use-run-simulation";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +28,9 @@ type Phase = "review" | "simulating" | "simulated" | "executing" | "done";
 type CheckState = "idle" | "running" | "pass" | "fail";
 type Fix = { kind: "skip"; ids: string[]; label: string } | { kind: "resume" };
 interface Check { id: string; label: string; ok: boolean; detail: string; fix?: Fix; state: CheckState }
+
+/** Rent for the temporary proof accounts plus fees. The rent is refunded when they are closed. */
+const MIN_SOL_FOR_RUN = 15_000_000n;
 
 const BASE_FLOW: { id: RunStatus; label: string }[] = [
   { id: "draft", label: "Draft" },
@@ -34,7 +41,11 @@ const BASE_FLOW: { id: RunStatus; label: string }[] = [
 ];
 
 export default function RunPayrollPage() {
-  return <RunPayroll />;
+  return (
+    <PayrollGate title="Run payroll">
+      <RunPayroll />
+    </PayrollGate>
+  );
 }
 
 function RunPayroll() {
@@ -52,7 +63,13 @@ function RunPayroll() {
 
   const included = useMemo(() => employees.filter((e) => !excluded.has(e.id)), [employees, excluded]);
   const total = included.reduce((n, e) => n + e.salary, 0n);
-  const sim = useRunSimulation(useMemo(() => included.map((e) => e.id), [included]), PIPELINE_STAGES.length, TRANSFER_STAGE);
+  const account = useAccountStatus();
+  const ids = useMemo(() => included.map((e) => e.id), [included]);
+  const liveItems = useMemo(() => included.map((e) => ({ id: e.id, name: e.name, wallet: e.wallet, amount: e.salary })), [included]);
+  // Demo wallets run the animated engine; real wallets run the real pipeline (pay_employee, one recipient at a time).
+  const mockSim = useRunSimulation(ids, PIPELINE_STAGES.length, TRANSFER_STAGE);
+  const liveSim = useLiveRun(liveItems, PIPELINE_STAGES.length);
+  const sim = v.isLive ? liveSim : mockSim;
   const phase: Phase = phaseState === "executing" && sim.done ? "done" : phaseState;
   const halted = phase === "executing" && !sim.running && sim.failedCount > 0;
 
@@ -68,7 +85,7 @@ function RunPayroll() {
       if (r.status !== "done" || !r.signature || credited.current.has(r.id)) continue;
       credited.current.add(r.id);
       const e = employees.find((x) => x.id === r.id);
-      if (e) v.pay(e.wallet, e.salary, r.signature, `${v.vault.name} payroll`);
+      if (e && !v.isLive) v.pay(e.wallet, e.salary, r.signature, `${v.vault.name} payroll`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sim.rows]);
@@ -80,6 +97,7 @@ function RunPayroll() {
       const e = employees.find((x) => x.id === r.id);
       return e && r.signature ? [{ wallet: e.wallet, name: e.name, amount: e.salary, signature: r.signature }] : [];
     });
+    // Saved to the database for real wallets. The payments themselves are already on-chain, so a failed save is not a failed payroll.
     v.recordRun({
       id: `run-${Date.now()}`,
       label: `${new Date().toLocaleDateString("en-US", { month: "long" })} payroll`,
@@ -88,7 +106,7 @@ function RunPayroll() {
       recipients: items.length,
       total: items.reduce((n, i) => n + i.amount, 0n),
       items,
-    });
+    }).catch((e) => toast.error("Payroll sent, but the run couldn't be saved to your history", { description: e instanceof Error ? e.message : "The payments are on-chain and unaffected." }));
     toast.success("Payroll complete", { description: `${items.length} payments sent. Amounts stayed encrypted.` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -119,6 +137,9 @@ function RunPayroll() {
         ? { id: "act", label: "Every recipient has an activated account", ok: true, detail: `${list.length} of ${list.length} activated` }
         : { id: "act", label: "Every recipient has an activated account", ok: false, detail: `${missing.map((m) => m.name).join(", ")} ${missing.length === 1 ? "has" : "have"} not activated an account`, fix: { kind: "skip", ids: missing.map((m) => m.id), label: "Skip them and re-run" } },
       { id: "dup", label: "No duplicate wallets or zero amounts", ok: !dup && !zero, detail: dup ? "The same wallet appears twice" : zero ? "An amount is zero" : "All wallets are unique and amounts are positive" },
+      ...(v.isLive
+        ? [{ id: "sol", label: "Enough SOL for network fees", ok: account.sol >= MIN_SOL_FOR_RUN, detail: account.sol >= MIN_SOL_FOR_RUN ? `${(Number(account.sol) / 1e9).toFixed(3)} SOL in this wallet` : `Each payment needs roughly 0.015 SOL up front (most of it is refunded). This wallet has ${(Number(account.sol) / 1e9).toFixed(3)} SOL.` }]
+        : []),
       { id: "pause", label: "Payroll is not paused", ok: !paused, detail: paused ? "Payroll is paused, so pay_employee would be rejected" : "Vault is active", fix: paused ? { kind: "resume" } : undefined },
     ];
   };
@@ -160,13 +181,24 @@ function RunPayroll() {
   };
 
   const approveAndRun = () => {
-    if (!guard()) return;
+    if (v.isLive) {
+      if (!keys.requireKeys()) return;
+      if (!liveSim.canSign) {
+        toast.error("This wallet can't sign devnet transactions", { description: "Try a different wallet." });
+        return;
+      }
+      setPhase("executing");
+      credited.current.clear();
+      recorded.current = false;
+      liveSim.start();
+      return;
+    }
     setPhase("executing");
     credited.current.clear();
     recorded.current = false;
     // Demo hook: the second recipient fails once at the transfer stage, to show failure and resume.
     const target = included[Math.min(1, included.length - 1)];
-    sim.start(failDemo && target ? { [target.id]: TRANSFER_STAGE } : {});
+    mockSim.start(failDemo && target ? { [target.id]: TRANSFER_STAGE } : {});
   };
   const reset = () => {
     setPhase("review");
@@ -230,7 +262,7 @@ function RunPayroll() {
                     );
                   })}
                 </ul>
-                {phase === "review" ? (
+                {phase === "review" && !v.isLive ? (
                   <div className="flex items-center justify-between gap-4 border-t border-dashed bg-muted/40 px-4 py-3">
                     <div>
                       <p className="text-[13px] font-medium">Demo control</p>
@@ -292,7 +324,14 @@ function RunPayroll() {
                           {r.status === "failed" ? (
                             <p className="enter-fade text-xs text-destructive">{r.error}</p>
                           ) : r.status === "done" ? (
-                            <p className="enter-fade font-mono text-[11.5px] text-muted-foreground">tx {r.signature?.slice(0, 10)}…{r.signature?.slice(-6)}</p>
+                            <div className="grid gap-1">
+                              <p className="enter-fade font-mono text-[11.5px] text-muted-foreground">tx {r.signature?.slice(0, 10)}…{r.signature?.slice(-6)}</p>
+                              {r.note ? <p className="text-xs text-pending">{r.note}</p> : null}
+                            </div>
+                          ) : r.deadline ? (
+                            <WalletCountdown note={r.note} deadline={r.deadline} />
+                          ) : r.note ? (
+                            <p className="enter-fade text-xs font-medium text-primary">{r.note}</p>
                           ) : (
                             <RunningLine stage={PIPELINE_STAGES[Math.min(r.completed, PIPELINE_STAGES.length - 1)]} active={r.status === "running"} waiting={r.waiting} />
                           )}
@@ -309,7 +348,7 @@ function RunPayroll() {
             <dl className="grid gap-3 text-sm">
               <div className="flex justify-between"><dt className="text-muted-foreground">Recipients</dt><dd className="tnum font-medium">{included.length}</dd></div>
               <div className="flex justify-between"><dt className="text-muted-foreground">Total</dt><dd className="font-mono font-medium tnum">{formatUsdc(total)} USDC</dd></div>
-              <div className="flex justify-between"><dt className="text-muted-foreground">Transactions</dt><dd className="tnum font-medium">about {included.length * 7}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted-foreground">Transactions</dt><dd className="tnum font-medium">about {included.length * (v.isLive ? 6 : 7)}</dd></div>
             </dl>
             <div className="mt-5" aria-label={`Progress ${Math.round(sim.progress * 100)}%`}>
               <div className="h-1.5 overflow-hidden rounded-full bg-secondary">

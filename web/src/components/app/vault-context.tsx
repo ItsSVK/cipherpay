@@ -1,6 +1,7 @@
 "use client";
 
 import { useChain } from "@/components/chain/chain-state";
+import { usePayrollData } from "@/components/data/payroll-data";
 import { useConfidentialBalance, type BalanceStatus } from "@/components/chain/use-confidential-balance";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
@@ -28,13 +29,14 @@ export function useVault() {
   const store = useDemoStore();
   const chain = useChain();
   const status = useCompanyStatus();
+  const data = usePayrollData();
   const treasury = useConfidentialBalance(isDemo ? null : (chain.vault?.treasury ?? null));
   const admin = address ?? "";
   const mock = store.vaultOf(admin);
 
   const vault: VaultState = isDemo
     ? mock
-    : { ...mock, created: status.created, treasuryConfigured: status.treasuryConfigured, paused: status.paused, treasury: treasury.balance?.available ?? 0n };
+    : { ...mock, created: status.created, treasuryConfigured: status.treasuryConfigured, paused: status.paused, treasury: treasury.balance?.available ?? 0n, employees: data.employees, runs: data.runs };
 
   return {
     admin,
@@ -53,8 +55,19 @@ export function useVault() {
     configureTreasury: () => store.configureTreasury(admin),
     fund: (amount: bigint) => store.fundTreasury(admin, amount),
     setPaused: (paused: boolean) => store.setPaused(admin, paused),
-    addEmployee: (e: Employee) => store.addEmployee(admin, e),
+    /** Real wallets save to the database (and may reject: duplicate wallet, signed out). Demo wallets use the in-memory list. */
+    addEmployee: async (e: Employee): Promise<void> => {
+      if (isDemo) store.addEmployee(admin, e);
+      else await data.addEmployee({ name: e.name, role: e.role, wallet: e.wallet, salary: e.salary });
+    },
+    removeEmployee: async (id: string): Promise<void> => {
+      if (isDemo) store.removeEmployee(admin, id);
+      else await data.removeEmployee(id);
+    },
     pay: (wallet: string, amount: bigint, signature: string, label: string) => store.pay(admin, wallet, amount, signature, label),
-    recordRun: (run: Parameters<typeof store.recordRun>[1]) => store.recordRun(admin, run),
+    recordRun: async (run: Parameters<typeof store.recordRun>[1]): Promise<void> => {
+      if (isDemo) store.recordRun(admin, run);
+      else await data.recordRun(run.label, run.items.map((i) => ({ wallet: i.wallet, name: i.name, amount: i.amount, signature: i.signature, status: "confirmed" as const })));
+    },
   };
 }

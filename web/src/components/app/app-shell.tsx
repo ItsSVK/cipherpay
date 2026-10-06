@@ -13,6 +13,7 @@ import { KeyProvider } from "@/components/crypto/key-context";
 import { WalletKeyProvider } from "@/components/crypto/wallet-key-provider";
 import { UnlockDialog } from "@/components/crypto/unlock-dialog";
 import { ChainProvider, useChain } from "@/components/chain/chain-state";
+import { PayrollDataProvider } from "@/components/data/payroll-data";
 import { ConnectScreen } from "@/components/wallet/connect-screen";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
@@ -75,7 +76,7 @@ function SidebarBody({ groups, pathname, isDemo, onNavigate }: { groups: NavGrou
           <span className="size-1.5 rounded-full bg-verified [animation:dot-pulse_2s_ease-in-out_infinite]" aria-hidden />
           Solana devnet
         </div>
-        {isDemo ? "Demo data. Proofs and chain calls are not connected yet." : "Balances and account state are read live from devnet. Activation, company setup and funding the treasury send real transactions; the rest is not wired yet."}
+        {isDemo ? "Demo data. Proofs and chain calls are not connected yet." : "Balances and account state are read live from devnet. Activation, company setup, funding and payroll send real transactions; the rest is not wired yet."}
       </div>
     </div>
   );
@@ -169,6 +170,8 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
                 aria-label="Disconnect wallet"
                 title="Disconnect wallet"
                 onClick={async () => {
+                  // End the server session too, so the next person on this browser can't read the payroll list.
+                  await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
                   await wallet.disconnect();
                   toast("Wallet disconnected", { description: "Keys were cleared from memory." });
                 }}
@@ -197,8 +200,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (wallet.status === "loading") return <div className="min-h-dvh" aria-busy="true" />;
   if (wallet.status !== "connected" || !wallet.address) return <ConnectScreen />;
   return (
-    <ChainProvider>
-      <ConnectedShell address={wallet.address}>{children}</ConnectedShell>
-    </ChainProvider>
+    <PayrollDataProvider>
+      <ChainProvider>
+        <ConnectedShell address={wallet.address}>{children}</ConnectedShell>
+      </ChainProvider>
+    </PayrollDataProvider>
   );
 }

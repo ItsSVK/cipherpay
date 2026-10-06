@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
+import { PayrollGate } from "@/components/data/payroll-gate";
 import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -27,7 +28,11 @@ const SPLIT_IDS = ["sam", "tax", "fee"];
 type Stage = "draft" | "approved" | "executing" | "done";
 
 export default function SplitPage() {
-  return <Split />;
+  return (
+    <PayrollGate title="Split payout">
+      <Split />
+    </PayrollGate>
+  );
 }
 
 function Split() {
@@ -95,7 +100,7 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
   useEffect(() => {
     if (stage !== "done" || recorded.current || !parts) return;
     recorded.current = true;
-    v.recordRun({
+    void v.recordRun({
       id: `run-${Date.now()}`,
       label: `Split payout, ${formatUsdc(parts.reduce((n, p) => n + p.amount, 0n))} USDC`,
       date: shortToday(),

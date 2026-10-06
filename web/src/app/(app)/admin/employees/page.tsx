@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PlusIcon, SearchIcon, UserPlusIcon } from "lucide-react";
+import { PlusIcon, SearchIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import { Address } from "@/components/crypto/fingerprint";
 import { CopyButton } from "@/components/app/copy-button";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
+import { PayrollGate } from "@/components/data/payroll-gate";
 import { useVault } from "@/components/app/vault-context";
 import { copyInvite } from "@/lib/payroll/invite";
 import type { Employee } from "@/lib/mock/data";
@@ -19,12 +20,13 @@ import { formatUsdc, parseUsdc } from "@/lib/format";
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-function AddEmployee({ onAdd, company }: { onAdd: (e: Employee) => void; company: string }) {
+function AddEmployee({ onAdd, company }: { onAdd: (e: Employee) => Promise<void>; company: string }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [wallet, setWallet] = useState("");
   const [salary, setSalary] = useState("");
   const [touched, setTouched] = useState(false);
+  const [saving, setSaving] = useState(false);
   const amount = parseUsdc(salary);
   const errors = {
     name: name.trim() ? "" : "Enter a name.",
@@ -46,16 +48,24 @@ function AddEmployee({ onAdd, company }: { onAdd: (e: Employee) => void; company
         <form
           id="add-employee"
           className="grid gap-4 px-4"
-          onSubmit={(e) => {
+          onSubmit={async (e) => {
             e.preventDefault();
             setTouched(true);
-            if (!valid || amount === null) return;
-            onAdd({ id: crypto.randomUUID(), name: name.trim(), role: "Team member", wallet: wallet.trim(), salary: amount });
+            if (!valid || amount === null || saving) return;
+            setSaving(true);
+            try {
+              await onAdd({ id: crypto.randomUUID(), name: name.trim(), role: "Team member", wallet: wallet.trim(), salary: amount });
+            } catch (err) {
+              // Saved to the database for real wallets, so this can legitimately fail: duplicate wallet, signed out, offline.
+              toast.error("Couldn't add them", { description: err instanceof Error ? err.message : "Try again." });
+              setSaving(false);
+              return;
+            }
             toast.success(`${name.trim()} added`, {
               description: "They need to set up their account once before they can be paid. Send them the invite.",
               action: { label: "Copy invite", onClick: () => { void copyInvite(company).then((ok) => toast(ok ? "Invite copied" : "Could not copy. Select the text manually.")); } },
             });
-            setName(""); setWallet(""); setSalary(""); setTouched(false); setOpen(false);
+            setName(""); setWallet(""); setSalary(""); setTouched(false); setSaving(false); setOpen(false);
           }}
         >
           {[
@@ -71,7 +81,7 @@ function AddEmployee({ onAdd, company }: { onAdd: (e: Employee) => void; company
           ))}
         </form>
         <SheetFooter>
-          <Button type="submit" form="add-employee" className="h-10"><UserPlusIcon /> Add to payroll</Button>
+          <Button type="submit" form="add-employee" className="h-10" disabled={saving}><UserPlusIcon /> {saving ? "Saving…" : "Add to payroll"}</Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>
@@ -79,6 +89,14 @@ function AddEmployee({ onAdd, company }: { onAdd: (e: Employee) => void; company
 }
 
 export default function EmployeesPage() {
+  return (
+    <PayrollGate title="Employees">
+      <Employees />
+    </PayrollGate>
+  );
+}
+
+function Employees() {
   const v = useVault();
   const rows = v.vault.employees;
   const [q, setQ] = useState("");
@@ -111,7 +129,8 @@ export default function EmployeesPage() {
               <TableHead className="pl-5">Name</TableHead>
               <TableHead>Wallet</TableHead>
               <TableHead className="text-right">Per run</TableHead>
-              <TableHead className="pr-5 text-right">Account</TableHead>
+              <TableHead className="text-right">Account</TableHead>
+              <TableHead className="w-12 pr-4"><span className="sr-only">Remove</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -123,7 +142,7 @@ export default function EmployeesPage() {
                 </TableCell>
                 <TableCell><span className="inline-flex items-center gap-1"><Address value={e.wallet} /><CopyButton value={e.wallet} label={`Copy ${e.name}'s address`} /></span></TableCell>
                 <TableCell className="text-right font-mono tnum">{formatUsdc(e.salary)}</TableCell>
-                <TableCell className="pr-5 text-right">
+                <TableCell className="text-right">
                   {v.isActivated(e.wallet) ? (
                     <StatusBadge tone="verified">Activated</StatusBadge>
                   ) : (
@@ -135,10 +154,26 @@ export default function EmployeesPage() {
                     </span>
                   )}
                 </TableCell>
+                <TableCell className="pr-4 text-right">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove ${e.name}`}
+                    title={`Remove ${e.name}`}
+                    onClick={() => {
+                      v.removeEmployee(e.id).then(
+                        () => toast(`${e.name} removed from your payroll list`),
+                        (err) => toast.error("Couldn't remove them", { description: err instanceof Error ? err.message : "Try again." }),
+                      );
+                    }}
+                  >
+                    <Trash2Icon />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
             {filtered.length === 0 ? (
-              <TableRow className="hover:bg-transparent"><TableCell colSpan={4} className="py-12 text-center text-muted-foreground">{rows.length === 0 ? "No one on payroll yet. Add your first employee." : <>No one matches &ldquo;{q}&rdquo;.</>}</TableCell></TableRow>
+              <TableRow className="hover:bg-transparent"><TableCell colSpan={5} className="py-12 text-center text-muted-foreground">{rows.length === 0 ? "No one on payroll yet. Add your first employee." : <>No one matches &ldquo;{q}&rdquo;.</>}</TableCell></TableRow>
             ) : null}
           </TableBody>
         </Table>

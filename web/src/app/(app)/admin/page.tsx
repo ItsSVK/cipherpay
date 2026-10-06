@@ -12,6 +12,7 @@ import { useKeys } from "@/components/crypto/key-context";
 import { CopyButton } from "@/components/app/copy-button";
 import { FundSheet } from "@/components/app/fund-sheet";
 import { useLiveGuard } from "@/components/app/live-guard";
+import { usePayrollData } from "@/components/data/payroll-data";
 import { PageHeader } from "@/components/app/page-header";
 import { PageLoading } from "@/components/app/page-loading";
 import { SetupVault } from "@/components/app/setup-vault";
@@ -24,6 +25,7 @@ export default function AdminOverview() {
   const keys = useKeys();
   const v = useVault();
   const guard = useLiveGuard();
+  const payroll = usePayrollData();
   const { vault } = v;
   const shown = keys.ready && v.treasuryStatus === "ready";
 
@@ -129,7 +131,14 @@ export default function AdminOverview() {
         <div className="mb-3 flex items-center justify-between">
           <h2 id="runs-h" className="font-sans text-base font-semibold tracking-normal">Recent runs</h2>
         </div>
-        {vault.runs.length === 0 ? (
+        {payroll.status === "needs-auth" ? (
+          <div className="plate flex flex-wrap items-center justify-between gap-3 p-5">
+            <p className="max-w-md text-sm text-muted-foreground">Your run history is saved on our server, tied to your wallet. Sign in with one free signature to see it.</p>
+            <Button variant="outline" disabled={payroll.signingIn} onClick={() => void payroll.signIn()}>{payroll.signingIn ? "Waiting for your wallet…" : "Sign in with wallet"}</Button>
+          </div>
+        ) : payroll.status === "loading" ? (
+          <div className="plate p-8 text-center text-sm text-muted-foreground">Loading your run history…</div>
+        ) : vault.runs.length === 0 ? (
           <div className="plate p-8 text-center text-sm text-muted-foreground">No payroll runs yet. Add your team, then run payroll.</div>
         ) : (
           <div className="plate overflow-hidden">

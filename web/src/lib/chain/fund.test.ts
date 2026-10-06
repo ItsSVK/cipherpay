@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { address, generateKeyPairSigner } from "@solana/kit";
+import { address, appendTransactionMessageInstructions, compileTransaction, createTransactionMessage, generateKeyPairSigner, getTransactionEncoder, pipe, setTransactionMessageFeePayerSigner, setTransactionMessageLifetimeUsingBlockhash, type Blockhash } from "@solana/kit";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
 import { AeCiphertext, AeKey } from "@solana/zk-sdk/bundler";
 import { findVaultPda, findWrappedMintPda, VAULT_PROGRAM_ADDRESS } from "@/generated/vault/src/generated";
@@ -65,4 +65,23 @@ describe("buildFundTreasuryInstructions", () => {
     const signer = await generateKeyPairSigner();
     await expect(buildFundTreasuryInstructions({ signer, keys: {} as never, amount: 0n, treasury: { available: 0n, pending: 0n, pendingCreditCounter: 0n } })).rejects.toThrow();
   });
+
+  test("topping up the payroll helper in the same transaction still fits the real 1232-byte limit", async () => {
+    const signer = await generateKeyPairSigner();
+    const sign: WalletSignMessage = async (message) => {
+      const [d] = await signer.signMessages([{ content: message, signatures: {} }]);
+      return { signature: d[signer.address] as unknown as Uint8Array, signedMessage: message };
+    };
+    const keys = await deriveWalletKeys(toMessagePartialSigner(signer.address, sign));
+    const helper = (await generateKeyPairSigner()).address;
+    const ixs = await buildFundTreasuryInstructions({ signer, keys, amount: 2_000_000n, treasury: { available: 0n, pending: 0n, pendingCreditCounter: 0n }, helperTopUp: { helper, lamports: 8_000_000n } });
+    expect(ixs).toHaveLength(6); // compute budget, helper transfer, wrap, fund, deposit, apply
+    const msg = pipe(
+      createTransactionMessage({ version: 0 }),
+      (m) => setTransactionMessageFeePayerSigner(signer, m),
+      (m) => setTransactionMessageLifetimeUsingBlockhash({ blockhash: "11111111111111111111111111111111" as Blockhash, lastValidBlockHeight: 0n }, m),
+      (m) => appendTransactionMessageInstructions(ixs, m),
+    );
+    expect(getTransactionEncoder().encode(compileTransaction(msg)).length).toBeLessThanOrEqual(1232);
+  }, 30_000);
 });

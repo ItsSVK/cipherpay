@@ -1,7 +1,7 @@
 // Read-only chain state for the connected wallet. No keys are used here: decryption happens separately
 // (lib/chain/decrypt.ts) and only while the user's keys are unlocked.
 import { address, unwrapOption, type Address } from "@solana/kit";
-import { TOKEN_2022_PROGRAM_ADDRESS, fetchAllMaybeToken, fetchMaybeToken, findAssociatedTokenPda, type Token } from "@solana-program/token-2022";
+import { TOKEN_2022_PROGRAM_ADDRESS, fetchAllMaybeToken, fetchMaybeMint, fetchMaybeToken, findAssociatedTokenPda, type Token } from "@solana-program/token-2022";
 import { fetchMaybeVault, findVaultPda } from "@/generated/vault/src/generated";
 import { DEVNET_USDC_MINT, DEVNET_WUSDC_MINT } from "./constants";
 import type { AppRpc } from "./rpc";
@@ -103,4 +103,21 @@ export async function readActivation(rpc: AppRpc, owners: Address[]): Promise<Re
   const atas = await Promise.all(owners.map((o) => ataFor(o, WUSDC, TOKEN_2022_PROGRAM_ADDRESS)));
   const accounts = await fetchAllMaybeToken(rpc, atas, { commitment: "confirmed" }).catch(() => null);
   return Object.fromEntries(owners.map((o, i) => [o, !!accounts?.[i]?.exists && viewOf(atas[i], accounts[i].data as Token).confidential]));
+}
+
+/** A wallet's WUSDC account as it is on-chain right now, or null if it has none. */
+export async function readConfidentialAccount(rpc: AppRpc, owner: Address): Promise<ConfidentialAccountView | null> {
+  const ata = await ataFor(owner, WUSDC, TOKEN_2022_PROGRAM_ADDRESS);
+  const token = await readToken(rpc, ata);
+  return token ? viewOf(ata, token) : null;
+}
+
+/** The ElGamal public key the mint registers for its auditor. Every confidential transfer must be encrypted to it. */
+export async function readAuditorPubkey(rpc: AppRpc): Promise<Address> {
+  const mint = await fetchMaybeMint(rpc, WUSDC, { commitment: "confirmed" });
+  if (!mint.exists) throw new Error("The WUSDC mint wasn't found on this network.");
+  const ext = (unwrapOption(mint.data.extensions) ?? []).find((e) => e.__kind === "ConfidentialTransferMint");
+  const auditor = ext && ext.__kind === "ConfidentialTransferMint" ? unwrapOption(ext.auditorElgamalPubkey) : null;
+  if (!auditor) throw new Error("The WUSDC mint has no auditor key, but payments are encrypted to one.");
+  return auditor;
 }

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { address, type Address } from "@solana/kit";
+import { usePayrollData } from "@/components/data/payroll-data";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
 import { rpc } from "@/lib/chain/rpc";
@@ -33,13 +34,14 @@ const POLL_MS = 20_000;
 export function ChainProvider({ children }: { children: React.ReactNode }) {
   const { address: connected, isDemo } = useWallet();
   const store = useDemoStore();
+  const payroll = usePayrollData();
   const [data, setData] = useState<{ for: string; wallet: WalletChainState; vault: VaultChainState; activation: Record<string, boolean>; at: number } | null>(null);
   const [error, setError] = useState<{ for: string; message: string } | null>(null);
   const [tick, setTick] = useState(0);
   const seq = useRef(0);
 
   // Employee wallets to check. A stable key keeps polling from restarting on unrelated store changes.
-  const employees = connected ? store.vaultOf(connected).employees : [];
+  const employees = isDemo ? (connected ? store.vaultOf(connected).employees : []) : payroll.employees;
   const employeeKey = employees.map((e) => e.wallet).join("|");
 
   useEffect(() => {
