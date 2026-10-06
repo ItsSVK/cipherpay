@@ -111,4 +111,6 @@ pub struct SetOperatorEvent {
     pub admin: Pubkey,
     pub operator: Pubkey,
     pub expires_at: i64,
+    /// Payments the operator may still make (0 when revoked).
+    pub payments_left: u32,
 }

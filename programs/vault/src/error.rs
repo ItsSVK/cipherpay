@@ -12,6 +12,10 @@ pub enum VaultError {
     PayrollPaused,
     #[msg("The vault's operator authorization has expired")]
     OperatorExpired,
-    #[msg("An operator expiry must be 0 (never) or a time in the future")]
+    #[msg("An operator expiry must be in the future and no more than 24 hours away")]
     InvalidOperatorExpiry,
+    #[msg("An operator must be allowed at least one payment")]
+    InvalidOperatorLimit,
+    #[msg("The operator has used all the payments it was allowed")]
+    OperatorLimitReached,
 }
