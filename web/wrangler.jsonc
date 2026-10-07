@@ -15,6 +15,15 @@
     }
   ],
   "observability": { "enabled": true },
+  // Per-IP limit for the unauthenticated sign-in routes (see src/server/rate-limit.ts). Cloudflare only offers 10 s or 60 s periods.
+  // 20 a minute is far above a person signing in (one nonce + one verify) but stops a loop from hammering the database.
+  "ratelimits": [
+    {
+      "name": "AUTH_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

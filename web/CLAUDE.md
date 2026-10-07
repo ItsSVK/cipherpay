@@ -279,7 +279,7 @@ Employee list, payout rules and payroll-run history are **off-chain** (decision 
   second prompt, duplicate wallet 409, extra `employer` field 400, bad address / amount / signature 400, remove works, run history shows
   after reload, logout ends the session, DB rows are scoped to the signing wallet and sessions hold only a hash. Unit tests cover the message
   and signature verification (tamper, wrong wallet, wrong site, wrong length).
-- **Known gaps before real users:** no rate limit on `/api/auth/nonce`; a run is saved only when it finishes completely (payments from a
+- **Known gaps before real users:** (the nonce rate limit is done, see "Hardening" below); a run is saved only when it finishes completely (payments from a
   partly failed run are on-chain but not in history until the indexer reconciles); no edit-salary endpoint yet; cookie is `Secure` only in
   production builds; CSRF relies on `SameSite=Lax` (cross-site POSTs carry no cookie).
 - **Deploy:** `bun run db:create`, paste the id into `wrangler.jsonc`, `bun run db:migrate:remote`, then `bun run deploy`. The first deploy
@@ -392,6 +392,27 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   is on the page, a failed destination can be retried (`Retry failed`), and the run is saved to history like payroll. Destinations are NOT persisted (React
   state only; a saved split rule is a later feature). Verified on a devnet-forked surfpool through our own lib code: 10.00 at 79/20/1 -> 7.90 / 2.00 / 0.10
   decrypt exactly, treasury drops by exactly 10.00, an unactivated destination is refused before anything moves. **Not browser-run.**
+- **Hardening (2026-10-07): sign-in rate limit and the proof worker.** **Rate limit:** `POST /api/auth/nonce` and `/api/auth/verify` are the only routes that
+  need no session, and the nonce route wrote to D1 on every call. They now go through `server/rate-limit.ts` (`rateLimited(request, scope)`): a Cloudflare
+  Rate Limiting binding `AUTH_LIMITER` (`wrangler.jsonc` `ratelimits`, 20 requests per 60 s, per client IP from `cf-connecting-ip`, separate bucket per route;
+  Cloudflare only offers 10 s or 60 s windows). Over the limit = `429` + `Retry-After: 60` and a plain message the sign-in UI already shows. If the binding is
+  missing, development carries on but PRODUCTION refuses with 503 (a limit that silently stops applying is worse than a visible outage). The expired-nonce
+  and expired-session sweep no longer runs on every nonce call, only about one call in twenty (`SWEEP_CHANCE`; both lookups check expiry anyway); a cron
+  trigger would be the alternative but needs a custom Worker entry. **Not done:** a cap on unused nonces per address, and limits on the session-gated routes.
+  Verified locally (miniflare binding, scratch copy): 20 x 200 then 429s with `Retry-After`, and `verify` is not starved by a nonce flood. The shared-NAT case
+  (a whole office behind one IP) can hit 20 a minute; raise `limit` if that happens. After changing `wrangler.jsonc` run `bun run cf-typegen`.
+  **Proof worker:** `lib/crypto/proof-worker.ts` runs the three heavy WASM jobs (transfer proofs, withdraw proofs, balance decryption) off the main thread;
+  `lib/crypto/proof-client.ts` (`proveTransfer`, `proveWithdraw`, `decryptOffThread`) is the page's side and `proof-protocol.ts` the messages. `decrypt.ts` is now a
+  thin off-thread wrapper over `decrypt-local.ts` (the pure version the worker runs); `pay.ts` and `receive.ts` call the client. **Keys:** each request sends the
+  secrets it needs as a structured-clone COPY (the page's keys are untouched), the worker keeps nothing between requests and zeroes what it was handed in a
+  `finally`. If a worker can't be created or its script fails to load, the client gives up on workers for the page and runs the work on the calling thread (a
+  stutter, not a failure); real errors from the work (wrong key, amount too large) are returned as errors, never retried. `proofWorkerStatus()` exposes
+  `{running, broken}`. **Measured in headless Chrome against the real Turbopack bundle, dev AND production build:** withdraw proof blocked the main thread
+  ~75 ms on the main thread vs 0 ms on the worker; balance decrypt ~480-535 ms vs 0 ms (production; ~68 ms in dev mode); wall time per call is about the same.
+  Transfer proofs (the heavier ones) were not separately measured, they use the same mechanism. `next.config.ts` still needs no change. Tests:
+  `proof-client.test.ts` (worker really used, caller's keys not zeroed, WrongKeyError type preserved, proofs verify, errors propagate). **Gotcha found on the way:**
+  a STATIC import of `@solana-program/token-2022/confidential` (or `@solana/zk-sdk`) anywhere in a module a page imports breaks `next build` prerendering
+  (`ENOENT ... zk-sdk/dist/node/index_bg.wasm`) while `next dev` hides it; keep those imports lazy (`await import`) and run `next build` after touching imports.
 - **The slow-wallet-popup investigation, 2026-10-06 (measured; it is NOT the front end).** Symptom: Phantom's popup appears ~30-40 s after the
   request, so the transaction's ~39 s window has closed by the time it is approved; intermittent, worse after a session has been running a while.
   **Measured in headless Chrome with the real UI instrumented** (main-thread lag probe, PerformanceObserver longtask, hooked `WebAssembly.instantiate`,
@@ -412,8 +433,7 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   does NOT hide the page, so the 6-call poll and its decrypt used to fire exactly while the wallet was opening; (c) **one decrypt shared between
   consumers** - `useVault()` and `useEmployee()` each created their own `useConfidentialBalance` for the same account (2-3 identical 370 ms decrypts),
   now deduped by ciphertext key in `use-confidential-balance.ts`; (d) the operator panel's **1 s countdown clock only runs while something is counting
-  down**. Known and NOT fixed: proof generation and decryption still run on the **main thread** (no Web Worker; `next.config.ts` deliberately empty) -
-  a payroll run shows ~5 long tasks, max ~340 ms; `@solana-program/token-2022`'s own `decryptConfidentialTransferBalance` leaks 3 wasm objects per
+  down**. Proof generation and decryption used to run on the **main thread** (~5 long tasks per payroll run, max ~340 ms); that is fixed, see "Hardening" below. Known and NOT fixed: `@solana-program/token-2022`'s own `decryptConfidentialTransferBalance` leaks 3 wasm objects per
   call inside `node_modules`; `useVault()`/`useEmployee()` still return fresh object literals every render.
 - **The admin signs a MESSAGE, not a transaction, to turn automatic payroll on or off (2026-10-06).** This is the fix for the slow-wallet
   problem below. `lib/chain/authorization.ts` builds the exact text the admin signs (`authorizationMessage`, which **must match

@@ -1,33 +1,12 @@
-// CLIENT-ONLY. Decrypts a confidential token account's balances with the user's unlocked keys.
+// CLIENT-ONLY. Decrypts a confidential token account's balances with the user's unlocked keys. Runs in the proof worker so the ~370 ms of
+// WASM work doesn't freeze the page (lib/crypto/proof-client.ts); the decryption itself is decrypt-local.ts.
 import type { DerivedKeys } from "@/lib/crypto/keys";
+import { decryptOffThread } from "@/lib/crypto/proof-client";
+import type { DecryptedBalance } from "./decrypt-local";
 import type { ConfidentialAccountView } from "./read";
 
-export interface DecryptedBalance {
-  /** Spendable: the AES "decryptable" balance. */
-  available: bigint;
-  /** Received but not yet applied (ElGamal). */
-  pending: bigint;
-  total: bigint;
-}
+export { WrongKeyError, type DecryptedBalance } from "./decrypt-local";
 
-export class WrongKeyError extends Error {
-  constructor() {
-    super("This account was set up with a different encryption key than the one derived from this wallet, so it can't be decrypted here.");
-    this.name = "WrongKeyError";
-  }
-}
-
-export async function decryptAccountBalance(view: ConfidentialAccountView, keys: DerivedKeys): Promise<DecryptedBalance> {
-  // A clear message beats an opaque decryption failure if the account was configured with another key.
-  if (view.elgamalPubkey !== null && view.elgamalPubkey !== keys.elgamalKeypair.elgamalPubkey) throw new WrongKeyError();
-  const [{ AeKey, ElGamalSecretKey }, { decryptConfidentialTransferBalance }] = await Promise.all([import("@solana/zk-sdk/bundler"), import("@solana-program/token-2022/confidential")]);
-  const aesKey = AeKey.fromBytes(keys.aeKey);
-  const elgamalSecretKey = ElGamalSecretKey.fromBytes(keys.elgamalKeypair.secretKey);
-  try {
-    const b = decryptConfidentialTransferBalance({ tokenAccount: view.token, elgamalSecretKey, aesKey });
-    return { available: b.availableBalance, pending: b.pendingBalance, total: b.totalBalance };
-  } finally {
-    aesKey.free();
-    elgamalSecretKey.free();
-  }
+export function decryptAccountBalance(view: ConfidentialAccountView, keys: DerivedKeys): Promise<DecryptedBalance> {
+  return decryptOffThread(view, keys);
 }

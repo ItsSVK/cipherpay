@@ -8,6 +8,7 @@ import { authNonces, sessions } from "./db/schema";
 export const SESSION_COOKIE = "cp_session";
 export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
+const SWEEP_CHANCE = 0.05;
 const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 async function sha256Hex(input: string): Promise<string> {
@@ -19,12 +20,16 @@ function randomToken(bytes = 32): string {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString("base64url");
 }
 
-/** A single-use sign-in challenge. Also sweeps expired challenges and sessions so the tables don't grow forever. */
+/** A single-use sign-in challenge. Occasionally sweeps expired challenges and sessions so the tables don't grow forever. */
 export async function createNonce(): Promise<{ nonce: string; issuedAt: number; expiresAt: number }> {
   const db = getDb();
   const now = nowSeconds();
-  await db.delete(authNonces).where(lt(authNonces.expiresAt, now));
-  await db.delete(sessions).where(lt(sessions.expiresAt, now));
+  // Sweeping on every call made this unauthenticated route do three writes per request. Expired rows are harmless (consumeNonce and
+  // getSessionAddress both check expiry), so sweep on about one call in twenty to keep the tables from growing.
+  if (Math.random() < SWEEP_CHANCE) {
+    await db.delete(authNonces).where(lt(authNonces.expiresAt, now));
+    await db.delete(sessions).where(lt(sessions.expiresAt, now));
+  }
   const nonce = randomToken(16);
   const expiresAt = now + SIGN_IN_TTL_SECONDS;
   await db.insert(authNonces).values({ nonce, expiresAt });

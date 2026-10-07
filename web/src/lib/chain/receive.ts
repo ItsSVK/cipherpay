@@ -9,7 +9,6 @@
 // (helper-signer.ts) creates, verifies and closes those accounts, and the owner's wallet signs only the transactions that need the owner.
 import { address, generateKeyPairSigner, unwrapOption, type Address, type Instruction, type TransactionSigner } from "@solana/kit";
 import { TOKEN_2022_PROGRAM_ADDRESS } from "@solana-program/token-2022";
-import { getApplyConfidentialPendingBalanceInstructionFromToken } from "@solana-program/token-2022/confidential";
 import { closeContextStateProof, verifyBatchedRangeProofU64, verifyCiphertextCommitmentEquality } from "@solana-program/zk-elgamal-proof";
 import { findWrappedMintAuthorityPda, getUnwrapConfidentialInstruction, getWithdrawConfidentialInstruction } from "@/generated/vault/src/generated";
 import type { DerivedKeys } from "@/lib/crypto/keys";
@@ -18,7 +17,7 @@ import { CLASSIC_TOKEN_PROGRAM } from "./fund";
 import type { TxSpec } from "./pay";
 import { ataFor, type ConfidentialAccountView } from "./read";
 import type { AppRpc } from "./rpc";
-import { composeWithdrawProofs } from "./withdraw-proofs";
+import { proveWithdraw } from "@/lib/crypto/proof-client";
 
 const USDC = address(DEVNET_USDC_MINT);
 const WUSDC = address(DEVNET_WUSDC_MINT);
@@ -37,7 +36,8 @@ function setComputeUnitLimit(units: number): Instruction {
  * the new available balance (available + pending) with the AES key, so the account's "decryptable" balance stays current.
  */
 export async function buildApplyPendingInstruction(input: { account: ConfidentialAccountView; keys: DerivedKeys; owner: TransactionSigner }): Promise<Instruction> {
-  const { AeKey, ElGamalSecretKey } = await import("@solana/zk-sdk/bundler");
+  // Lazy, like every other zk-sdk import: the WASM must only load in the browser, never while Next prerenders pages on the server.
+  const [{ AeKey, ElGamalSecretKey }, { getApplyConfidentialPendingBalanceInstructionFromToken }] = await Promise.all([import("@solana/zk-sdk/bundler"), import("@solana-program/token-2022/confidential")]);
   const aesKey = AeKey.fromBytes(input.keys.aeKey);
   const elgamalSecretKey = ElGamalSecretKey.fromBytes(input.keys.elgamalKeypair.secretKey);
   try {
@@ -101,7 +101,7 @@ export async function buildWithdrawPlan(input: WithdrawInput): Promise<WithdrawP
   const ext = (unwrapOption(account.token.extensions) ?? []).find((e) => e.__kind === "ConfidentialTransferAccount");
   if (!ext || ext.__kind !== "ConfidentialTransferAccount") throw new Error("This account has no confidential-transfer extension.");
 
-  const proofs = await composeWithdrawProofs({ currentAvailableCiphertext: Uint8Array.from(ext.availableBalance), currentBalance: input.available, amount, secretKey: keys.elgamalKeypair.secretKey });
+  const proofs = await proveWithdraw({ currentAvailableCiphertext: Uint8Array.from(ext.availableBalance), currentBalance: input.available, amount, secretKey: keys.elgamalKeypair.secretKey });
 
   const [eqCtx, rangeCtx] = await Promise.all([generateKeyPairSigner(), generateKeyPairSigner()]);
   const rpc = input.rpc as AppRpc;

@@ -2,11 +2,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { buildSignInMessage } from "@/lib/auth/message";
 import { verifyWalletSignature } from "@/lib/auth/verify";
 import { consumeNonce, cookieOptions, createSession, SESSION_COOKIE } from "@/server/auth";
+import { rateLimited } from "@/server/rate-limit";
 import { invalid, jsonError, readJson } from "@/server/http";
 import { verifyRequest } from "@/server/schemas";
 
 /** Step 2: checks the wallet's signature over the server-built message, burns the nonce, and starts a session. */
 export async function POST(request: NextRequest) {
+  const limited = await rateLimited(request, "verify");
+  if (limited) return limited;
   const parsed = verifyRequest.safeParse(await readJson(request));
   if (!parsed.success) return invalid(parsed.error);
   const { address, nonce, signature } = parsed.data;

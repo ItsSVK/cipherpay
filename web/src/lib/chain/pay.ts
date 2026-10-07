@@ -23,7 +23,7 @@ import type { DerivedKeys } from "@/lib/crypto/keys";
 import { DEVNET_WUSDC_MINT } from "./constants";
 import { ataFor, type ConfidentialAccountView } from "./read";
 import type { AppRpc } from "./rpc";
-import { composeTransferProofs } from "./transfer-proofs";
+import { proveTransfer } from "@/lib/crypto/proof-client";
 
 const WUSDC = address(DEVNET_WUSDC_MINT);
 const COMPUTE_BUDGET_PROGRAM = address("ComputeBudget111111111111111111111111111111");
@@ -78,7 +78,7 @@ export async function buildPaymentPlan(input: PaymentInput): Promise<PaymentPlan
   if (!ext || ext.__kind !== "ConfidentialTransferAccount") throw new Error("The treasury has no confidential-transfer extension.");
 
   const enc = getAddressEncoder();
-  const proofs = await composeTransferProofs({
+  const proofs = await proveTransfer({
     currentAvailableCiphertext: Uint8Array.from(ext.availableBalance),
     currentBalance: input.treasuryAvailable,
     amount,
