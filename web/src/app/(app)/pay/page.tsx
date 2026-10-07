@@ -1,6 +1,6 @@
 "use client";
 
-import { EyeIcon, ExternalLinkIcon } from "lucide-react";
+import { EyeIcon, ExternalLinkIcon, ShieldIcon, SparklesIcon, WalletIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Cipher } from "@/components/crypto/cipher";
@@ -15,34 +15,43 @@ import { PageLoading } from "@/components/app/page-loading";
 import { SolNotice } from "@/components/app/sol-notice";
 import { StatusBadge } from "@/components/app/status-badge";
 import { WithdrawSheet } from "@/components/app/withdraw-sheet";
+import { MetricCard } from "@/components/app/metric-card";
+import { DisclosureCard } from "@/components/app/disclosure-card";
+import { EmptyState } from "@/components/app/empty-state";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { useStepper } from "@/hooks/use-stepper";
 import { formatUsdc, shortAddress } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const ACTIVATE_STEPS: Step[] = [
-  { label: "Prove you hold the key", detail: "A short proof, built in your browser, that the key you are registering is really yours.", visibility: "encrypted" },
-  { label: "Approve in your wallet", detail: "One transaction. Your wallet shows it to you before you sign." },
-  { label: "Create and register your account", detail: "In that one transaction: creates your wrapped-USDC token account, makes room for confidential balances and registers your key." },
+  { label: "Prove you hold the key", detail: "A short proof, built in your browser, verifying your confidential key.", visibility: "encrypted" },
+  { label: "Approve in your wallet", detail: "Single transaction approval. Review before signing." },
+  { label: "Create and register your account", detail: "Sets up wrapped-USDC confidential extension and registers your public encryption key." },
 ];
 
 const APPLY_STEPS: Step[] = [{ label: "Apply pending balance", detail: "Moves new payments into your spendable balance.", visibility: "encrypted" }];
 const LIVE_APPLY_STEPS: Step[] = [
-  { label: "Prepare in your browser", detail: "Reads your account and works out your new encrypted balance. Nothing leaves this tab.", visibility: "encrypted" },
-  { label: "Approve in your wallet", detail: "One transaction. Your wallet shows it to you before you sign." },
-  { label: "Apply pending balance", detail: "Moves new payments into your spendable balance.", visibility: "encrypted" },
+  { label: "Prepare in your browser", detail: "Derives your new encrypted balance locally. No data leaves this tab.", visibility: "encrypted" },
+  { label: "Approve in your wallet", detail: "One transaction approval for the update." },
+  { label: "Apply pending balance", detail: "Moves new payments into spendable balance on-chain.", visibility: "encrypted" },
 ];
 const LIVE_APPLY_STEP: Record<string, number> = { idle: 0, preparing: 0, signing: 1, confirming: 2, done: 3, error: 0 };
 
-/** Personal side of the app: balances, payments and withdrawal, for any wallet that gets paid. */
 export default function MyPay() {
   const keys = useKeys();
   const emp = useEmployee();
   const guard = useLiveGuard();
-  // Show amounts only once they exist in plaintext: keys unlocked AND the balance decrypted.
   const shown = keys.ready && emp.balanceStatus === "ready";
-  const activation = useStepper(ACTIVATE_STEPS.length, 950, () => { emp.activate(); toast.success("Account activated", { description: "You can now receive confidential payments." }); });
+  const activation = useStepper(ACTIVATE_STEPS.length, 950, () => {
+    emp.activate();
+    toast.success("Account activated", { description: "You can now receive confidential payments." });
+  });
   const live = useActivation();
   const act = emp.isLive ? live : activation;
-  const apply = useStepper(1, 1100, () => { emp.applyPending(); toast.success("Pending balance applied"); });
+  const apply = useStepper(1, 1100, () => {
+    emp.applyPending();
+    toast.success("Pending balance applied");
+  });
   const liveApply = useApplyPending();
   const applying = emp.isLive ? liveApply.running : apply.running;
 
@@ -50,19 +59,44 @@ export default function MyPay() {
 
   if (!emp.activated) {
     return (
-      <>
-        <PageHeader title="Set up to receive pay" description="Before anyone can pay this wallet, it needs a confidential account. You do this once." />
-        <section className="plate enter mx-auto max-w-xl p-6" style={{ ["--i" as string]: 1 }}>
+      <div className="space-y-6">
+        <PageHeader
+          title="Confidential Account Setup"
+          description="Create your encrypted Token-2022 account to begin receiving private payroll payments."
+        />
+        <section className="plate enter mx-auto max-w-xl p-6 sm:p-8" style={{ ["--i" as string]: 1 }}>
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs leading-relaxed text-muted-foreground">
+            <ShieldIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+            <div>
+              <p className="font-medium text-foreground">One account for all employers</p>
+              <p className="mt-0.5">Every employer pays into this confidential account. You only need to activate once.</p>
+            </div>
+          </div>
+
           <SolNotice />
-          <p className="mb-4 rounded-lg bg-muted/60 p-3 text-[13px] leading-relaxed text-muted-foreground">
-            It is one account per wallet, not one per employer. Every company that pays this wallet pays into the same account, so you never repeat this. Until it exists there is no balance to show, and nobody can send you pay.
-          </p>
-          <StepList steps={ACTIVATE_STEPS} completed={act.completed} running={act.running} />
-          {emp.isLive && live.error ? <p role="alert" className="mt-3 rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">{live.error}</p> : null}
-          {emp.isLive && live.phase === "done" ? <p role="status" className="mt-3 rounded-lg bg-verified-soft px-3 py-2 text-[13px] text-verified">Confirmed on devnet. Reading your new account…</p> : null}
-          {emp.isLive && !live.canSign ? <p className="mt-3 text-[13px] text-muted-foreground">{live.cannotSignReason}</p> : null}
+
+          <div className="mt-6">
+            <StepList steps={ACTIVATE_STEPS} completed={act.completed} running={act.running} />
+          </div>
+
+          {emp.isLive && live.error ? (
+            <p role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-failed-soft p-3 text-xs text-destructive">
+              {live.error}
+            </p>
+          ) : null}
+
+          {emp.isLive && live.phase === "done" ? (
+            <p role="status" className="mt-4 rounded-xl bg-verified-soft p-3 text-xs text-verified">
+              Confirmed on devnet. Reading your new account…
+            </p>
+          ) : null}
+
+          {emp.isLive && !live.canSign ? (
+            <p className="mt-4 text-xs text-muted-foreground">{live.cannotSignReason}</p>
+          ) : null}
+
           <Button
-            className="mt-5 h-10 w-full"
+            className="mt-6 h-11 w-full font-medium"
             disabled={act.running || !emp.hasSol || live.phase === "done" || (emp.isLive && !live.canSign)}
             onClick={() => {
               if (!keys.requireKeys()) return;
@@ -73,42 +107,81 @@ export default function MyPay() {
               activation.run();
             }}
           >
-            {act.running ? "Activating…" : live.error && emp.isLive ? "Try again" : keys.ready ? "Activate account" : "Unlock keys to activate"}
+            {act.running ? "Activating account…" : live.error && emp.isLive ? "Retry activation" : keys.ready ? "Activate account" : "Unlock keys to activate"}
           </Button>
-          <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">You pay the network fee in SOL for each transaction you send, so keep a little SOL in this wallet. An employer cannot pay you until this is done.</p>
+
+          <p className="mt-3 text-center text-[11.5px] text-muted-foreground">
+            Requires ~0.005 SOL for network rent & initialization fees.
+          </p>
         </section>
-      </>
+      </div>
     );
   }
 
   return (
-    <>
-      <PageHeader title="My pay" description="Only you can read these amounts. Decryption happens in this tab." actions={<WithdrawSheet />} />
+    <div className="space-y-8">
+      <PageHeader
+        title="My Pay"
+        description="Your confidential balances and compensation history, encrypted and decrypted client-side."
+        actions={<WithdrawSheet />}
+      />
+
       <SolNotice />
+
       {emp.awaitingApproval ? (
-        <p className="mb-4 rounded-lg border border-pending/25 bg-pending-soft px-3.5 py-3 text-[13.5px] text-pending" role="status">Your account is set up but not approved yet, so it can&apos;t receive confidential pay. This mint requires approval for new accounts.</p>
+        <div className="rounded-xl border border-pending/30 bg-pending-soft/70 px-4 py-3 text-xs text-pending" role="status">
+          Your account is set up but awaiting mint approval. You cannot receive confidential pay until approval is granted.
+        </div>
       ) : null}
+
       {emp.balanceError ? (
-        <p className="mb-4 rounded-lg border border-destructive/30 bg-failed-soft px-3.5 py-3 text-[13.5px] text-destructive" role="alert">{emp.balanceError}</p>
+        <div className="rounded-xl border border-destructive/30 bg-failed-soft px-4 py-3 text-xs text-destructive" role="alert">
+          {emp.balanceError}
+        </div>
       ) : null}
+
       <div className="grid gap-5 sm:grid-cols-2">
-        {[
-          { id: "available", title: "Available", note: "Ready to withdraw", value: emp.available },
-          { id: "pending", title: "Pending", note: "New payments waiting to be applied", value: emp.pending },
-        ].map((b, i) => (
-          <section key={b.id} className="plate enter p-5" style={{ ["--i" as string]: i + 1 }} aria-label={b.title}>
-            <div className="flex items-center justify-between">
-              <h2 className="font-sans text-sm font-medium text-muted-foreground">{b.title}</h2>
-              <StatusBadge tone={shown ? "verified" : "key"}>{shown ? "Decrypted" : keys.ready && emp.balanceStatus === "decrypting" ? "Decrypting…" : "Encrypted"}</StatusBadge>
+        <MetricCard
+          title="Available Balance"
+          tooltip="Confirmed, spendable balance ready to withdraw to plain USDC or transfer."
+          value={formatUsdc(emp.available)}
+          seed={`emp-available-${emp.available}`}
+          revealed={shown}
+          badgeText={shown ? "Decrypted" : keys.ready && emp.balanceStatus === "decrypting" ? "Decrypting…" : "Encrypted"}
+          badgeTone={shown ? "verified" : "key"}
+          subtitle="Ready for withdrawal to your wallet."
+          style={{ ["--i" as string]: 1 }}
+          actions={
+            <div className="flex w-full items-center justify-between">
+              <span className="text-xs text-muted-foreground">Unlocked locally</span>
+              {!shown && !emp.balanceError ? (
+                <Button variant="ghost" size="sm" onClick={() => keys.setDialogOpen(true)} className="h-8 gap-1.5 text-xs text-primary">
+                  <EyeIcon className="size-3.5" /> Decrypt
+                </Button>
+              ) : null}
             </div>
-            <div className="mt-4 text-4xl font-medium leading-none">
-              <Cipher value={formatUsdc(b.value)} seed={`emp-${b.id}-${b.value}`} revealed={shown} suffix="USDC" className="[&>span:last-child]:text-sm" />
-            </div>
-            <div className="mt-4 flex min-h-8 items-center justify-between gap-3">
-              <p className="text-[13px] text-muted-foreground">{b.note}</p>
-              {b.id === "pending" && emp.pending > 0n ? (
+          }
+        />
+
+        <MetricCard
+          title="Pending Payments"
+          tooltip="Recently received payouts waiting to be applied into your spendable confidential balance."
+          value={formatUsdc(emp.pending)}
+          seed={`emp-pending-${emp.pending}`}
+          revealed={shown}
+          badgeText={emp.pending > 0n ? "New Pay" : "Up to date"}
+          badgeTone={emp.pending > 0n ? "pending" : "neutral"}
+          subtitle="Apply payments to add them to your spendable balance."
+          style={{ ["--i" as string]: 2 }}
+          actions={
+            <div className="flex w-full items-center justify-between">
+              <span className="text-xs text-muted-foreground">
+                {emp.pending > 0n ? "Action required to spend" : "No pending payments"}
+              </span>
+              {emp.pending > 0n ? (
                 <Button
                   size="sm"
+                  className="h-8 px-3 text-xs"
                   disabled={applying || !emp.hasSol || (emp.isLive && !liveApply.canSign)}
                   onClick={() => {
                     if (!keys.requireKeys()) return;
@@ -120,61 +193,121 @@ export default function MyPay() {
                     apply.run();
                   }}
                 >
-                  {applying ? "Applying…" : emp.isLive && liveApply.error ? "Try again" : "Apply"}
+                  {applying ? "Applying…" : emp.isLive && liveApply.error ? "Retry" : "Apply Pay"}
                 </Button>
               ) : null}
             </div>
-            {b.id === "pending" && !emp.isLive && apply.running ? <StepList className="mt-3" steps={APPLY_STEPS} completed={apply.completed} running={apply.running} /> : null}
-            {b.id === "pending" && emp.isLive && (liveApply.running || liveApply.phase === "done") ? <StepList className="mt-3" steps={LIVE_APPLY_STEPS} completed={LIVE_APPLY_STEP[liveApply.phase]} running={liveApply.running} /> : null}
-            {b.id === "pending" && emp.isLive && liveApply.error ? <p role="alert" className="mt-3 rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">{liveApply.error}</p> : null}
-          </section>
-        ))}
+          }
+        >
+          {emp.pending > 0n && !emp.isLive && apply.running ? (
+            <div className="mt-3">
+              <StepList steps={APPLY_STEPS} completed={apply.completed} running={apply.running} />
+            </div>
+          ) : null}
+          {emp.pending > 0n && emp.isLive && (liveApply.running || liveApply.phase === "done") ? (
+            <div className="mt-3">
+              <StepList steps={LIVE_APPLY_STEPS} completed={LIVE_APPLY_STEP[liveApply.phase]} running={liveApply.running} />
+            </div>
+          ) : null}
+          {emp.pending > 0n && emp.isLive && liveApply.error ? (
+            <p role="alert" className="mt-2 rounded-lg border border-destructive/30 bg-failed-soft p-2 text-xs text-destructive">
+              {liveApply.error}
+            </p>
+          ) : null}
+        </MetricCard>
       </div>
 
-      <section className="enter mt-8" style={{ ["--i" as string]: 3 }} aria-labelledby="pay-h">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 id="pay-h" className="font-sans text-base font-semibold tracking-normal">Payments</h2>
-          {!shown && !emp.balanceError ? (
-            <Button variant="outline" size="sm" disabled={keys.ready} onClick={() => keys.setDialogOpen(true)}><EyeIcon /> Decrypt amounts</Button>
+      <section className="enter space-y-3" style={{ ["--i" as string]: 3 }}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">Payment History</h2>
+            <p className="text-xs text-muted-foreground">All confidential transfers recorded for this wallet.</p>
+          </div>
+          {!shown && !emp.balanceError && emp.payments.length > 0 ? (
+            <Button variant="outline" size="sm" onClick={() => keys.setDialogOpen(true)} className="h-8 gap-1.5 text-xs">
+              <EyeIcon className="size-3.5" /> Decrypt Amounts
+            </Button>
           ) : null}
         </div>
+
         {emp.isLive && emp.paymentsStatus === "needs-auth" ? (
-          <div className="plate flex flex-wrap items-center justify-between gap-3 p-5">
-            <p className="max-w-md text-sm text-muted-foreground">Your payment history comes from what your employers recorded for this wallet. Sign in with one free signature to see it. It is not a transaction and costs nothing.</p>
-            <Button variant="outline" disabled={emp.paymentsSigningIn} onClick={() => void emp.signInForPayments()}>{emp.paymentsSigningIn ? "Waiting for your wallet…" : "Sign in with wallet"}</Button>
+          <div className="plate flex flex-wrap items-center justify-between gap-4 p-5">
+            <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+              Your payment history is linked to employer payroll records. Sign in with a gasless signature to load your payments.
+            </p>
+            <Button size="sm" disabled={emp.paymentsSigningIn} onClick={() => void emp.signInForPayments()}>
+              {emp.paymentsSigningIn ? "Signing…" : "Sign in to view history"}
+            </Button>
           </div>
         ) : emp.isLive && emp.paymentsStatus === "loading" ? (
-          <div className="plate p-8 text-center text-sm text-muted-foreground">Loading your payments…</div>
+          <div className="plate p-8 text-center text-xs text-muted-foreground">Loading payment records…</div>
         ) : emp.isLive && emp.paymentsStatus === "error" ? (
-          <p role="alert" className="plate border-destructive/30 bg-failed-soft p-5 text-[13.5px] text-destructive">{emp.paymentsError}</p>
+          <div role="alert" className="plate border-destructive/30 bg-failed-soft p-5 text-xs text-destructive">
+            {emp.paymentsError}
+          </div>
         ) : emp.payments.length === 0 ? (
-          <div className="plate p-8 text-center text-sm text-muted-foreground">Account active. Nothing recorded yet. When an employer pays this wallet through the app, it shows up here.</div>
+          <EmptyState
+            icon={<WalletIcon className="size-5" />}
+            title="No payments received yet"
+            description="When an employer executes a payroll run to your wallet, the encrypted transfer details will appear here."
+          />
         ) : (
-          <ul className="plate overflow-hidden">
-            {emp.payments.map((p, i) => (
-              <li key={p.id} className="row-hover flex items-center justify-between gap-4 border-b px-4 py-3.5 last:border-b-0">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{p.from}</p>
-                  <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                    {p.date}
-                    {p.employer ? <span className="font-mono">from {shortAddress(p.employer)}</span> : null}
-                    <a href={`https://explorer.solana.com/tx/${p.signature}?cluster=devnet`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono underline-offset-2 hover:text-foreground hover:underline">
-                      {p.signature.slice(0, 6)}… <ExternalLinkIcon className="size-3" />
-                    </a>
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  {p.status ? <StatusBadge tone={p.status === "pending" ? "pending" : "neutral"} className="hidden sm:inline-flex">{p.status === "pending" ? "Pending" : "Applied"}</StatusBadge> : null}
-                  <span className="text-[15px]"><Cipher value={formatUsdc(p.amount)} seed={`pay-${p.id}`} revealed={shown} delay={i * 120} suffix="USDC" /></span>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="plate overflow-hidden">
+            <ul className="divide-y divide-border/60">
+              {emp.payments.map((p, i) => (
+                <li key={p.id} className="row-hover flex items-center justify-between gap-4 px-5 py-4 transition-colors">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-medium text-foreground">{p.from}</p>
+                      {p.status ? (
+                        <StatusBadge tone={p.status === "pending" ? "pending" : "neutral"} className="text-[10.5px]">
+                          {p.status === "pending" ? "Pending" : "Applied"}
+                        </StatusBadge>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span>{p.date}</span>
+                      {p.employer ? <span className="font-mono">from {shortAddress(p.employer)}</span> : null}
+                      <a
+                        href={`https://explorer.solana.com/tx/${p.signature}?cluster=devnet`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-mono hover:text-foreground hover:underline"
+                        title="View transaction on Solana Explorer"
+                      >
+                        {p.signature.slice(0, 6)}…{p.signature.slice(-4)}
+                        <ExternalLinkIcon className="size-3" />
+                      </a>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <Cipher
+                      value={formatUsdc(p.amount)}
+                      seed={`pay-${p.id}`}
+                      revealed={shown}
+                      delay={i * 90}
+                      suffix="USDC"
+                      className="font-mono text-base font-semibold tnum"
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
-        <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-          Your balances above are decrypted from the chain. The per-payment list comes from your employer&apos;s payroll record, because the chain only stores the combined encrypted balance. The amounts are what the employer recorded; the transaction link lets you check that the payment was sent.
-        </p>
       </section>
-    </>
+
+      <DisclosureCard
+        title="Privacy & Decryption Architecture"
+        description="Learn how your balances and payment details remain confidential on Solana."
+      >
+        <p className="mb-2">
+          Your balances above are decrypted client-side directly from your Token-2022 confidential account using ElGamal key pairs derived from your wallet signature.
+        </p>
+        <p>
+          On-chain, third parties only observe encrypted ciphertext and zero-knowledge proofs. Payment memos and historic receipts are securely stored off-chain and verified against on-chain transaction signatures.
+        </p>
+      </DisclosureCard>
+    </div>
   );
 }

@@ -14,6 +14,7 @@ import { OPERATOR_TTL_OPTIONS, readOperator, type OperatorStatus } from "@/lib/c
 import { rpc } from "@/lib/chain/rpc";
 import { walletPromptOpen } from "@/lib/chain/send";
 import { cn } from "@/lib/utils";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 /** What the admin chose on the payroll page. `enabled` mirrors the chain: it is true exactly while an authorization is live. */
 export interface AutoPayrollSettings {
@@ -180,35 +181,38 @@ export function OperatorPanel({ settings, onChange, recipients, locked }: { sett
   const tooShort = !live && settings.ttlSeconds < estimate;
 
   return (
-    <section className="plate enter p-5" aria-label="Automatic payroll" style={{ ["--i" as string]: 2 }}>
+    <section className="plate enter p-5 sm:p-6" aria-label="Automatic payroll" style={{ ["--i" as string]: 2 }}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="font-sans text-sm font-semibold tracking-normal">Automatic payroll</h2>
-          <p className="mt-1 max-w-xl text-[13px] text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">Automatic Payroll Helper</h2>
+            <InfoTooltip content="Approve once up-front to allow your local helper key to sign the 6-7 transactions per employee automatically without manual wallet popups for each transfer." />
+          </div>
+          <p className="mt-1 max-w-xl text-xs text-muted-foreground">
             {live
-              ? "On. Your payroll helper pays everyone with no wallet popups, until the timer or the payment limit runs out."
+              ? "Active: Your payroll helper signs each transfer automatically without wallet prompts until the time limit expires."
               : busy === "authorizing"
-                ? "Waiting for your wallet. Approve it once and payroll can then run without more popups."
-                : "Off: your wallet approves each payment, one by one. Turn it on to approve once, up front, and then run payroll hands-free."}
+                ? "Awaiting single wallet approval to activate hands-free helper mode…"
+                : "Approve once up front to execute the entire batch hands-free without individual transaction popups."}
           </p>
         </div>
-        <Switch checked={live || busy === "authorizing"} onCheckedChange={onSwitch} disabled={locked || !!busy} aria-label="Automatic payroll" />
+        <Switch checked={live || busy === "authorizing"} onCheckedChange={onSwitch} disabled={locked || !!busy} aria-label="Automatic payroll switch" />
       </div>
 
-      <div className="mt-4 grid gap-4 border-t pt-4 sm:grid-cols-2">
+      <div className="mt-4 grid gap-4 border-t border-border/60 pt-4 sm:grid-cols-2">
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Stays on for</p>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">Authorization Duration</p>
           <Segmented
-            label="How long automatic payroll stays on"
+            label="Helper active duration"
             value={String(settings.ttlSeconds)}
             onChange={(v) => editable && onChange({ ...settings, ttlSeconds: Number(v) })}
             options={OPERATOR_TTL_OPTIONS.map((o) => ({ value: String(o.seconds), label: o.label }))}
             className={cn(!editable && "pointer-events-none opacity-60")}
           />
-          {tooShort ? <p className="mt-1 text-xs text-pending">A run of {recipients} can take about {Math.ceil(estimate / 60)} min (roughly 30 s per person on devnet). Pick a longer time or it may run out mid-run.</p> : null}
+          {tooShort ? <p className="mt-1 text-xs text-pending">A run of {recipients} can take ~{Math.ceil(estimate / 60)} min. Consider a longer window.</p> : null}
         </div>
         <div>
-          <label htmlFor="max-payments" className="mb-1.5 block text-xs font-medium text-muted-foreground">Most payments it may make</label>
+          <label htmlFor="max-payments" className="mb-1.5 block text-xs font-medium text-muted-foreground">Payment Cap Limit</label>
           <input
             id="max-payments"
             type="number"
@@ -219,28 +223,28 @@ export function OperatorPanel({ settings, onChange, recipients, locked }: { sett
             onChange={(e) => onChange({ ...settings, maxPayments: Math.max(recipients, Math.min(500, Math.floor(Number(e.target.value) || recipients))) })}
             className="h-9 w-28 rounded-lg border bg-background px-3 font-mono text-sm tnum disabled:opacity-60"
           />
-          <p className="mt-1 text-xs text-muted-foreground">{live ? "Payments left." : `At least ${recipients}, the people in this run.`} It can&apos;t limit the amount, because amounts are encrypted.</p>
+          <p className="mt-1 text-xs text-muted-foreground">{live ? "Payments remaining." : `Minimum ${recipients} (recipients in batch).`}</p>
         </div>
       </div>
 
       {live && shown ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-verified/30 bg-verified-soft px-3 py-2.5 text-[13px]" role="status">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-verified/30 bg-verified-soft/50 p-3 text-xs" role="status">
           <div>
-            <p className="font-medium">
-              Time left <span className={cn("font-mono tnum", secondsLeft <= 10 && "text-pending")}>{mmss(secondsLeft)}</span>
-              <span className="text-muted-foreground"> · {shown.paymentsLeft} payment{shown.paymentsLeft === 1 ? "" : "s"} left</span>
+            <p className="font-medium text-foreground">
+              Helper active: <span className={cn("font-mono font-semibold tnum", secondsLeft <= 10 && "text-pending")}>{mmss(secondsLeft)}</span>
+              <span className="text-muted-foreground"> · {shown.paymentsLeft} payments remaining</span>
             </p>
-            <p className="text-xs text-muted-foreground">Payroll helper holds {balance === null ? "…" : `${sol(balance)} SOL`}. Turn the switch off to revoke it and get that SOL back.</p>
+            <p className="text-[11px] text-muted-foreground">Helper holds {balance === null ? "…" : `${sol(balance)} SOL`} for rent. Toggle off anytime to reclaim SOL.</p>
           </div>
         </div>
       ) : !live && balance !== null && balance > 10_000n ? (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/40 px-3 py-2.5 text-[13px]">
-          <p className="text-xs text-muted-foreground">Payroll helper still holds {sol(balance)} SOL from earlier.</p>
-          <Button size="sm" variant="outline" onClick={reclaim} disabled={!!busy || locked}>Reclaim SOL</Button>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/30 p-3 text-xs">
+          <p className="text-muted-foreground">Helper key has {sol(balance)} SOL from previous authorization.</p>
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={reclaim} disabled={!!busy || locked}>Reclaim SOL</Button>
         </div>
       ) : null}
       {wallet ? <div className="mt-2">{wallet.deadline ? <WalletCountdown deadline={wallet.deadline} note={wallet.note} /> : <p className="enter-fade text-xs font-medium text-primary" role="status">{wallet.note}</p>}</div> : null}
-      {!ready ? <p className="mt-3 text-xs text-muted-foreground">Unlock your keys to turn this on or see its status.</p> : null}
+      {!ready ? <p className="mt-3 text-xs text-muted-foreground">Unlock keys to enable automatic helper authorization.</p> : null}
     </section>
   );
 }

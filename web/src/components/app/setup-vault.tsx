@@ -1,5 +1,6 @@
 "use client";
 
+import { ShieldCheckIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCompanySetup } from "@/components/chain/use-company-setup";
@@ -8,18 +9,16 @@ import { StepList, type Step } from "@/components/crypto/step-list";
 import { useEmployee } from "@/components/app/employee-context";
 import { SolNotice } from "@/components/app/sol-notice";
 import { useStepper } from "@/hooks/use-stepper";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { PageHeader } from "./page-header";
 import { useVault } from "./vault-context";
 
-// One transaction: initialize_vault + configure_treasury_account (create the vault-owned treasury token account,
-// make room for the confidential extension, register the admin's key), preceded by a key proof.
 const STEPS: Step[] = [
-  { label: "Prove you hold the key", detail: "A short proof, built in your browser, that the key you are registering is really yours.", visibility: "encrypted" },
-  { label: "Approve in your wallet", detail: "One transaction. Your wallet shows it to you before you sign." },
-  { label: "Create the vault and its treasury", detail: "In that one transaction: creates your vault (only your wallet can administer it), an encrypted treasury account the vault owns, and registers your key on it." },
+  { label: "Prove you hold the key", detail: "A short proof, built in your browser, verifying your confidential admin key.", visibility: "encrypted" },
+  { label: "Approve in your wallet", detail: "Single atomic transaction for initialization.", visibility: "public" },
+  { label: "Initialize vault & treasury", detail: "Creates your vault PDA, encrypts treasury token account, and binds authority.", visibility: "encrypted" },
 ];
 
-/** First-run flow for a wallet with no company. The rest of the admin area opens once this finishes. */
 export function SetupVault() {
   const keys = useKeys();
   const v = useVault();
@@ -28,25 +27,56 @@ export function SetupVault() {
   const mock = useStepper(STEPS.length, 950, () => {
     v.initialize();
     v.configureTreasury();
-    toast.success("Vault ready", { description: "Next, fund the treasury." });
+    toast.success("Vault ready", { description: "Next, fund the treasury to enable payroll runs." });
   });
   const act = v.isLive ? live : mock;
   const repairing = v.isLive && v.vault.created && !v.vault.treasuryConfigured;
 
   return (
-    <>
-      <PageHeader title="Set up your payroll vault" description="One-time setup, one transaction. Your wallet pays the network fees." />
-      <section className="plate enter mx-auto max-w-xl p-6" style={{ ["--i" as string]: 1 }}>
+    <div className="space-y-6">
+      <PageHeader
+        title="Set Up Payroll Vault"
+        description="One-time on-chain deployment. Creates your company vault PDA and initializes encrypted Token-2022 treasury."
+      />
+      <section className="plate enter mx-auto max-w-xl p-6 sm:p-8" style={{ ["--i" as string]: 1 }}>
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4 text-xs leading-relaxed text-muted-foreground">
+          <ShieldCheckIcon className="mt-0.5 size-4 shrink-0 text-primary" />
+          <div>
+            <p className="font-medium text-foreground">Non-Custodial Vault Architecture</p>
+            <p className="mt-0.5">Only your connected wallet holds administrative authority over this vault. Keys remain securely in memory.</p>
+          </div>
+        </div>
+
         <SolNotice />
+
         {repairing ? (
-          <p className="mb-4 rounded-lg bg-muted/60 p-3 text-[13px] leading-relaxed text-muted-foreground">Your vault was created earlier but its treasury was never configured. This finishes the setup.</p>
+          <p className="mb-4 rounded-xl bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">
+            Your vault was initialized earlier but its treasury configuration was interrupted. This will complete the setup.
+          </p>
         ) : null}
-        <StepList steps={STEPS} completed={act.completed} running={act.running} />
-        {v.isLive && live.error ? <p role="alert" className="mt-3 rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">{live.error}</p> : null}
-        {v.isLive && live.phase === "done" ? <p role="status" className="mt-3 rounded-lg bg-verified-soft px-3 py-2 text-[13px] text-verified">Confirmed on devnet. Reading your new vault…</p> : null}
-        {v.isLive && !live.canSign ? <p className="mt-3 text-[13px] text-muted-foreground">{live.cannotSignReason}</p> : null}
+
+        <div className="mt-6 rounded-xl border bg-muted/20 p-4">
+          <StepList steps={STEPS} completed={act.completed} running={act.running} />
+        </div>
+
+        {v.isLive && live.error ? (
+          <p role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-failed-soft p-3 text-xs text-destructive">
+            {live.error}
+          </p>
+        ) : null}
+
+        {v.isLive && live.phase === "done" ? (
+          <p role="status" className="mt-4 rounded-xl bg-verified-soft p-3 text-xs text-verified">
+            Vault confirmed on devnet. Synchronizing configuration…
+          </p>
+        ) : null}
+
+        {v.isLive && !live.canSign ? (
+          <p className="mt-4 text-xs text-muted-foreground">{live.cannotSignReason}</p>
+        ) : null}
+
         <Button
-          className="mt-5 h-10 w-full"
+          className="mt-6 h-11 w-full text-sm font-medium"
           disabled={act.running || !emp.hasSol || (v.isLive && (live.phase === "done" || !live.canSign)) || (!v.isLive && mock.done)}
           onClick={() => {
             if (!keys.requireKeys()) return;
@@ -57,12 +87,13 @@ export function SetupVault() {
             mock.run();
           }}
         >
-          {act.running ? "Setting up…" : v.isLive && live.error ? "Try again" : keys.ready ? (repairing ? "Finish setup" : "Create vault") : "Unlock keys to continue"}
+          {act.running ? "Deploying Vault…" : v.isLive && live.error ? "Retry Setup" : keys.ready ? (repairing ? "Complete Setup" : "Deploy Vault") : "Unlock Keys to Continue"}
         </Button>
-        <p className="mt-3 text-center text-xs leading-relaxed text-muted-foreground">
-          Your encryption key is derived from a wallet signature and never leaves this browser. The auditor key is set on the mint, not here.
+
+        <p className="mt-3 text-center text-[11.5px] text-muted-foreground">
+          Your encryption key never leaves this browser tab. Gas & account rent are paid in SOL by your wallet.
         </p>
       </section>
-    </>
+    </div>
   );
 }

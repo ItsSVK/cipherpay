@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { PlusIcon, SearchIcon, Trash2Icon, UserPlusIcon } from "lucide-react";
+import { PlusIcon, SearchIcon, Trash2Icon, UserPlusIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,10 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { PayrollGate } from "@/components/data/payroll-gate";
 import { useVault } from "@/components/app/vault-context";
 import { copyInvite } from "@/lib/payroll/invite";
+import { InfoTooltip } from "@/components/ui/info-tooltip";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
+import { EmptyState } from "@/components/app/empty-state";
+import { DisclosureCard } from "@/components/app/disclosure-card";
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -25,24 +29,26 @@ function AddAddress({ onAdd, company }: { onAdd: (a: { name: string; wallet: str
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const errors = {
-    name: name.trim() ? "" : "Enter a name.",
-    wallet: BASE58.test(wallet.trim()) ? "" : "Paste a valid Solana address (32 to 44 characters).",
+    name: name.trim() ? "" : "Enter a recipient name.",
+    wallet: BASE58.test(wallet.trim()) ? "" : "Paste a valid Solana address (32 to 44 base58 characters).",
   };
   const valid = !errors.name && !errors.wallet;
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<Button />}>
-        <PlusIcon /> Add address
+      <SheetTrigger render={<Button className="h-9 gap-1.5 text-xs font-medium" />}>
+        <PlusIcon className="size-3.5" /> Add Address
       </SheetTrigger>
       <SheetContent className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle className="text-lg">Add an address</SheetTitle>
-          <SheetDescription>Saved to your list. You choose the amount each time you run payroll. The owner must activate their account before they can be paid.</SheetDescription>
+          <SheetTitle className="text-lg">Add Saved Address</SheetTitle>
+          <SheetDescription>
+            Saved to your company directory. Payout amounts are chosen when you create or execute payroll.
+          </SheetDescription>
         </SheetHeader>
         <form
           id="add-address"
-          className="grid gap-4 px-4"
+          className="grid gap-4 px-4 py-2"
           onSubmit={async (e) => {
             e.preventDefault();
             setTouched(true);
@@ -51,31 +57,56 @@ function AddAddress({ onAdd, company }: { onAdd: (a: { name: string; wallet: str
             try {
               await onAdd({ name: name.trim(), wallet: wallet.trim() });
             } catch (err) {
-              // Saved to the database for real wallets, so this can legitimately fail: duplicate address, signed out, offline.
-              toast.error("Couldn't add it", { description: err instanceof Error ? err.message : "Try again." });
+              toast.error("Couldn't add address", { description: err instanceof Error ? err.message : "Try again." });
               setSaving(false);
               return;
             }
-            toast.success(`${name.trim()} added`, {
-              description: "They need to set up their account once before they can be paid. Send them the invite.",
-              action: { label: "Copy invite", onClick: () => { void copyInvite(company).then((ok) => toast(ok ? "Invite copied" : "Could not copy. Select the text manually.")); } },
+            toast.success(`${name.trim()} added to directory`, {
+              description: "Send them the invite link so they can activate their confidential account.",
+              action: {
+                label: "Copy invite",
+                onClick: () => {
+                  void copyInvite(company).then((ok) => toast(ok ? "Invite link copied" : "Could not copy link"));
+                },
+              },
             });
-            setName(""); setWallet(""); setTouched(false); setSaving(false); setOpen(false);
+            setName("");
+            setWallet("");
+            setTouched(false);
+            setSaving(false);
+            setOpen(false);
           }}
         >
-          {[
-            { id: "addr-name", label: "Name", value: name, set: setName, error: errors.name, ph: "Jordan Lee" },
-            { id: "addr-wallet", label: "Address", value: wallet, set: setWallet, error: errors.wallet, ph: "Solana address" },
-          ].map((f) => (
-            <div key={f.id} className="grid gap-1.5">
-              <Label htmlFor={f.id}>{f.label}</Label>
-              <Input id={f.id} value={f.value} placeholder={f.ph} onChange={(e) => f.set(e.target.value)} aria-invalid={touched && !!f.error} className="h-10" />
-              <p className="min-h-4 text-xs text-destructive transition-opacity duration-200" style={{ opacity: touched && f.error ? 1 : 0 }}>{f.error}</p>
-            </div>
-          ))}
+          <div className="grid gap-1.5">
+            <Label htmlFor="addr-name">Recipient Name</Label>
+            <Input
+              id="addr-name"
+              value={name}
+              placeholder="e.g. Jordan Lee"
+              onChange={(e) => setName(e.target.value)}
+              aria-invalid={touched && !!errors.name}
+              className="h-10"
+            />
+            {touched && errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="addr-wallet">Solana Wallet Address</Label>
+            <Input
+              id="addr-wallet"
+              value={wallet}
+              placeholder="e.g. 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+              onChange={(e) => setWallet(e.target.value)}
+              aria-invalid={touched && !!errors.wallet}
+              className="h-10 font-mono text-xs"
+            />
+            {touched && errors.wallet ? <p className="text-xs text-destructive">{errors.wallet}</p> : null}
+          </div>
         </form>
         <SheetFooter>
-          <Button type="submit" form="add-address" className="h-10" disabled={saving}><UserPlusIcon /> {saving ? "Saving…" : "Save address"}</Button>
+          <Button type="submit" form="add-address" className="h-10 w-full" disabled={saving}>
+            <UserPlusIcon className="mr-1.5 size-4" /> {saving ? "Saving…" : "Save to Directory"}
+          </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>
@@ -94,80 +125,158 @@ function Addresses() {
   const v = useVault();
   const rows = v.vault.employees;
   const [q, setQ] = useState("");
-  const filtered = useMemo(() => rows.filter((e) => `${e.name} ${e.wallet}`.toLowerCase().includes(q.toLowerCase())), [rows, q]);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  const filtered = useMemo(
+    () => rows.filter((e) => `${e.name} ${e.wallet}`.toLowerCase().includes(q.toLowerCase())),
+    [rows, q]
+  );
   const pending = rows.filter((e) => !v.isActivated(e.wallet)).length;
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
-        title="Addresses"
-        description={`${rows.length} saved ${rows.length === 1 ? "address" : "addresses"}. Names and addresses here are your own records, stored off-chain. Amounts are chosen when you run payroll.`}
+        title="Saved Addresses"
+        description={`${rows.length} team member${rows.length === 1 ? "" : "s"} in directory. Stored off-chain and mapped to confidential token accounts.`}
         actions={<AddAddress onAdd={v.addAddress} company={v.vault.name} />}
       />
+
       {pending > 0 ? (
-        <p className="enter mb-4 rounded-lg border border-pending/25 bg-pending-soft px-3.5 py-2.5 text-[13.5px] text-pending" style={{ ["--i" as string]: 1 }}>
-          {pending} {pending === 1 ? "person has" : "people have"} not set up an account yet, so they can&apos;t be paid and will be skipped until they do. Use Copy invite to tell them how.
-        </p>
+        <div className="enter flex flex-wrap items-center justify-between gap-3 rounded-xl border border-pending/30 bg-pending-soft/70 px-4 py-3 text-xs text-pending" style={{ ["--i" as string]: 1 }}>
+          <div className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-pending [animation:dot-pulse_1.5s_ease-in-out_infinite]" />
+            <span>
+              {pending} recipient{pending === 1 ? " has" : "s have"} not yet activated their confidential account and cannot be paid until activated.
+            </span>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 border-pending/30 bg-card text-xs text-pending hover:bg-pending-soft"
+            onClick={() => {
+              void copyInvite(v.vault.name).then((ok) => toast(ok ? "Invite instructions copied" : "Could not copy"));
+            }}
+          >
+            Copy Activation Invite
+          </Button>
+        </div>
       ) : null}
+
       <div className="plate enter overflow-hidden" style={{ ["--i" as string]: 2 }}>
-        <div className="border-b p-3">
-          <div className="relative max-w-xs">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or address" aria-label="Search addresses" className="h-9 pl-8" />
+        <div className="border-b p-3 bg-muted/20">
+          <div className="relative max-w-sm">
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search by name or Solana address…"
+              aria-label="Search addresses"
+              className="h-9 pl-9 text-xs"
+            />
           </div>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="pl-5">Name</TableHead>
-              <TableHead>Address</TableHead>
-              <TableHead className="text-right">Account</TableHead>
-              <TableHead className="w-12 pr-4"><span className="sr-only">Remove</span></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.map((e, i) => (
-              <TableRow key={e.id} className="row-hover enter" style={{ ["--i" as string]: Math.min(i, 8) }}>
-                <TableCell className="pl-5">
-                  <p className="font-medium">{e.name}</p>
-                </TableCell>
-                <TableCell><span className="inline-flex items-center gap-1"><Address value={e.wallet} /><CopyButton value={e.wallet} label={`Copy ${e.name}'s address`} /></span></TableCell>
-                <TableCell className="text-right">
-                  {v.isActivated(e.wallet) ? (
-                    <StatusBadge tone="verified">Activated</StatusBadge>
-                  ) : (
-                    <span className="inline-flex flex-wrap items-center justify-end gap-2">
-                      <StatusBadge tone="pending">Not activated, can&apos;t be paid yet</StatusBadge>
-                      <Button size="sm" variant="outline" onClick={() => { void copyInvite(v.vault.name).then((ok) => toast(ok ? `Invite for ${e.name} copied` : "Could not copy. Select the text manually.")); }}>
-                        Copy invite
-                      </Button>
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="pr-4 text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remove ${e.name}`}
-                    title={`Remove ${e.name}`}
-                    onClick={() => {
-                      v.removeAddress(e.id).then(
-                        () => toast(`${e.name} removed from your addresses`),
-                        (err) => toast.error("Couldn't remove it", { description: err instanceof Error ? err.message : "Try again." }),
-                      );
-                    }}
-                  >
-                    <Trash2Icon />
-                  </Button>
-                </TableCell>
+
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={<UsersIcon className="size-5" />}
+            title="No addresses saved"
+            description="Add your team members to the directory so you can include them in confidential payroll runs."
+            action={<AddAddress onAdd={v.addAddress} company={v.vault.name} />}
+          />
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center text-xs text-muted-foreground">
+            No recipients matching &ldquo;{q}&rdquo;.
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-5 text-xs">Name</TableHead>
+                <TableHead className="text-xs">Solana Address</TableHead>
+                <TableHead className="text-right text-xs">Account Status</TableHead>
+                <TableHead className="w-12 pr-4"><span className="sr-only">Actions</span></TableHead>
               </TableRow>
-            ))}
-            {filtered.length === 0 ? (
-              <TableRow className="hover:bg-transparent"><TableCell colSpan={4} className="py-12 text-center text-muted-foreground">{rows.length === 0 ? "No addresses saved yet. Add your first address." : <>No one matches &ldquo;{q}&rdquo;.</>}</TableCell></TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((e, i) => (
+                <TableRow key={e.id} className="row-hover enter" style={{ ["--i" as string]: Math.min(i, 8) }}>
+                  <TableCell className="pl-5">
+                    <p className="font-medium text-sm text-foreground">{e.name}</p>
+                  </TableCell>
+                  <TableCell>
+                    <span className="inline-flex items-center gap-1 font-mono text-xs">
+                      <Address value={e.wallet} />
+                      <CopyButton value={e.wallet} label={`Copy ${e.name}'s address`} />
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {v.isActivated(e.wallet) ? (
+                      <StatusBadge tone="verified">Activated</StatusBadge>
+                    ) : (
+                      <span className="inline-flex flex-wrap items-center justify-end gap-2">
+                        <StatusBadge tone="pending" className="text-[10.5px]">Pending setup</StatusBadge>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs text-primary hover:text-primary"
+                          onClick={() => {
+                            void copyInvite(v.vault.name).then((ok) => toast(ok ? `Invite for ${e.name} copied` : "Could not copy"));
+                          }}
+                        >
+                          Send invite
+                        </Button>
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="pr-4 text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove ${e.name}`}
+                      title={`Remove ${e.name}`}
+                      onClick={() => setDeleteTarget({ id: e.id, name: e.name })}
+                      className="text-muted-foreground hover:text-destructive"
+                    >
+                      <Trash2Icon className="size-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
       </div>
-    </>
+
+      <DisclosureCard
+        title="Directory Storage & Privacy"
+        description="How address mappings and recipient names are preserved securely."
+      >
+        <p className="mb-2">
+          Recipient names and wallet pairings are held in encrypted local or database storage, tied strictly to your company&apos;s vault administrator wallet.
+        </p>
+        <p>
+          On-chain, only anonymous Token-2022 confidential accounts interact. The public cannot associate recipient identities with confidential transaction logs.
+        </p>
+      </DisclosureCard>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Remove Saved Address?"
+        description={`Are you sure you want to remove ${deleteTarget?.name ?? "this address"} from your saved directory? They can be re-added anytime.`}
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          try {
+            await v.removeAddress(deleteTarget.id);
+            toast.success(`${deleteTarget.name} removed from directory`);
+          } catch (err) {
+            toast.error("Couldn't remove address", { description: err instanceof Error ? err.message : "Try again." });
+          }
+          setDeleteTarget(null);
+        }}
+      />
+    </div>
   );
 }
