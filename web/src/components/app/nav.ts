@@ -18,7 +18,7 @@ export interface NavGroup {
 
 const COMPANY: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboardIcon },
-  { href: "/admin/employees", label: "Employees", icon: UsersIcon },
+  { href: "/admin/addresses", label: "Addresses", icon: UsersIcon },
   { href: "/admin/payroll", label: "Run payroll", icon: SendIcon },
   { href: "/admin/split", label: "Split payout", icon: SplitIcon },
 ];

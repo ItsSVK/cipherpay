@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
-import { emptyAccount, newVault, seedAccounts, seedVaults, SOL, type Account, type Employee, type Run, type VaultState } from "./data";
+import { emptyAccount, newVault, seedAccounts, seedVaults, SOL, type Account, type Employee, type Payroll, type Run, type VaultState } from "./data";
 
 /**
  * MOCK backend: stands in for D1 (employee lists, run history) and for on-chain reads (balances,
@@ -23,6 +23,8 @@ interface Store {
   setPaused: (admin: string, paused: boolean) => void;
   addEmployee: (admin: string, employee: Employee) => void;
   removeEmployee: (admin: string, id: string) => void;
+  addPayroll: (admin: string, payroll: Payroll) => void;
+  removePayroll: (admin: string, id: string) => void;
   /** pay_employee, once per recipient: moves value from the treasury to the recipient's pending balance. */
   pay: (admin: string, wallet: string, amount: bigint, signature: string, label: string) => void;
   recordRun: (admin: string, run: Run) => void;
@@ -61,6 +63,8 @@ export function DemoStoreProvider({ children }: { children: React.ReactNode }) {
       setPaused: (admin, paused) => patchVault(admin, (v) => ({ ...v, paused })),
       addEmployee: (admin, employee) => patchVault(admin, (v) => ({ ...v, employees: [employee, ...v.employees] })),
       removeEmployee: (admin, id) => patchVault(admin, (v) => ({ ...v, employees: v.employees.filter((e) => e.id !== id) })),
+      addPayroll: (admin, payroll) => patchVault(admin, (v) => ({ ...v, payrolls: [payroll, ...v.payrolls] })),
+      removePayroll: (admin, id) => patchVault(admin, (v) => ({ ...v, payrolls: v.payrolls.filter((p) => p.id !== id) })),
       pay: (admin, wallet, amount, signature, label) => {
         patchVault(admin, (v) => ({ ...v, treasury: v.treasury - amount }));
         patchAccount(wallet, (a) => ({

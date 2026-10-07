@@ -23,17 +23,27 @@ export const verifyRequest = z
   })
   .strict();
 
-export const employeeInput = z
+export const addressInput = z
   .object({
     name: z.string().trim().min(1, "Enter a name").max(80),
-    role: z.string().trim().max(60).default("Team member"),
     wallet: walletSchema,
-    amount: amountSchema,
+  })
+  .strict();
+
+export const payrollInput = z
+  .object({
+    name: z.string().trim().min(1, "Enter a name for this payroll").max(80),
+    entries: z
+      .array(z.object({ addressId: z.string().uuid(), amount: amountSchema }).strict())
+      .min(1, "Add at least one address")
+      .max(200)
+      .refine((e) => new Set(e.map((x) => x.addressId)).size === e.length, "Each address can only appear once in a payroll"),
   })
   .strict();
 
 export const runInput = z
   .object({
+    payrollId: z.string().uuid().nullable().optional(),
     label: z.string().trim().min(1).max(120),
     items: z
       .array(

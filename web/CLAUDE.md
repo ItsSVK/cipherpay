@@ -261,7 +261,7 @@ never hardcode them in components. Devnet only; no mainnet code paths.
 Employee list, payout rules and payroll-run history are **off-chain** (decision 5 in `../PRODUCT.md`) and, for real wallets, live in
 **Cloudflare D1 via Drizzle** (decided D6, wired 2026-10-05). Demo wallets keep using the in-memory mock store.
 
-- **Schema** (`src/server/db/schema.ts`, migration in `drizzle/`): `employees`, `payroll_runs`, `payroll_run_items`, plus `auth_nonces` and
+- **Schema** (`src/server/db/schema.ts`, migration in `drizzle/`): `addresses` (renamed from `employees` 2026-10-07, migration `0002`: columns `id, employer, name, wallet, created_at`; `role` and `amount` were dropped, amounts are now chosen per run), `payrolls` + `payroll_entries` (added 2026-10-07, migration `0003`: a named list of (saved address, amount per run); the same address can be in many payrolls at different amounts; an address that is in a payroll cannot be deleted, the API answers 409 naming the payroll), `payroll_runs` (now has a nullable `payroll_id`, set null if the payroll is deleted so history stays), `payroll_run_items`, plus `auth_nonces` and
   `sessions`. Everything is keyed by `employer` = the admin wallet. Amounts are base-unit strings. No keys, ever.
 - **Auth = one wallet signature, then a session.** `POST /api/auth/nonce` returns the exact message to sign (site, wallet, single-use
   nonce, 5-minute expiry; built by `lib/auth/message.ts`), the wallet signs it with `signMessage`, `POST /api/auth/verify` rebuilds the
@@ -269,18 +269,23 @@ Employee list, payout rules and payroll-run history are **off-chain** (decision 
   cookie (7 days). **Only the SHA-256 of the cookie token is stored** and there is **no server secret**, so nothing to put in `.dev.vars`.
   This is a second, separate signature from key derivation (that one is never sent anywhere).
 - **Every route takes "who is calling" from the session only** (`getSessionAddress`), never from the body: the zod schemas are `.strict()`, so
-  a client that sends `employer` gets a 400. Routes: `GET /api/company` (list + runs), `POST /api/employees`, `DELETE /api/employees/[id]`,
+  a client that sends `employer` gets a 400. Routes: `GET /api/company` (`addresses` + runs), `POST /api/addresses` (`{name, wallet}` only), `DELETE /api/addresses/[id]` (409 while it is in a payroll), `POST /api/payrolls` (`{name, entries:[{addressId, amount}]}`, every address must be the caller's own, no repeats, amounts positive; payroll + entries in one batch), `DELETE /api/payrolls/[id]`,
   `POST /api/runs` (totals and counts computed server-side; run + items written in one batch), `/api/auth/{nonce,verify,session,logout}`.
-- **Client:** `components/data/payroll-data.tsx` (`PayrollDataProvider`, `usePayrollData`) loads on connect and exposes `signIn`, `addEmployee`,
-  `removeEmployee`, `recordRun`. A wallet that has not signed in sees `PayrollGate` ("Sign in with wallet") on Employees / Run payroll /
+- **Client:** `components/data/payroll-data.tsx` (`PayrollDataProvider`, `usePayrollData`) loads on connect and exposes `signIn`, `addAddress`,
+  `removeAddress`, `addPayroll`, `removePayroll`, `recordRun(label, items, payrollId)`. A wallet that has not signed in sees `PayrollGate` ("Sign in with wallet") on Addresses / Run payroll /
   Split, and an inline prompt for run history on the Overview. Disconnect also calls `/api/auth/logout`. `useVault()` merges this data over the
-  chain-derived vault flags; `ChainProvider` checks activation for the persisted employees.
+  chain-derived vault flags (`vault.employees` = saved addresses, `vault.payrolls` = payrolls with amounts); `ChainProvider` checks activation for the persisted employees.
+- **Payrolls (2026-10-07).** Run payroll now starts from a payroll: `components/app/payroll-picker.tsx` has `PayrollPicker` (choose, delete) and `AddPayroll` (a sheet:
+  name, then rows of saved-address dropdown + amount, one submit). The page maps the chosen payroll's entries to the run engine's recipient list, so the engine is
+  unchanged; a run is saved with its `payrollId`. Demo wallets get the same flow from the mock store (seeded with one payroll). Verified against the running dev
+  server + local D1 with throwaway wallets (valid create, same address in two payrolls, duplicate / foreign address / zero amount / no entries / extra field / no session
+  rejected, address delete blocked then allowed, payroll delete keeps the run, other wallets can't see or touch them). **Not browser-run.** Remote D1 needs `bun run db:migrate:remote`.
 - **Verified** (devnet-forked surfpool + local D1, real UI): one wallet prompt to sign in, 401 before / 200 after, rows survive a reload with no
   second prompt, duplicate wallet 409, extra `employer` field 400, bad address / amount / signature 400, remove works, run history shows
   after reload, logout ends the session, DB rows are scoped to the signing wallet and sessions hold only a hash. Unit tests cover the message
   and signature verification (tamper, wrong wallet, wrong site, wrong length).
 - **Known gaps before real users:** (the nonce rate limit is done, see "Hardening" below); a run is saved only when it finishes completely (payments from a
-  partly failed run are on-chain but not in history until the indexer reconciles); no edit-salary endpoint yet; cookie is `Secure` only in
+  partly failed run are on-chain but not in history until the indexer reconciles); no edit-payroll endpoint yet (delete and recreate); cookie is `Secure` only in
   production builds; CSRF relies on `SameSite=Lax` (cross-site POSTs carry no cookie).
 - **Deploy:** `bun run db:create`, paste the id into `wrangler.jsonc`, `bun run db:migrate:remote`, then `bun run deploy`. The first deploy
   also needs `NEXT_PUBLIC_SOLANA_RPC_URL` set in the BUILD environment (it is inlined into the browser bundle).
@@ -387,8 +392,7 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   an employer could record a payment that never happened, which is why every row carries its transaction signature and the page says so. Real indexer
   stays Phase 2. Verified against the running dev server + local D1 with 3 throwaway wallets: 401 without a session, each wallet sees only payments addressed
   to it, failed items and signature-less items are excluded, the employer sees none. **Split:** the page runs the real engine (`useLiveRun`, the same `payOne`
-  as payroll, strictly sequential) for real wallets; the tax and fee destinations are typed-in wallets (`lib/payroll/split-plan.ts`: `checkSplitWallets`
-  rejects bad or duplicate addresses, `splitRunItems` drops 0% destinations), their activation is read with `readActivation`, the Automatic payroll switch
+  as payroll, strictly sequential) for real wallets; the destinations are typed-in wallets (see the next entry), their activation is read with `readActivation`, the Automatic payroll switch
   is on the page, a failed destination can be retried (`Retry failed`), and the run is saved to history like payroll. Destinations are NOT persisted (React
   state only; a saved split rule is a later feature). Verified on a devnet-forked surfpool through our own lib code: 10.00 at 79/20/1 -> 7.90 / 2.00 / 0.10
   decrypt exactly, treasury drops by exactly 10.00, an unactivated destination is refused before anything moves. **Not browser-run.**
@@ -413,6 +417,18 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   `proof-client.test.ts` (worker really used, caller's keys not zeroed, WrongKeyError type preserved, proofs verify, errors propagate). **Gotcha found on the way:**
   a STATIC import of `@solana-program/token-2022/confidential` (or `@solana/zk-sdk`) anywhere in a module a page imports breaks `next build` prerendering
   (`ENOENT ... zk-sdk/dist/node/index_bg.wasm`) while `next dev` hides it; keep those imports lazy (`await import`) and run `next build` after touching imports.
+- **Split payout is a rule the admin writes (2026-10-07).** No more fixed three destinations. The admin adds up to `MAX_SPLIT_ROWS` (10) destinations, each with a
+  name, a wallet and a percentage (0 to 100, up to 2 decimals), picks one **primary** (it absorbs the rounding remainder and must be above 0%), and can remove rows.
+  Pure logic in `lib/payroll/split-plan.ts` (`parsePercentBps`, `checkSplit`, `toDestinations`, `splitRunItems`, `checkSplitWallets`), 14 tests: a rule must add up to
+  exactly 100%, every row needs a name (the server's 80-character limit), a valid and distinct wallet and a readable percentage; a 0% destination is not paid. Real wallets
+  start from their first payroll recipient at 100%; the demo starts from its three sample wallets (demo checks only "filled in and distinct", its wallets are not real
+  addresses). The page (`admin/split/page.tsx`) shows the unassigned / over-100% amount live, reads activation for ALL typed wallets in one batched call, and Approve explains
+  in words why it cannot go ahead (and highlights the fields) instead of being a dead button. **Not persisted:** the rule lives in page state; saved split presets
+  (a D1 table) are the obvious next step. **Verified:** (1) on a devnet-forked surfpool through our own lib code: 5 destinations (50.5 / 25 / 12.25 / 12.25 / 0 %, the primary
+  is the 3rd row) of a 7.777777 invoice, 4 payments, each holds exactly its part (the primary got the 2 extra base units of rounding), the 0% one holds nothing, the
+  treasury fell by exactly the invoice; (2) in headless Chrome in demo mode: edit a percentage, see "9% left to assign", add a 4th destination, name/wallet errors, a
+  duplicate wallet flagged, remove a row (the primary moves), then approve, unlock keys and execute a hand-built 4-destination rule to completion. The real-wallet
+  version of the page was not clicked through in a browser (no wallet extension); its engine is the same one the chain test used.
 - **The slow-wallet-popup investigation, 2026-10-06 (measured; it is NOT the front end).** Symptom: Phantom's popup appears ~30-40 s after the
   request, so the transaction's ~39 s window has closed by the time it is approved; intermittent, worse after a session has been running a while.
   **Measured in headless Chrome with the real UI instrumented** (main-thread lag probe, PerformanceObserver longtask, hooked `WebAssembly.instantiate`,

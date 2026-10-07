@@ -4,23 +4,28 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { useSignMessage } from "@solana/react";
 import type { UiWalletAccount } from "@wallet-standard/react";
 import { useWallet } from "@/components/wallet/wallet-context";
-import type { Employee, Run } from "@/lib/mock/data";
+import type { Employee, Payroll, Run } from "@/lib/mock/data";
 
 /**
- * The company's payroll list and run history. Real wallets read and write them through the API (D1); demo wallets keep using the
+ * The company's saved addresses and run history. Real wallets read and write them through the API (D1); demo wallets keep using the
  * in-memory mock store, so this reports "demo" and the pages read the store instead.
  *
  * "needs-auth" means this wallet has not signed in yet. One free wallet signature starts a session, which is what proves to the
- * server that the caller owns the wallet before it hands over (or accepts) a salary list.
+ * server that the caller owns the wallet before it hands over (or accepts) your saved addresses.
  */
 export type PayrollDataStatus = "demo" | "needs-auth" | "loading" | "ready" | "error";
 
-export interface NewEmployee {
+/** A saved address: who the employer pays, no amount (amounts are entered per run). */
+export interface NewAddress {
   name: string;
-  role?: string;
   wallet: string;
-  /** Base units. */
-  salary: bigint;
+}
+
+/** A new payroll: a name and (saved address id, amount) pairs. */
+export interface NewPayroll {
+  name: string;
+  /** Amounts in base units. */
+  entries: { addressId: string; amount: bigint }[];
 }
 
 /** One confirmed payment the employer's record says was sent to this wallet. `amount` is what the employer recorded; the signature lets anyone check it on-chain. */
@@ -44,7 +49,9 @@ export interface RunItemInput {
 
 interface PayrollData {
   status: PayrollDataStatus;
+  /** Saved addresses, as payroll recipients with no amount yet (`salary` is 0 until the run page asks for one). */
   employees: Employee[];
+  payrolls: Payroll[];
   runs: Run[];
   /** Payments addressed to the connected wallet, newest first. Empty until signed in. */
   payments: ReceivedPayment[];
@@ -52,18 +59,22 @@ interface PayrollData {
   signingIn: boolean;
   signIn: () => Promise<void>;
   refresh: () => Promise<void>;
-  addEmployee: (e: NewEmployee) => Promise<void>;
-  removeEmployee: (id: string) => Promise<void>;
-  recordRun: (label: string, items: RunItemInput[]) => Promise<void>;
+  addAddress: (a: NewAddress) => Promise<void>;
+  removeAddress: (id: string) => Promise<void>;
+  addPayroll: (p: NewPayroll) => Promise<Payroll>;
+  removePayroll: (id: string) => Promise<void>;
+  recordRun: (label: string, items: RunItemInput[], payrollId?: string | null) => Promise<void>;
 }
 
 const Ctx = createContext<PayrollData | null>(null);
 
 interface ApiPayment { id: string; employer: string; label: string; createdAt: string; amount: string; signature: string }
-interface ApiEmployee { id: string; name: string; role: string; wallet: string; salary: string }
+interface ApiAddress { id: string; name: string; wallet: string }
+interface ApiPayroll { id: string; name: string; entries: { addressId: string; name: string; wallet: string; amount: string }[] }
+const toPayroll = (p: ApiPayroll): Payroll => ({ id: p.id, name: p.name, entries: p.entries.map((e) => ({ id: e.addressId, name: e.name, wallet: e.wallet, amount: BigInt(e.amount) })) });
 interface ApiRun { id: string; label: string; createdAt: string; status: string; recipients: number; total: string; items: { wallet: string; name: string; amount: string; signature: string; status: string }[] }
 
-const toEmployee = (e: ApiEmployee): Employee => ({ id: e.id, name: e.name, role: e.role, wallet: e.wallet, salary: BigInt(e.salary) });
+const toEmployee = (a: ApiAddress): Employee => ({ id: a.id, name: a.name, role: "", wallet: a.wallet, salary: 0n });
 const toRun = (r: ApiRun): Run => ({
   id: r.id,
   label: r.label,
@@ -92,18 +103,23 @@ const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const DEMO: PayrollData = {
   status: "demo",
   employees: [],
+  payrolls: [],
   runs: [],
   payments: [],
   error: null,
   signingIn: false,
   signIn: async () => {},
   refresh: async () => {},
-  addEmployee: async () => {},
-  removeEmployee: async () => {},
+  addAddress: async () => {},
+  removeAddress: async () => {},
+  addPayroll: async () => {
+    throw new Error("Demo wallets use the in-memory list.");
+  },
+  removePayroll: async () => {},
   recordRun: async () => {},
 };
 
-type Loaded = { for: string; status: "needs-auth" | "ready" | "error"; employees: Employee[]; runs: Run[]; payments: ReceivedPayment[]; error: string | null };
+type Loaded = { for: string; status: "needs-auth" | "ready" | "error"; employees: Employee[]; payrolls: Payroll[]; runs: Run[]; payments: ReceivedPayment[]; error: string | null };
 
 function LiveProvider({ account, children }: { account: UiWalletAccount; children: React.ReactNode }) {
   const address = account.address;
@@ -116,12 +132,12 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
       const session = await api<{ address: string }>("/api/auth/session");
       // A cookie from a different wallet is not this wallet's session.
       if (session.address !== address) throw new ApiError("Signed in as another wallet", 401);
-      const [data, received] = await Promise.all([api<{ employees: ApiEmployee[]; runs: ApiRun[] }>("/api/company"), api<{ payments: ApiPayment[] }>("/api/payments")]);
+      const [data, received] = await Promise.all([api<{ addresses: ApiAddress[]; payrolls: ApiPayroll[]; runs: ApiRun[] }>("/api/company"), api<{ payments: ApiPayment[] }>("/api/payments")]);
       const payments = received.payments.map((p): ReceivedPayment => ({ ...p, amount: BigInt(p.amount) }));
-      setState({ for: address, status: "ready", employees: data.employees.map(toEmployee), runs: data.runs.map(toRun), payments, error: null });
+      setState({ for: address, status: "ready", employees: data.addresses.map(toEmployee), payrolls: data.payrolls.map(toPayroll), runs: data.runs.map(toRun), payments, error: null });
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) setState({ for: address, status: "needs-auth", employees: [], runs: [], payments: [], error: null });
-      else setState({ for: address, status: "error", employees: [], runs: [], payments: [], error: e instanceof Error ? e.message : "Could not load your payroll data." });
+      if (e instanceof ApiError && e.status === 401) setState({ for: address, status: "needs-auth", employees: [], payrolls: [], runs: [], payments: [], error: null });
+      else setState({ for: address, status: "error", employees: [], payrolls: [], runs: [], payments: [], error: e instanceof Error ? e.message : "Could not load your payroll data." });
     }
   }, [address]);
 
@@ -140,7 +156,7 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
       await load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign-in failed.";
-      setState({ for: address, status: "needs-auth", employees: [], runs: [], payments: [], error: /reject|declin|denied|cancel|closed|user/i.test(msg) ? "You declined the sign-in request." : msg });
+      setState({ for: address, status: "needs-auth", employees: [], payrolls: [], runs: [], payments: [], error: /reject|declin|denied|cancel|closed|user/i.test(msg) ? "You declined the sign-in request." : msg });
     } finally {
       setSigningIn(false);
     }
@@ -152,32 +168,49 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
       try {
         return await fn();
       } catch (e) {
-        if (e instanceof ApiError && e.status === 401) setState({ for: address, status: "needs-auth", employees: [], runs: [], payments: [], error: "Your session expired. Sign in again." });
+        if (e instanceof ApiError && e.status === 401) setState({ for: address, status: "needs-auth", employees: [], payrolls: [], runs: [], payments: [], error: "Your session expired. Sign in again." });
         throw e;
       }
     },
     [address],
   );
 
-  const addEmployee = useCallback(
-    async (e: NewEmployee) => {
-      const created = await guard(() => api<ApiEmployee>("/api/employees", { method: "POST", body: JSON.stringify({ name: e.name, role: e.role, wallet: e.wallet, amount: e.salary.toString() }) }));
+  const addAddress = useCallback(
+    async (a: NewAddress) => {
+      const created = await guard(() => api<ApiAddress>("/api/addresses", { method: "POST", body: JSON.stringify({ name: a.name, wallet: a.wallet }) }));
       setState((s) => (s && s.for === address ? { ...s, employees: [toEmployee(created), ...s.employees] } : s));
     },
     [guard, address],
   );
 
-  const removeEmployee = useCallback(
+  const removeAddress = useCallback(
     async (id: string) => {
-      await guard(() => api(`/api/employees/${id}`, { method: "DELETE" }));
+      await guard(() => api(`/api/addresses/${id}`, { method: "DELETE" }));
       setState((s) => (s && s.for === address ? { ...s, employees: s.employees.filter((x) => x.id !== id) } : s));
     },
     [guard, address],
   );
 
+  const addPayroll = useCallback(
+    async (p: NewPayroll) => {
+      const created = toPayroll(await guard(() => api<ApiPayroll>("/api/payrolls", { method: "POST", body: JSON.stringify({ name: p.name, entries: p.entries.map((e) => ({ addressId: e.addressId, amount: e.amount.toString() })) }) })));
+      setState((s) => (s && s.for === address ? { ...s, payrolls: [created, ...s.payrolls] } : s));
+      return created;
+    },
+    [guard, address],
+  );
+
+  const removePayroll = useCallback(
+    async (id: string) => {
+      await guard(() => api(`/api/payrolls/${id}`, { method: "DELETE" }));
+      setState((s) => (s && s.for === address ? { ...s, payrolls: s.payrolls.filter((x) => x.id !== id) } : s));
+    },
+    [guard, address],
+  );
+
   const recordRun = useCallback(
-    async (label: string, items: RunItemInput[]) => {
-      await guard(() => api("/api/runs", { method: "POST", body: JSON.stringify({ label, items: items.map((i) => ({ ...i, amount: i.amount.toString() })) }) }));
+    async (label: string, items: RunItemInput[], payrollId?: string | null) => {
+      await guard(() => api("/api/runs", { method: "POST", body: JSON.stringify({ label, payrollId: payrollId ?? null, items: items.map((i) => ({ ...i, amount: i.amount.toString() })) }) }));
       await load();
     },
     [guard, load],
@@ -188,17 +221,20 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
     return {
       status: mine ? mine.status : "loading",
       employees: mine?.employees ?? [],
+      payrolls: mine?.payrolls ?? [],
       runs: mine?.runs ?? [],
       payments: mine?.payments ?? [],
       error: mine?.error ?? null,
       signingIn,
       signIn,
       refresh: load,
-      addEmployee,
-      removeEmployee,
+      addAddress,
+      removeAddress,
+      addPayroll,
+      removePayroll,
       recordRun,
     };
-  }, [state, address, signingIn, signIn, load, addEmployee, removeEmployee, recordRun]);
+  }, [state, address, signingIn, signIn, load, addAddress, removeAddress, addPayroll, removePayroll, recordRun]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

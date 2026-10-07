@@ -18,7 +18,7 @@ export function PayrollGate({ title, children }: { title: string; children: Reac
           <>
             <p className="text-[15px] font-medium">Sign in to open your payroll list.</p>
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-              Your employees and run history are saved on our server, tied to your wallet. One free signature proves it&apos;s yours. It doesn&apos;t move funds or touch your encryption keys.
+              Your saved addresses and run history are saved on our server, tied to your wallet. One free signature proves it&apos;s yours. It doesn&apos;t move funds or touch your encryption keys.
             </p>
             {d.error ? <p role="alert" className="mx-auto mt-3 max-w-md rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">{d.error}</p> : null}
             <Button className="mt-5 h-10 px-5" disabled={d.signingIn} onClick={() => void d.signIn()}>

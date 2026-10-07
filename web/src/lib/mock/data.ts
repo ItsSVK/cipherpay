@@ -12,6 +12,21 @@ export interface Employee {
   salary: bigint;
 }
 
+/** One line of a payroll: a saved address and what it is paid each run. `id` is the saved address's id. */
+export interface PayrollEntry {
+  id: string;
+  name: string;
+  wallet: string;
+  amount: bigint;
+}
+
+/** A named list of who is paid what. The same address can be in several payrolls. */
+export interface Payroll {
+  id: string;
+  name: string;
+  entries: PayrollEntry[];
+}
+
 export const ADMIN_WALLET = "8xQf2nPLtGZ4wVhKd6YbJ3sRcA9mTe1uXoHvN5zWkP7q";
 export const NEW_COMPANY_WALLET = "N3wCo4pAnYWa11etK7mQxZ9VcLbT2nRhJdE5uFgS8yPv";
 export const AUDITOR_WALLET = "Aud1tR4kLm9XcVb2nQzW7sHjT5yPeUo3dFgK8vNxC6aZ";
@@ -111,11 +126,13 @@ export interface VaultState {
   paused: boolean;
   /** Decrypted treasury balance (the admin's key reads it). */
   treasury: bigint;
+  /** Saved addresses (amount is not used here; amounts live in payrolls). */
   employees: Employee[];
+  payrolls: Payroll[];
   runs: Run[];
 }
 
-export const newVault = (name = "Your company"): VaultState => ({ name, created: false, treasuryConfigured: false, paused: false, treasury: 0n, employees: [], runs: [] });
+export const newVault = (name = "Your company"): VaultState => ({ name, created: false, treasuryConfigured: false, paused: false, treasury: 0n, employees: [], payrolls: [], runs: [] });
 
 export function seedAccounts(): Record<string, Account> {
   const accounts: Record<string, Account> = {};
@@ -145,7 +162,7 @@ export function seedAccounts(): Record<string, Account> {
 
 export function seedVaults(): Record<string, VaultState> {
   return {
-    [ADMIN_WALLET]: { name: EMPLOYER_NAME, created: true, treasuryConfigured: true, paused: false, treasury: TREASURY_BALANCE, employees: EMPLOYEES, runs: SEED_RUNS },
+    [ADMIN_WALLET]: { name: EMPLOYER_NAME, created: true, treasuryConfigured: true, paused: false, treasury: TREASURY_BALANCE, employees: EMPLOYEES, payrolls: [{ id: "pr1", name: "Monthly payroll", entries: EMPLOYEES.map((e) => ({ id: e.id, name: e.name, wallet: e.wallet, amount: e.salary })) }], runs: SEED_RUNS },
   };
 }
 

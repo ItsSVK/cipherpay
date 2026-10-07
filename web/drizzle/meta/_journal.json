@@ -15,6 +15,20 @@
       "when": 1791304774234,
       "tag": "0001_cool_lady_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791353521815,
+      "tag": "0002_bumpy_wong",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1791354228819,
+      "tag": "0003_noisy_vulcan",
+      "breakpoints": true
     }
   ]
 }

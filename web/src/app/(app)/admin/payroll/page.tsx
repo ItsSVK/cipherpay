@@ -12,6 +12,7 @@ import { useKeys } from "@/components/crypto/key-context";
 import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
 import { WalletCountdown } from "@/components/app/wallet-countdown";
 import { DEFAULT_AUTO_SETTINGS, OperatorPanel, type AutoPayrollSettings } from "@/components/app/operator-panel";
+import { PayrollPicker, AddPayroll } from "@/components/app/payroll-picker";
 import { PayrollGate } from "@/components/data/payroll-gate";
 import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
@@ -53,7 +54,10 @@ function RunPayroll() {
   const keys = useKeys();
   const v = useVault();
   const guard = useLiveGuard();
-  const employees = v.vault.employees;
+  // The people in this run are the entries of the chosen payroll (saved address + this payroll's amount).
+  const [chosenId, setChosenId] = useState<string | null>(null);
+  const payroll = v.vault.payrolls.find((p) => p.id === chosenId) ?? v.vault.payrolls[0] ?? null;
+  const employees = useMemo<Employee[]>(() => (payroll?.entries ?? []).map((e) => ({ id: e.id, name: e.name, role: "", wallet: e.wallet, salary: e.amount })), [payroll]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [phaseState, setPhase] = useState<Phase>("review");
   const [checks, setChecks] = useState<Check[]>([]);
@@ -104,13 +108,13 @@ function RunPayroll() {
     // Saved to the database for real wallets. The payments themselves are already on-chain, so a failed save is not a failed payroll.
     v.recordRun({
       id: `run-${Date.now()}`,
-      label: `${new Date().toLocaleDateString("en-US", { month: "long" })} payroll`,
+      label: payroll?.name ?? `${new Date().toLocaleDateString("en-US", { month: "long" })} payroll`,
       date: shortToday(),
       status: "done",
       recipients: items.length,
       total: items.reduce((n, i) => n + i.amount, 0n),
       items,
-    }).catch((e) => toast.error("Payroll sent, but the run couldn't be saved to your history", { description: e instanceof Error ? e.message : "The payments are on-chain and unaffected." }));
+    }, payroll?.id).catch((e) => toast.error("Payroll sent, but the run couldn't be saved to your history", { description: e instanceof Error ? e.message : "The payments are on-chain and unaffected." }));
     toast.success("Payroll complete", { description: `${items.length} payments sent. Amounts stayed encrypted.` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -240,11 +244,16 @@ function RunPayroll() {
         })}
       </ol>
 
+      {v.vault.payrolls.length > 0 ? <PayrollPicker selected={payroll} onSelect={(id) => { setChosenId(id); setExcluded(new Set()); }} locked={phase !== "review"} /> : null}
+
       {employees.length === 0 ? (
         <section className="plate enter mx-auto max-w-xl p-8 text-center">
-          <p className="text-[15px] font-medium">No one on payroll yet.</p>
-          <p className="mt-1 text-sm text-muted-foreground">Add the people you pay, then come back to run payroll.</p>
-          <Link href="/admin/employees" className={cn(buttonVariants(), "mt-5 h-10 px-5")}>Add employees</Link>
+          <p className="text-[15px] font-medium">No payroll yet.</p>
+          <p className="mt-1 text-sm text-muted-foreground">A payroll is a list of saved addresses and what each is paid per run. Create one, then run it here.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-2">
+            <AddPayroll onCreated={(p) => setChosenId(p.id)} trigger={<Button className="h-10 px-5" />} />
+            <Link href="/admin/addresses" className={cn(buttonVariants({ variant: "outline" }), "h-10 px-5")}>Saved addresses</Link>
+          </div>
         </section>
       ) : (
         <div className="grid items-start gap-5 lg:grid-cols-[1fr_320px]">

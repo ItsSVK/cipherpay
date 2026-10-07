@@ -6,7 +6,7 @@ import { useConfidentialBalance, type BalanceStatus } from "@/components/chain/u
 import { usePausePayroll } from "@/components/chain/use-pause-payroll";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
-import { VAULT_ADDRESS, type Employee, type VaultState } from "@/lib/mock/data";
+import { VAULT_ADDRESS, type Payroll, type VaultState } from "@/lib/mock/data";
 
 /** Company status that needs no keys, so the shell can use it. Demo reads the mock store; a real wallet reads its vault PDA. */
 export function useCompanyStatus() {
@@ -38,7 +38,7 @@ export function useVault() {
 
   const vault: VaultState = isDemo
     ? mock
-    : { ...mock, created: status.created, treasuryConfigured: status.treasuryConfigured, paused: status.paused, treasury: treasury.balance?.available ?? 0n, employees: data.employees, runs: data.runs };
+    : { ...mock, created: status.created, treasuryConfigured: status.treasuryConfigured, paused: status.paused, treasury: treasury.balance?.available ?? 0n, employees: data.employees, payrolls: data.payrolls, runs: data.runs };
 
   return {
     admin,
@@ -67,19 +67,31 @@ export function useVault() {
     /** True while a real pause / resume is waiting on the wallet or the network. */
     pauseBusy: pause.busy,
     pauseError: pause.error,
-    /** Real wallets save to the database (and may reject: duplicate wallet, signed out). Demo wallets use the in-memory list. */
-    addEmployee: async (e: Employee): Promise<void> => {
-      if (isDemo) store.addEmployee(admin, e);
-      else await data.addEmployee({ name: e.name, role: e.role, wallet: e.wallet, salary: e.salary });
+    /** Real wallets save to the database (and may reject: duplicate address, signed out). Demo wallets use the in-memory list. */
+    addAddress: async (a: { name: string; wallet: string }): Promise<void> => {
+      if (isDemo) store.addEmployee(admin, { id: crypto.randomUUID(), name: a.name, role: "", wallet: a.wallet, salary: 0n });
+      else await data.addAddress(a);
     },
-    removeEmployee: async (id: string): Promise<void> => {
+    removeAddress: async (id: string): Promise<void> => {
       if (isDemo) store.removeEmployee(admin, id);
-      else await data.removeEmployee(id);
+      else await data.removeAddress(id);
+    },
+    /** Real wallets save to the database; demo wallets use the in-memory list. Resolves to the saved payroll. */
+    addPayroll: async (p: { name: string; entries: { addressId: string; amount: bigint }[] }): Promise<Payroll> => {
+      if (!isDemo) return data.addPayroll(p);
+      const known = new Map(mock.employees.map((e) => [e.id, e]));
+      const payroll: Payroll = { id: crypto.randomUUID(), name: p.name, entries: p.entries.flatMap((e) => { const a = known.get(e.addressId); return a ? [{ id: a.id, name: a.name, wallet: a.wallet, amount: e.amount }] : []; }) };
+      store.addPayroll(admin, payroll);
+      return payroll;
+    },
+    removePayroll: async (id: string): Promise<void> => {
+      if (isDemo) store.removePayroll(admin, id);
+      else await data.removePayroll(id);
     },
     pay: (wallet: string, amount: bigint, signature: string, label: string) => store.pay(admin, wallet, amount, signature, label),
-    recordRun: async (run: Parameters<typeof store.recordRun>[1]): Promise<void> => {
+    recordRun: async (run: Parameters<typeof store.recordRun>[1], payrollId?: string | null): Promise<void> => {
       if (isDemo) store.recordRun(admin, run);
-      else await data.recordRun(run.label, run.items.map((i) => ({ wallet: i.wallet, name: i.name, amount: i.amount, signature: i.signature, status: "confirmed" as const })));
+      else await data.recordRun(run.label, run.items.map((i) => ({ wallet: i.wallet, name: i.name, amount: i.amount, signature: i.signature, status: "confirmed" as const })), payrollId);
     },
   };
 }
