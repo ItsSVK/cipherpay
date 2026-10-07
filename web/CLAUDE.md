@@ -361,7 +361,7 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   the failed one, final balances exact (no double payment). **Not verified:** a real wallet app's batch `signTransaction` (Phantom should
   map multiple inputs to one `signAllTransactions` approval, unconfirmed); blockhash lifetime if the user sits on the approval for more
   than ~60-90s (the run fails safely with "expired", nothing sent); leftover context accounts if a run dies after step 1 (rent only, not yet
-  auto-closed). Split payout stays on the demo engine (its tax/fee destinations are demo wallets). Pause/resume is real (see the employee-side entry below).
+  auto-closed). Split payout is real too (see the entry below). Pause/resume is real (see the employee-side entry below).
 - **Employee side is real: apply pending, withdraw, unwrap (2026-10-06), and pause/resume.** `lib/chain/receive.ts` builds Token-2022 `ApplyPendingBalance`
   (the library helper reads the pending-credit counter and AES-encrypts available + pending), `vault::withdraw_confidential` and `vault::unwrap_confidential`;
   `lib/chain/withdraw-proofs.ts` composes the two withdraw proofs (equality + 64-bit range; port of the client's `withdrawProofData`, tested to verify
@@ -379,6 +379,19 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   Tests: `withdraw-proofs.test.ts`, `receive.test.ts` (accounts, who signs what, every transaction under 1232 bytes including withdraw + unwrap),
   `pause.test.ts`. **Not done:** the per-payment history list (needs the indexer; the chain only holds the combined balance and the payment event is encrypted for
   the auditor, not the employee), a browser run of the new UI, and a real wallet app.
+- **Per-payment history and real split payout (2026-10-06).** **History:** `GET /api/payments` (`src/app/api/payments/route.ts`) returns the confirmed
+  `payroll_run_items` whose RECIPIENT is the signed-in wallet (session only, never a parameter; new index `payroll_run_items_recipient`, migration
+  `0001`, run `bun run db:migrate:local` / `db:migrate:remote`). `PayrollData` now exposes `payments`; `useEmployee()` maps them (title = run label, "from"
+  = employer address, explorer link). An employee who has never signed in sees a "Sign in with wallet" prompt (the same one-signature session as the employer).
+  **These are employer-recorded amounts, not chain-verified** (the chain holds only the combined balance and the payment event is encrypted for the auditor):
+  an employer could record a payment that never happened, which is why every row carries its transaction signature and the page says so. Real indexer
+  stays Phase 2. Verified against the running dev server + local D1 with 3 throwaway wallets: 401 without a session, each wallet sees only payments addressed
+  to it, failed items and signature-less items are excluded, the employer sees none. **Split:** the page runs the real engine (`useLiveRun`, the same `payOne`
+  as payroll, strictly sequential) for real wallets; the tax and fee destinations are typed-in wallets (`lib/payroll/split-plan.ts`: `checkSplitWallets`
+  rejects bad or duplicate addresses, `splitRunItems` drops 0% destinations), their activation is read with `readActivation`, the Automatic payroll switch
+  is on the page, a failed destination can be retried (`Retry failed`), and the run is saved to history like payroll. Destinations are NOT persisted (React
+  state only; a saved split rule is a later feature). Verified on a devnet-forked surfpool through our own lib code: 10.00 at 79/20/1 -> 7.90 / 2.00 / 0.10
+  decrypt exactly, treasury drops by exactly 10.00, an unactivated destination is refused before anything moves. **Not browser-run.**
 - **The slow-wallet-popup investigation, 2026-10-06 (measured; it is NOT the front end).** Symptom: Phantom's popup appears ~30-40 s after the
   request, so the transaction's ~39 s window has closed by the time it is approved; intermittent, worse after a session has been running a while.
   **Measured in headless Chrome with the real UI instrumented** (main-thread lag probe, PerformanceObserver longtask, hooked `WebAssembly.instantiate`,

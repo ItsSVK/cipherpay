@@ -2,6 +2,7 @@
 
 import { useChain } from "@/components/chain/chain-state";
 import { useConfidentialBalance, type BalanceStatus } from "@/components/chain/use-confidential-balance";
+import { usePayrollData } from "@/components/data/payroll-data";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
 
@@ -31,6 +32,7 @@ export function useEmployee() {
   const chain = useChain();
   const status = useAccountStatus();
   const decrypted = useConfidentialBalance(isDemo ? null : (chain.wallet?.wusdc ?? null));
+  const data = usePayrollData();
   const wallet = address ?? "";
 
   const actions = {
@@ -42,7 +44,7 @@ export function useEmployee() {
 
   if (isDemo) {
     const a = store.accountOf(wallet);
-    return { wallet, ...a, ...actions, isLive: false, loading: false, awaitingApproval: false, hasSol: a.sol >= MIN_SOL, balanceStatus: "ready" as BalanceStatus, balanceError: null as string | null };
+    return { wallet, ...a, payments: a.payments.map((p) => ({ ...p, employer: null as string | null, status: p.status as "pending" | "available" | null })), paymentsStatus: "demo" as const, paymentsSigningIn: false, paymentsError: null as string | null, signInForPayments: async () => {}, ...actions, isLive: false, loading: false, awaitingApproval: false, hasSol: a.sol >= MIN_SOL, balanceStatus: "ready" as BalanceStatus, balanceError: null as string | null };
   }
 
   const w = chain.wallet;
@@ -60,7 +62,12 @@ export function useEmployee() {
     available: decrypted.balance?.available ?? 0n,
     publicWusdc: w?.wusdc?.publicBalance ?? 0n,
     publicUsdc: w?.usdc ?? 0n,
-    payments: [] as { id: string; date: string; from: string; amount: bigint; status: "pending" | "available"; signature: string }[],
+    // The chain keeps only the combined balance, so per-payment history is what employers recorded for this wallet (signed in with one signature).
+    payments: data.payments.map((p) => ({ id: p.id, date: new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }), from: p.label, employer: p.employer as string | null, amount: p.amount, status: null as "pending" | "available" | null, signature: p.signature })),
+    paymentsStatus: data.status,
+    paymentsSigningIn: data.signingIn,
+    paymentsError: data.error,
+    signInForPayments: data.signIn,
     balanceStatus: decrypted.status,
     balanceError: decrypted.error,
   };

@@ -1,0 +1,1 @@
+CREATE INDEX `payroll_run_items_recipient` ON `payroll_run_items` (`recipient`);

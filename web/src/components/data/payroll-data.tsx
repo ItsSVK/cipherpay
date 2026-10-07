@@ -23,6 +23,16 @@ export interface NewEmployee {
   salary: bigint;
 }
 
+/** One confirmed payment the employer's record says was sent to this wallet. `amount` is what the employer recorded; the signature lets anyone check it on-chain. */
+export interface ReceivedPayment {
+  id: string;
+  employer: string;
+  label: string;
+  createdAt: string;
+  amount: bigint;
+  signature: string;
+}
+
 export interface RunItemInput {
   wallet: string;
   name: string;
@@ -36,6 +46,8 @@ interface PayrollData {
   status: PayrollDataStatus;
   employees: Employee[];
   runs: Run[];
+  /** Payments addressed to the connected wallet, newest first. Empty until signed in. */
+  payments: ReceivedPayment[];
   error: string | null;
   signingIn: boolean;
   signIn: () => Promise<void>;
@@ -47,6 +59,7 @@ interface PayrollData {
 
 const Ctx = createContext<PayrollData | null>(null);
 
+interface ApiPayment { id: string; employer: string; label: string; createdAt: string; amount: string; signature: string }
 interface ApiEmployee { id: string; name: string; role: string; wallet: string; salary: string }
 interface ApiRun { id: string; label: string; createdAt: string; status: string; recipients: number; total: string; items: { wallet: string; name: string; amount: string; signature: string; status: string }[] }
 
@@ -80,6 +93,7 @@ const DEMO: PayrollData = {
   status: "demo",
   employees: [],
   runs: [],
+  payments: [],
   error: null,
   signingIn: false,
   signIn: async () => {},
@@ -89,7 +103,7 @@ const DEMO: PayrollData = {
   recordRun: async () => {},
 };
 
-type Loaded = { for: string; status: "needs-auth" | "ready" | "error"; employees: Employee[]; runs: Run[]; error: string | null };
+type Loaded = { for: string; status: "needs-auth" | "ready" | "error"; employees: Employee[]; runs: Run[]; payments: ReceivedPayment[]; error: string | null };
 
 function LiveProvider({ account, children }: { account: UiWalletAccount; children: React.ReactNode }) {
   const address = account.address;
@@ -102,11 +116,12 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
       const session = await api<{ address: string }>("/api/auth/session");
       // A cookie from a different wallet is not this wallet's session.
       if (session.address !== address) throw new ApiError("Signed in as another wallet", 401);
-      const data = await api<{ employees: ApiEmployee[]; runs: ApiRun[] }>("/api/company");
-      setState({ for: address, status: "ready", employees: data.employees.map(toEmployee), runs: data.runs.map(toRun), error: null });
+      const [data, received] = await Promise.all([api<{ employees: ApiEmployee[]; runs: ApiRun[] }>("/api/company"), api<{ payments: ApiPayment[] }>("/api/payments")]);
+      const payments = received.payments.map((p): ReceivedPayment => ({ ...p, amount: BigInt(p.amount) }));
+      setState({ for: address, status: "ready", employees: data.employees.map(toEmployee), runs: data.runs.map(toRun), payments, error: null });
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) setState({ for: address, status: "needs-auth", employees: [], runs: [], error: null });
-      else setState({ for: address, status: "error", employees: [], runs: [], error: e instanceof Error ? e.message : "Could not load your payroll data." });
+      if (e instanceof ApiError && e.status === 401) setState({ for: address, status: "needs-auth", employees: [], runs: [], payments: [], error: null });
+      else setState({ for: address, status: "error", employees: [], runs: [], payments: [], error: e instanceof Error ? e.message : "Could not load your payroll data." });
     }
   }, [address]);
 
@@ -125,7 +140,7 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
       await load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Sign-in failed.";
-      setState({ for: address, status: "needs-auth", employees: [], runs: [], error: /reject|declin|denied|cancel|closed|user/i.test(msg) ? "You declined the sign-in request." : msg });
+      setState({ for: address, status: "needs-auth", employees: [], runs: [], payments: [], error: /reject|declin|denied|cancel|closed|user/i.test(msg) ? "You declined the sign-in request." : msg });
     } finally {
       setSigningIn(false);
     }
@@ -137,7 +152,7 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
       try {
         return await fn();
       } catch (e) {
-        if (e instanceof ApiError && e.status === 401) setState({ for: address, status: "needs-auth", employees: [], runs: [], error: "Your session expired. Sign in again." });
+        if (e instanceof ApiError && e.status === 401) setState({ for: address, status: "needs-auth", employees: [], runs: [], payments: [], error: "Your session expired. Sign in again." });
         throw e;
       }
     },
@@ -174,6 +189,7 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
       status: mine ? mine.status : "loading",
       employees: mine?.employees ?? [],
       runs: mine?.runs ?? [],
+      payments: mine?.payments ?? [],
       error: mine?.error ?? null,
       signingIn,
       signIn,

@@ -57,7 +57,7 @@ export const payrollRunItems = sqliteTable(
     error: text("error"),
     createdAt: createdAt(),
   },
-  (t) => [index("payroll_run_items_run").on(t.runId)],
+  (t) => [index("payroll_run_items_run").on(t.runId), index("payroll_run_items_recipient").on(t.recipient)],
 );
 
 /** Single-use sign-in challenges. Consumed when a signature is verified; expired ones are swept. */

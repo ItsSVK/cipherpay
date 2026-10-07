@@ -8,6 +8,13 @@
       "when": 1791212189414,
       "tag": "0000_adorable_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1791304774234,
+      "tag": "0001_cool_lady_vermin",
+      "breakpoints": true
     }
   ]
 }

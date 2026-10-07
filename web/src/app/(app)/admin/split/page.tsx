@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
+import { address } from "@solana/kit";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,14 +12,19 @@ import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { PipelineTrack, RunningLine } from "@/components/crypto/pipeline-track";
 import { PayrollGate } from "@/components/data/payroll-gate";
+import { DEFAULT_AUTO_SETTINGS, OperatorPanel, type AutoPayrollSettings } from "@/components/app/operator-panel";
 import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
 import { FEE_WALLET, PIPELINE_STAGES, TAX_WALLET, TRANSFER_STAGE } from "@/lib/mock/data";
 import { shortToday } from "@/lib/mock/store";
+import { readActivation } from "@/lib/chain/read";
+import { rpc } from "@/lib/chain/rpc";
 import { formatUsdc, parseUsdc } from "@/lib/format";
 import { BPS_TOTAL, splitAmount, type SplitDestination } from "@/lib/payroll/split";
+import { checkSplitWallets, splitRunItems } from "@/lib/payroll/split-plan";
+import { useLiveRun, type RunSettings } from "@/lib/payroll/use-live-run";
 import { useRunSimulation } from "@/lib/payroll/use-run-simulation";
 import { cn } from "@/lib/utils";
 
@@ -57,12 +63,29 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
   const keys = useKeys();
   const guard = useLiveGuard();
   const v = useVault();
+  // Demo wallets split between fixed demo wallets. Real wallets enter where the tax and fee shares go: any wallet that has set up its account.
+  const [taxWallet, setTaxWallet] = useState("");
+  const [feeWallet, setFeeWallet] = useState("");
+  const [extraActive, setExtraActive] = useState<Record<string, boolean>>({});
   const DEST_META: Record<string, { name: string; wallet: string; color: string }> = {
     sam: { name: primary.name, wallet: primary.wallet, color: COLORS.sam },
-    tax: { name: `${v.vault.name} tax reserve`, wallet: TAX_WALLET, color: COLORS.tax },
-    fee: { name: "Platform fee (demo wallet)", wallet: FEE_WALLET, color: COLORS.fee },
+    tax: { name: v.isLive ? "Tax reserve" : `${v.vault.name} tax reserve`, wallet: v.isLive ? taxWallet.trim() : TAX_WALLET, color: COLORS.tax },
+    fee: { name: v.isLive ? "Platform fee" : "Platform fee (demo wallet)", wallet: v.isLive ? feeWallet.trim() : FEE_WALLET, color: COLORS.fee },
   };
-  const allActivated = SPLIT_IDS.every((k) => v.isActivated(DEST_META[k].wallet));
+  const targets = SPLIT_IDS.map((k) => ({ id: k, name: DEST_META[k].name, wallet: DEST_META[k].wallet }));
+  const walletErrors = v.isLive ? checkSplitWallets(targets) : {};
+  // The payroll list's activation is already read by the chain provider; the two typed-in wallets are read here.
+  const extraKey = v.isLive ? [taxWallet, feeWallet].map((w) => w.trim()).filter((w, i) => w && !walletErrors[["tax", "fee"][i]]).join("|") : "";
+  useEffect(() => {
+    if (!extraKey) return;
+    let cancelled = false;
+    const wallets = extraKey.split("|").map((w) => address(w));
+    readActivation(rpc, wallets).then((a) => { if (!cancelled) setExtraActive((prev) => ({ ...prev, ...a })); }, () => undefined);
+    return () => { cancelled = true; };
+  }, [extraKey]);
+  const isActive = (wallet: string) => (v.isLive && wallet !== primary.wallet ? !!extraActive[wallet] : v.isActivated(wallet));
+  const allActivated = SPLIT_IDS.every((k) => isActive(DEST_META[k].wallet)) && SPLIT_IDS.every((k) => !walletErrors[k]);
+  const [auto, setAuto] = useState<AutoPayrollSettings>(DEFAULT_AUTO_SETTINGS);
   const credited = useRef(new Set<string>());
   const recorded = useRef(false);
   const [invoice, setInvoice] = useState("10,000");
@@ -84,15 +107,23 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [total, sumValid, pct.sam, pct.tax, pct.fee]);
 
-  const sim = useRunSimulation(SPLIT_IDS, PIPELINE_STAGES.length, TRANSFER_STAGE);
+  const mockSim = useRunSimulation(SPLIT_IDS, PIPELINE_STAGES.length, TRANSFER_STAGE);
+  const liveItems = useMemo(() => (parts && v.isLive ? splitRunItems(parts, targets) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [parts, v.isLive, taxWallet, feeWallet, primary.wallet, primary.name]);
+  const maxPayments = Math.max(auto.maxPayments ?? liveItems.length, liveItems.length);
+  const runSettings = useMemo<RunSettings>(() => (auto.enabled ? { mode: "automatic", terms: { ttlSeconds: auto.ttlSeconds, maxPayments } } : { mode: "manual" }), [auto.enabled, auto.ttlSeconds, maxPayments]);
+  const liveSim = useLiveRun(liveItems, PIPELINE_STAGES.length, runSettings);
+  const sim = v.isLive ? liveSim : mockSim;
   const stage: Stage = stageState === "executing" && sim.done ? "done" : stageState;
+  const halted = stage === "executing" && !sim.running && sim.failedCount > 0;
   // Each destination is credited the moment its transfer confirms.
   useEffect(() => {
     for (const r of sim.rows) {
       if (r.status !== "done" || !r.signature || credited.current.has(r.id)) continue;
       credited.current.add(r.id);
       const part = parts?.find((p) => p.id === r.id);
-      if (part) v.pay(DEST_META[r.id].wallet, part.amount, r.signature, `${v.vault.name} split payout`);
+      if (part && !v.isLive) v.pay(DEST_META[r.id].wallet, part.amount, r.signature, `${v.vault.name} split payout`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sim.rows]);
@@ -100,21 +131,24 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
   useEffect(() => {
     if (stage !== "done" || recorded.current || !parts) return;
     recorded.current = true;
-    void v.recordRun({
+    const paid = parts.filter((p) => sim.rows.some((r) => r.id === p.id && r.signature));
+    // Saved to the database for real wallets. The payments are already on-chain, so a failed save is not a failed payout.
+    v.recordRun({
       id: `run-${Date.now()}`,
-      label: `Split payout, ${formatUsdc(parts.reduce((n, p) => n + p.amount, 0n))} USDC`,
+      label: `Split payout, ${formatUsdc(paid.reduce((n, p) => n + p.amount, 0n))} USDC`,
       date: shortToday(),
       status: "done",
-      recipients: parts.length,
-      total: parts.reduce((n, p) => n + p.amount, 0n),
-      items: parts.map((p) => ({ wallet: DEST_META[p.id].wallet, name: DEST_META[p.id].name, amount: p.amount, signature: sim.rows.find((r) => r.id === p.id)?.signature ?? "" })),
-    });
-    toast.success("Split payout complete", { description: "Three confidential transfers sent." });
+      recipients: paid.length,
+      total: paid.reduce((n, p) => n + p.amount, 0n),
+      items: paid.map((p) => ({ wallet: DEST_META[p.id].wallet, name: DEST_META[p.id].name, amount: p.amount, signature: sim.rows.find((r) => r.id === p.id)?.signature ?? "" })),
+    }).catch((e) => toast.error("Payout sent, but the run couldn't be saved to your history", { description: e instanceof Error ? e.message : "The payments are on-chain and unaffected." }));
+    toast.success("Split payout complete", { description: `${paid.length} confidential transfer${paid.length === 1 ? "" : "s"} sent.` });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage]);
 
   const locked = stage !== "draft";
-  const treasuryOk = !!parts && v.vault.treasury >= parts.reduce((n, p) => n + p.amount, 0n);
+  const treasuryKnown = !v.isLive || v.treasuryStatus === "ready"; // a real treasury balance is only readable while keys are unlocked
+  const treasuryOk = !!parts && treasuryKnown && v.vault.treasury >= parts.reduce((n, p) => n + p.amount, 0n);
   const canApprove = !!parts && allActivated && !v.vault.paused && treasuryOk;
 
   return (
@@ -146,10 +180,18 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
                       <span className="size-2.5 shrink-0 rounded-full" style={{ background: DEST_META[k].color }} />
                       <div className="min-w-0">
                         <p className="flex items-center gap-2 truncate text-sm font-medium">{DEST_META[k].name}{k === "sam" ? <StatusBadge tone="key">Primary</StatusBadge> : null}</p>
-                        <span className="flex flex-wrap items-center gap-2">
-                          <Address value={DEST_META[k].wallet} className="text-muted-foreground" />
-                          {!v.isActivated(DEST_META[k].wallet) ? <StatusBadge tone="pending">Not activated</StatusBadge> : null}
-                        </span>
+                        {v.isLive && k !== "sam" ? (
+                          <div className="mt-1.5 grid gap-1">
+                            <Input aria-label={`${DEST_META[k].name} wallet address`} placeholder="Wallet address" spellCheck={false} value={k === "tax" ? taxWallet : feeWallet} disabled={locked} onChange={(e) => (k === "tax" ? setTaxWallet : setFeeWallet)(e.target.value)} aria-invalid={!!walletErrors[k] && DEST_META[k].wallet !== ""} className="h-8 font-mono text-xs" />
+                            {walletErrors[k] && DEST_META[k].wallet !== "" ? <p className="text-xs text-destructive">{walletErrors[k]}</p> : null}
+                            {!walletErrors[k] ? (isActive(DEST_META[k].wallet) ? null : <StatusBadge tone="pending">Not activated</StatusBadge>) : null}
+                          </div>
+                        ) : (
+                          <span className="flex flex-wrap items-center gap-2">
+                            <Address value={DEST_META[k].wallet} className="text-muted-foreground" />
+                            {!isActive(DEST_META[k].wallet) ? <StatusBadge tone="pending">Not activated</StatusBadge> : null}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="relative">
@@ -179,9 +221,13 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
               <Button size="sm" variant="outline" disabled={v.pauseBusy} onClick={() => { void (async () => { if (!v.isLive && !guard()) return; if (!(await v.setPaused(false))) return; toast("Payroll resumed", { description: "Payouts can run again." }); })(); }}>{v.pauseBusy ? "Waiting for your wallet…" : "Resume payroll"}</Button>
             </div>
           ) : null}
-          {stage === "draft" && parts && !treasuryOk ? (
+          {stage === "draft" && parts && v.isLive && !treasuryKnown ? (
+            <p className="plate border-pending/25 bg-pending-soft p-4 text-[13.5px] text-pending" role="alert">Unlock your keys so the app can check that the treasury covers this invoice.</p>
+          ) : null}
+          {stage === "draft" && parts && treasuryKnown && !treasuryOk ? (
             <p className="plate border-pending/25 bg-pending-soft p-4 text-[13.5px] text-pending" role="alert">The treasury holds {formatUsdc(v.vault.treasury)} USDC, which does not cover this invoice. Fund the treasury first.</p>
           ) : null}
+          {v.isLive ? <OperatorPanel settings={auto} onChange={setAuto} recipients={liveItems.length} locked={stage === "executing" && !halted} /> : null}
           {(stage === "executing" || stage === "done") && (
             <section className="plate enter overflow-hidden" aria-live="polite" aria-label="Split progress">
               <ul>
@@ -189,8 +235,10 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
                   <li key={r.id} className="border-b px-4 py-3.5 last:border-b-0">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm font-medium">{DEST_META[r.id].name}</p>
-                      <StatusBadge tone={r.status === "done" ? "verified" : r.status === "running" ? "key" : "neutral"} pulse={r.status === "running"}>{r.status === "done" ? "Confirmed" : r.status === "running" ? (r.waiting ? "Waiting" : "Sending") : "Queued"}</StatusBadge>
+                      <StatusBadge tone={r.status === "done" ? "verified" : r.status === "failed" ? "failed" : r.status === "running" ? "key" : "neutral"} pulse={r.status === "running"}>{r.status === "done" ? "Confirmed" : r.status === "failed" ? "Failed" : r.status === "running" ? (r.waiting ? "Waiting" : "Sending") : "Queued"}</StatusBadge>
                     </div>
+                    {r.note ? <p className="mt-2 text-[13px] text-muted-foreground">{r.note}</p> : null}
+                    {r.error ? <p role="alert" className="mt-2 rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-[13px] text-destructive">{r.error}</p> : null}
                     <div className="mt-3"><PipelineTrack stages={PIPELINE_STAGES} completed={r.completed} status={r.status} compact /></div>
                     <div className="mt-2 min-h-5">
                       {r.status === "done" ? <p className="enter-fade font-mono text-[11.5px] text-muted-foreground">tx {r.signature?.slice(0, 10)}…{r.signature?.slice(-6)}</p> : <RunningLine stage={PIPELINE_STAGES[Math.min(r.completed, PIPELINE_STAGES.length - 1)]} active={r.status === "running"} waiting={r.waiting} />}
@@ -223,11 +271,18 @@ function SplitBody({ primary }: { primary: { name: string; wallet: string } }) {
             )}
             {stage === "approved" && (
               <>
-                <Button className="h-10" onClick={() => { if (!keys.requireKeys()) return; if (!guard()) return; credited.current.clear(); recorded.current = false; setStage("executing"); sim.start(); }}>{keys.ready ? "Execute payout" : "Unlock keys to execute"}</Button>
+                <Button className="h-10" onClick={() => {
+                  if (!keys.requireKeys()) return;
+                  if (v.isLive) {
+                    if (!liveSim.canSign) { toast.error("This wallet can't sign devnet transactions", { description: "Try a different wallet." }); return; }
+                  } else if (!guard()) return;
+                  credited.current.clear(); recorded.current = false; setStage("executing"); sim.start();
+                }}>{keys.ready ? "Execute payout" : "Unlock keys to execute"}</Button>
                 <Button variant="ghost" onClick={() => setStage("draft")}>Edit rule</Button>
               </>
             )}
-            {stage === "executing" && <Button className="h-10" disabled>Sending…</Button>}
+            {stage === "executing" && halted ? <Button className="h-10" onClick={() => liveSim.retryFailed()}>Retry failed</Button> : null}
+            {stage === "executing" && !halted && <Button className="h-10" disabled>Sending…</Button>}
             {stage === "done" && <Button variant="outline" className="h-10" onClick={() => { sim.reset(); credited.current.clear(); recorded.current = false; setStage("draft"); }}>New split</Button>}
           </div>
           <p className="mt-4 text-xs leading-relaxed text-muted-foreground">Each destination needs an activated account, and the treasury must cover the invoice. Both are checked before you can approve.</p>

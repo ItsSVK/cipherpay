@@ -16,7 +16,7 @@ import { SolNotice } from "@/components/app/sol-notice";
 import { StatusBadge } from "@/components/app/status-badge";
 import { WithdrawSheet } from "@/components/app/withdraw-sheet";
 import { useStepper } from "@/hooks/use-stepper";
-import { formatUsdc } from "@/lib/format";
+import { formatUsdc, shortAddress } from "@/lib/format";
 
 const ACTIVATE_STEPS: Step[] = [
   { label: "Prove you hold the key", detail: "A short proof, built in your browser, that the key you are registering is really yours.", visibility: "encrypted" },
@@ -138,34 +138,42 @@ export default function MyPay() {
             <Button variant="outline" size="sm" disabled={keys.ready} onClick={() => keys.setDialogOpen(true)}><EyeIcon /> Decrypt amounts</Button>
           ) : null}
         </div>
-        {emp.payments.length === 0 ? (
-          <div className="plate p-8 text-center text-sm text-muted-foreground">{emp.isLive ? "Per-payment history will appear here once payments are indexed. Your balances above are read live from devnet." : "Account active. Nothing received yet. When an employer pays this wallet, it shows up here."}</div>
+        {emp.isLive && emp.paymentsStatus === "needs-auth" ? (
+          <div className="plate flex flex-wrap items-center justify-between gap-3 p-5">
+            <p className="max-w-md text-sm text-muted-foreground">Your payment history comes from what your employers recorded for this wallet. Sign in with one free signature to see it. It is not a transaction and costs nothing.</p>
+            <Button variant="outline" disabled={emp.paymentsSigningIn} onClick={() => void emp.signInForPayments()}>{emp.paymentsSigningIn ? "Waiting for your wallet…" : "Sign in with wallet"}</Button>
+          </div>
+        ) : emp.isLive && emp.paymentsStatus === "loading" ? (
+          <div className="plate p-8 text-center text-sm text-muted-foreground">Loading your payments…</div>
+        ) : emp.isLive && emp.paymentsStatus === "error" ? (
+          <p role="alert" className="plate border-destructive/30 bg-failed-soft p-5 text-[13.5px] text-destructive">{emp.paymentsError}</p>
+        ) : emp.payments.length === 0 ? (
+          <div className="plate p-8 text-center text-sm text-muted-foreground">Account active. Nothing recorded yet. When an employer pays this wallet through the app, it shows up here.</div>
         ) : (
           <ul className="plate overflow-hidden">
             {emp.payments.map((p, i) => (
               <li key={p.id} className="row-hover flex items-center justify-between gap-4 border-b px-4 py-3.5 last:border-b-0">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{p.from}</p>
-                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     {p.date}
+                    {p.employer ? <span className="font-mono">from {shortAddress(p.employer)}</span> : null}
                     <a href={`https://explorer.solana.com/tx/${p.signature}?cluster=devnet`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-mono underline-offset-2 hover:text-foreground hover:underline">
                       {p.signature.slice(0, 6)}… <ExternalLinkIcon className="size-3" />
                     </a>
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <StatusBadge tone={p.status === "pending" ? "pending" : "neutral"} className="hidden sm:inline-flex">{p.status === "pending" ? "Pending" : "Applied"}</StatusBadge>
+                  {p.status ? <StatusBadge tone={p.status === "pending" ? "pending" : "neutral"} className="hidden sm:inline-flex">{p.status === "pending" ? "Pending" : "Applied"}</StatusBadge> : null}
                   <span className="text-[15px]"><Cipher value={formatUsdc(p.amount)} seed={`pay-${p.id}`} revealed={shown} delay={i * 120} suffix="USDC" /></span>
                 </div>
               </li>
             ))}
           </ul>
         )}
-        {!emp.isLive ? (
-          <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-            Your balances above are decrypted from the chain. The per-payment list comes from your employer&apos;s payroll record, because the chain only stores the combined encrypted balance.
-          </p>
-        ) : null}
+        <p className="mt-3 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
+          Your balances above are decrypted from the chain. The per-payment list comes from your employer&apos;s payroll record, because the chain only stores the combined encrypted balance. The amounts are what the employer recorded; the transaction link lets you check that the payment was sent.
+        </p>
       </section>
     </>
   );
