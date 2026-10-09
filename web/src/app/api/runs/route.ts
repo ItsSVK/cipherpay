@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
   // One atomic batch: a run is never saved without its items.
   await db.batch([
     db.insert(payrollRuns).values(run),
-    ...items.map((i) => db.insert(payrollRunItems).values({ runId: run.id, recipient: i.wallet, name: i.name, legacyAmount: "", amountCt: i.amountCt, status: i.status, signature: i.signature, error: i.error ?? null })),
+    ...items.map((i) => db.insert(payrollRunItems).values({ runId: run.id, recipient: i.wallet, name: i.name, legacyAmount: "", amountCt: i.amountCt, receivedAmountCt: i.receivedAmountCt ?? null, status: i.status, signature: i.signature, error: i.error ?? null })),
   ]);
   return NextResponse.json({ id: run.id }, { status: 201 });
 }

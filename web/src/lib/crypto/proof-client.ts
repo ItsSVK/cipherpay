@@ -2,6 +2,7 @@
 // (composeTransferProofs, composeWithdrawProofs, decryptAccountBalanceLocal) but on a worker thread, and falls back to running it on the
 // calling thread if a worker can't be created or fails to start, so a bundling or browser problem degrades to "a short stutter", not "broken".
 import { decryptAccountBalanceLocal, WrongKeyError, type DecryptedBalance } from "@/lib/chain/decrypt-local";
+import { openReceivedAmountsLocal } from "@/lib/chain/received-amount-local";
 import { composeTransferProofs, type TransferProofInput, type TransferProofs } from "@/lib/chain/transfer-proofs";
 import { composeWithdrawProofs, type WithdrawProofInput, type WithdrawProofs } from "@/lib/chain/withdraw-proofs";
 import type { DerivedKeys } from "./keys";
@@ -81,6 +82,10 @@ async function offThread<T>(request: Distribute<WorkerRequest>, local: () => Pro
 export const proveTransfer = (input: TransferProofInput): Promise<TransferProofs> => offThread({ op: "transfer", input }, () => composeTransferProofs(input));
 
 export const proveWithdraw = (input: WithdrawProofInput): Promise<WithdrawProofs> => offThread({ op: "withdraw", input }, () => composeWithdrawProofs(input));
+
+/** Opens payment amounts encrypted to this wallet (lib/received-amount.ts); null where one doesn't open. One worker round trip for the whole list. */
+export const openReceivedAmounts = (encoded: (string | null)[], keys: DerivedKeys): Promise<(bigint | null)[]> =>
+  offThread({ op: "openReceived", encoded, secretKey: keys.elgamalKeypair.secretKey }, () => openReceivedAmountsLocal(encoded, keys.elgamalKeypair.secretKey));
 
 export async function decryptOffThread(view: DecryptView, keys: DerivedKeys): Promise<DecryptedBalance> {
   try {

@@ -33,6 +33,9 @@ export interface TransferProofs {
   /** The amount's low 16 bits and high bits, each encrypted to the auditor. The auditor recovers amount = lo + hi * 2^16. */
   auditorCiphertextLo: Uint8Array;
   auditorCiphertextHi: Uint8Array;
+  /** The same two halves encrypted to the recipient (what Token-2022 adds to its pending balance). Kept so the recipient can read each payment. */
+  destinationCiphertextLo: Uint8Array;
+  destinationCiphertextHi: Uint8Array;
   newBalance: bigint;
 }
 
@@ -93,6 +96,8 @@ export async function composeTransferProofs(input: TransferProofInput): Promise<
     const sourceCtHi = own(sourcePubkey.encryptWith(amountHi, openingHi));
     const auditorCtLo = own(auditorPubkey.encryptWith(amountLo, openingLo));
     const auditorCtHi = own(auditorPubkey.encryptWith(amountHi, openingHi));
+    const destinationCtLo = own(destinationPubkey.encryptWith(amountLo, openingLo));
+    const destinationCtHi = own(destinationPubkey.encryptWith(amountHi, openingHi));
 
     const newBalance = currentBalance - amount;
     const newOpening = own(new PedersenOpening());
@@ -128,6 +133,8 @@ export async function composeTransferProofs(input: TransferProofInput): Promise<
       range: range.toBytes(),
       auditorCiphertextLo: auditorCtLo.toBytes(),
       auditorCiphertextHi: auditorCtHi.toBytes(),
+      destinationCiphertextLo: destinationCtLo.toBytes(),
+      destinationCiphertextHi: destinationCtHi.toBytes(),
       newBalance,
     };
   } finally {

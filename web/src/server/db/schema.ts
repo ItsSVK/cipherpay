@@ -86,6 +86,8 @@ export const payrollRunItems = sqliteTable(
     name: text("name").notNull(),
     legacyAmount: text("amount").notNull(), // pre-sealing plaintext; '' once sealed
     amountCt: text("amount_ct"), // sealed amount; null only for a row not sealed yet
+    // The amount encrypted to the RECIPIENT's ElGamal key (lib/received-amount.ts), so the recipient can read it. Null for older rows.
+    receivedAmountCt: text("received_amount_ct"),
     // pending | proofs_ready | sent | confirmed | failed
     status: text("status").notNull().default("confirmed"),
     signature: text("signature"), // pay_employee tx signature (the auditor view and the indexer key on these)

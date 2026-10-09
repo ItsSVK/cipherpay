@@ -138,7 +138,7 @@ export function useVault() {
       // The id is chosen here because the total and each item are sealed to (this wallet, this run) before they are sent.
       const id = crypto.randomUUID();
       const items = await Promise.all(
-        run.items.map(async (i) => ({ wallet: i.wallet, name: i.name, amountCt: await sealAmount(key, i.amount, amountContext.runItem(admin, id, i.wallet)), signature: i.signature, status: "confirmed" as const })),
+        run.items.map(async (i) => ({ wallet: i.wallet, name: i.name, amountCt: await sealAmount(key, i.amount, amountContext.runItem(admin, id, i.wallet)), signature: i.signature, receivedAmountCt: i.receivedAmount ?? null, status: "confirmed" as const })),
       );
       const total = run.items.reduce((n, i) => n + i.amount, 0n);
       await data.recordRun({ id, label: run.label, payrollId: payrollId ?? null, totalCt: await sealAmount(key, total, amountContext.runTotal(admin, id)), items });

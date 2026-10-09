@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArchiveRestoreIcon, CheckIcon, ChevronDownIcon, FilePlus2Icon, LockIcon, PlayIcon, PlusIcon, RefreshCwIcon, RotateCcwIcon, SendIcon, ShieldCheckIcon, SigmaIcon, UsersIcon, WalletIcon, XIcon, ZapIcon } from "lucide-react";
+import { LockIcon, PlayIcon, PlusIcon, RefreshCwIcon, SendIcon, UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,22 +10,43 @@ import { Switch } from "@/components/ui/switch";
 import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { Cipher } from "@/components/crypto/cipher";
-import { Flow, type FlowStep } from "@/components/crypto/flow";
+import { Flow } from "@/components/crypto/flow";
 import { ProgressButton, type ButtonProgress } from "@/components/app/progress-button";
-import { PhaseRail, RecipientBar, Reveal, SignaturePrompt, TxSlot } from "@/components/app/run-payroll-parts";
-import { useOperator, mmss } from "@/components/app/operator-context";
+import {
+  LaneMark,
+  PhaseRail,
+  PreflightBand,
+  RecipientBar,
+  RetryFailedAlert,
+  Reveal,
+  SignaturePrompt,
+  SigningCard,
+  STAGE_LABEL,
+  StartOverButton,
+  TxSlot,
+  laneDetail,
+  laneStatus,
+  laneSteps,
+  runFlow,
+  runStatus,
+  usePreflight,
+  type Check,
+  type Fix,
+  type RunPhase,
+} from "@/components/app/run-payroll-parts";
+import { useOperator } from "@/components/app/operator-context";
 import { AddPayroll, DeletePayroll, PayrollRail } from "@/components/app/payroll-picker";
 import { PayrollGate } from "@/components/data/payroll-gate";
 import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
-import { PIPELINE_STAGES, TRANSFER_STAGE, type Employee, type RunStatus } from "@/lib/mock/data";
+import { PIPELINE_STAGES, TRANSFER_STAGE, type Employee } from "@/lib/mock/data";
 import { shortToday } from "@/lib/mock/store";
 import { formatUsdc, shortAddress } from "@/lib/format";
 import { useAccountStatus } from "@/components/app/employee-context";
 import { useLiveRun } from "@/lib/payroll/use-live-run";
-import { useRunSimulation, type RecipientRun } from "@/lib/payroll/use-run-simulation";
+import { useRunSimulation } from "@/lib/payroll/use-run-simulation";
 import { checkSigning, suggestSigning, type SigningState } from "@/lib/payroll/signing-check";
 import { EmptyState } from "@/components/app/empty-state";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
@@ -34,52 +55,8 @@ import { SealedAmount } from "@/components/app/sealed-amount";
 import { sealedPreview, sealedTotalPreview } from "@/lib/sealed-amount";
 import { cn } from "@/lib/utils";
 
-type Phase = "review" | "simulating" | "simulated" | "executing" | "done";
-type CheckState = "idle" | "running" | "pass" | "fail";
-type Fix = { kind: "skip"; ids: string[]; label: string } | { kind: "resume" } | { kind: "operator"; label: string };
-interface Check { id: string; label: string; ok: boolean; detail: string; fix?: Fix; state: CheckState }
-
 /** Rent for the temporary proof accounts plus fees. The rent is refunded when they are closed. */
 const MIN_SOL_FOR_RUN = 15_000_000n;
-
-/** The five steps of one payment, as the engine reports them (PIPELINE_STAGES order). Labels are short so five fit a phone. */
-const STAGE_LABEL = ["Prove", "Accounts", "Verify", "Transfer", "Close"] as const;
-const STAGE_ICON = [<SigmaIcon key="p" />, <FilePlus2Icon key="c" />, <ShieldCheckIcon key="v" />, <SendIcon key="t" />, <ArchiveRestoreIcon key="x" />];
-const STAGE_DETAIL = [
-  "Building the equality, validity and range proofs in this tab.",
-  "Creating the three temporary proof accounts.",
-  "The ZK ElGamal program is verifying the proofs on-chain.",
-  "Sending the encrypted transfer from the treasury.",
-  "Closing the proof accounts. Their rent comes back.",
-];
-
-/** One recipient's run state as flow steps: finished ones done, the current one working (or waiting on the wallet), a failure marked where it stopped. */
-function laneSteps(r: RecipientRun | undefined): FlowStep[] {
-  const completed = r?.completed ?? 0;
-  return STAGE_LABEL.map((label, i) => ({
-    key: label,
-    label,
-    icon: STAGE_ICON[i],
-    state:
-      r?.status === "done" || i < completed
-        ? "done"
-        : i === completed && r?.status === "failed"
-          ? "error"
-          : i === completed && r?.status === "running"
-            ? r.deadline
-              ? "waiting"
-              : "active"
-            : "idle",
-  }));
-}
-
-const BASE_FLOW: { id: RunStatus; label: string }[] = [
-  { id: "draft", label: "Draft" },
-  { id: "pending_approval", label: "Pending approval" },
-  { id: "approved", label: "Approved" },
-  { id: "executing", label: "Executing" },
-  { id: "done", label: "Done" },
-];
 
 export default function RunPayrollPage() {
   return (
@@ -97,18 +74,17 @@ function RunPayroll() {
   const payroll = v.vault.payrolls.find((p) => p.id === chosenId) ?? v.vault.payrolls[0] ?? null;
   const employees = useMemo<Employee[]>(() => (payroll?.entries ?? []).map((e) => ({ id: e.id, name: e.name, role: "", wallet: e.wallet, salary: e.amount })), [payroll]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
-  const [phaseState, setPhase] = useState<Phase>("review");
-  const [checks, setChecks] = useState<Check[]>([]);
+  const [phaseState, setPhase] = useState<RunPhase>("review");
+  const preflight = usePreflight();
+  const { checks, allPass } = preflight;
   const [failDemo, setFailDemo] = useState(false);
   const { runSettings, live: autoLive, setModalOpen, secondsLeft: autoSecondsLeft, status: autoStatus, settings: autoSettings, setSettings: setAutoSettings } = useOperator();
-  const autoLow = autoLive && autoSecondsLeft <= 10;
   // How the run would be signed right now. Read through a ref by the checks, which run from timers and callbacks.
   const signingNow: SigningState = autoLive && autoStatus ? { mode: "automatic", secondsLeft: autoSecondsLeft, paymentsLeft: autoStatus.paymentsLeft } : { mode: "manual" };
   const signingRef = useRef(signingNow);
   useEffect(() => {
     signingRef.current = signingNow;
   });
-  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const credited = useRef(new Set<string>());
   const recorded = useRef(false);
 
@@ -123,14 +99,11 @@ function RunPayroll() {
   const mockSim = useRunSimulation(ids, PIPELINE_STAGES.length, TRANSFER_STAGE);
   const liveSim = useLiveRun(liveItems, PIPELINE_STAGES.length, runSettings);
   const sim = v.isLive ? liveSim : mockSim;
-  const phase: Phase = phaseState === "executing" && sim.done ? "done" : phaseState;
+  const phase: RunPhase = phaseState === "executing" && sim.done ? "done" : phaseState;
   const halted = phase === "executing" && !sim.running && sim.failedCount > 0;
 
-  const status: RunStatus = halted ? "failed" : phase === "review" || phase === "simulating" ? "draft" : phase === "simulated" ? "pending_approval" : phase === "executing" ? "executing" : "done";
-  const flow = status === "failed" ? [...BASE_FLOW.slice(0, 3), { id: "failed" as RunStatus, label: "Needs attention" }] : BASE_FLOW;
-  const allPass = checks.length > 0 && checks.every((c) => c.state === "pass");
-
-  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const { status, tone: statusTone, label: statusLabel } = runStatus(phase, halted, allPass, preflight.failed);
+  const flow = runFlow(status);
 
   useEffect(() => {
     for (const r of sim.rows) {
@@ -147,7 +120,7 @@ function RunPayroll() {
     recorded.current = true;
     const items = sim.rows.flatMap((r) => {
       const e = employees.find((x) => x.id === r.id);
-      return e && r.signature ? [{ wallet: e.wallet, name: e.name, amount: e.salary, signature: r.signature }] : [];
+      return e && r.signature ? [{ wallet: e.wallet, name: e.name, amount: e.salary, signature: r.signature, receivedAmount: r.receivedAmount }] : [];
     });
     v.recordRun({
       id: `run-${Date.now()}`,
@@ -211,20 +184,8 @@ function RunPayroll() {
       });
       return;
     }
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-    const results = buildChecks(list, paused);
-    setChecks(results.map((r) => ({ ...r, state: "idle" })));
     setPhase("simulating");
-    results.forEach((r, i) => {
-      timers.current.push(setTimeout(() => setChecks((c) => c.map((x, j) => (j === i ? { ...x, state: "running" } : x))), i * 500));
-      timers.current.push(
-        setTimeout(() => {
-          setChecks((c) => c.map((x, j) => (j === i ? { ...x, state: r.ok ? "pass" : "fail" } : x)));
-          if (i === results.length - 1) setPhase("simulated");
-        }, i * 500 + 440),
-      );
-    });
+    preflight.run(buildChecks(list, paused), () => setPhase("simulated"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys, v.vault.paused, v.vault.treasury, employees, payroll?.sealed, v.recordsStatus]);
 
@@ -291,10 +252,8 @@ function RunPayroll() {
   };
 
   const reset = () => {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
+    preflight.reset();
     setPhase("review");
-    setChecks([]);
     sim.reset();
   };
 
@@ -313,8 +272,7 @@ function RunPayroll() {
   // Safe only while no payment has gone out: a run that is sending can't be stopped, and forgetting confirmed payments
   // would let a re-run pay those people twice (partial runs aren't saved to history). After that, Retry failed is the way on.
   const canStartOver = (phase === "review" && excluded.size > 0) || phase === "simulating" || phase === "simulated" || (halted && paidCount === 0 && !sim.rows.some((r) => r.uncertain));
-  const checksDone = checks.filter((c) => c.state === "pass" || c.state === "fail").length;
-  const failedChecks = checks.filter((c) => c.state === "fail").length;
+  const checksDone = preflight.done;
   // Amounts show as ciphertext until the keys are unlocked, exactly like the treasury on the overview.
   const amountsShown = keys.ready && !payroll?.sealed;
   const unreadable = !!payroll?.sealed && v.recordsStatus === "open";
@@ -342,9 +300,6 @@ function RunPayroll() {
           : halted
             ? { label: `Retry ${sim.failedCount} failed`, icon: <RefreshCwIcon className="size-3.5" />, onClick: sim.retryFailed, disabled: false }
             : { label: "", icon: null, onClick: () => {}, disabled: true };
-
-  const statusTone = status === "failed" ? "failed" : status === "done" ? "verified" : status === "executing" ? "key" : status === "pending_approval" ? (allPass ? "verified" : "pending") : "neutral";
-  const statusLabel = status === "failed" ? "Needs attention" : status === "done" ? "Completed" : status === "executing" ? "Executing" : status === "pending_approval" ? (allPass ? "Ready to approve" : `${failedChecks} to resolve`) : phase === "simulating" ? "Checking" : "Draft";
 
   return (
     <div className="space-y-8">
@@ -427,16 +382,7 @@ function RunPayroll() {
 
             <SignaturePrompt rows={executing ? sim.rows : []} nameOf={nameOf} />
 
-            {halted ? (
-              <div className="enter-fade mx-5 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-failed-soft px-4 py-3 sm:mx-6" role="alert">
-                <p className="text-xs text-destructive">
-                  {sim.failedCount} payment{sim.failedCount === 1 ? "" : "s"} did not complete. Confirmed payments stay paid and are never sent twice.
-                </p>
-                <Button size="sm" variant="outline" onClick={sim.retryFailed} className="h-7 border-destructive/30 text-xs text-destructive hover:bg-destructive/10">
-                  <RefreshCwIcon className="mr-1 size-3" /> Retry failed
-                </Button>
-              </div>
-            ) : null}
+            {halted ? <RetryFailedAlert count={sim.failedCount} onRetry={sim.retryFailed} /> : null}
 
             <div className={cn("flex items-center justify-between gap-3 border-border/60 bg-muted/30 px-5 py-2 sm:px-6", phase === "review" ? "border-b" : "mt-4 border-y")}>
               <span className="min-w-0 truncate text-[11px] font-medium text-muted-foreground">
@@ -505,11 +451,7 @@ function RunPayroll() {
                                 className="text-sm font-semibold text-foreground"
                               />
                             )}
-                            {executing ? (
-                              <p className={cn("mt-0.5 text-[11px] font-medium", paid ? "text-verified" : failed ? "text-destructive" : running ? "text-primary" : "text-muted-foreground")}>
-                                {paid ? "Confirmed" : failed ? "Failed" : running ? (r?.deadline ? "Awaiting signature" : STAGE_LABEL[Math.min(r?.completed ?? 0, STAGE_LABEL.length - 1)]) : r?.waiting ? "Waiting" : "Queued"}
-                              </p>
-                            ) : null}
+                            {executing ? <p className={cn("mt-0.5 text-[11px] font-medium", laneStatus(r).className)}>{laneStatus(r).text}</p> : null}
                           </div>
                         </div>
 
@@ -518,7 +460,7 @@ function RunPayroll() {
                           <div className="pt-4 sm:pl-9">
                             <Flow label={`Payment to ${e.name}`} steps={laneSteps(r)} />
                             <p className={cn("mt-3 text-xs", failed ? "text-destructive" : r?.deadline ? "text-primary" : "text-muted-foreground")}>
-                              {failed ? r?.error : r?.deadline ? "Waiting for your wallet to approve the transfer." : r?.waiting ? "Waits for the previous transfer to land. Transfers from one treasury go one at a time." : STAGE_DETAIL[Math.min(r?.completed ?? 0, STAGE_DETAIL.length - 1)]}
+                              {laneDetail(r)}
                             </p>
                           </div>
                         </Reveal>
@@ -562,11 +504,7 @@ function RunPayroll() {
                   </h2>
                   <p className="text-[11px] text-muted-foreground">Simulate, approve, dispatch</p>
                 </div>
-                {canStartOver ? (
-                  <Button variant="ghost" size="sm" className="enter-fade ml-auto h-7 gap-1.5 rounded-full border border-primary/20 bg-accent/70 px-3 text-[11px] font-semibold text-accent-foreground shadow-2xs hover:border-primary/35 hover:bg-accent hover:text-accent-foreground [&_svg]:transition-transform [&_svg]:duration-300 hover:[&_svg]:-rotate-90" onClick={startOver}>
-                    <RotateCcwIcon className="size-3.5" /> Start over
-                  </Button>
-                ) : null}
+                {canStartOver ? <StartOverButton onClick={startOver} /> : null}
               </div>
 
               <div className="space-y-3 rounded-2xl border border-border/80 bg-gradient-to-b from-muted/30 to-muted/10 p-5">
@@ -603,37 +541,7 @@ function RunPayroll() {
                 </Reveal>
               </div>
 
-              {v.isLive ? (
-                <div
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl border p-3 text-xs transition-colors duration-300",
-                    !autoLive || autoLow ? "border-pending/30 bg-pending-soft" : "border-verified/25 bg-verified-soft",
-                  )}
-                >
-                  <div className={cn("grid size-8 shrink-0 place-items-center rounded-lg shadow-2xs", autoLive ? (autoLow ? "bg-pending text-white" : "bg-verified text-white") : "bg-card text-pending")}>
-                    {autoLive ? <ZapIcon className="size-4 fill-current" /> : <WalletIcon className="size-4" />}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 font-semibold text-foreground">
-                      {autoLive ? "Automatic" : "Manual approvals"}
-                      {autoLive ? (
-                        <span className={cn("inline-flex items-center gap-1 font-mono text-[11px] font-semibold tnum", autoLow ? "text-pending" : "text-verified")} role="timer" aria-label="Automatic payroll time left">
-                          <span aria-hidden className="size-1.5 rounded-full bg-current [animation:dot-pulse_1.2s_ease-in-out_infinite]" />
-                          {mmss(autoSecondsLeft)}
-                        </span>
-                      ) : null}
-                    </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {autoLive
-                        ? `Helper signs · ${autoStatus?.paymentsLeft ?? 0} payment${autoStatus?.paymentsLeft === 1 ? "" : "s"} left`
-                        : `Your wallet approves each of ${included.length} payments.`}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm" className="h-7 shrink-0 bg-card text-[11px]" onClick={() => setModalOpen(true)} disabled={executing && !halted && phase !== "done"}>
-                    {autoLive ? "Manage" : "Turn on"}
-                  </Button>
-                </div>
-              ) : null}
+              {v.isLive ? <SigningCard payments={included.length} locked={executing && !halted && phase !== "done"} /> : null}
 
               <div>
               <ProgressButton
@@ -682,156 +590,5 @@ function RunPayroll() {
         <p>The proof accounts are closed right after, and their rent comes back to you or the payroll helper.</p>
       </DisclosureCard>
     </div>
-  );
-}
-
-/** The lane's leading mark during a run: queued ring, running pulse, confirmed check, failed cross. */
-function LaneMark({ status }: { status: RecipientRun["status"] }) {
-  return (
-    <span className="relative shrink-0" aria-hidden>
-      {status === "running" ? <span className="absolute -inset-1 rounded-full border-2 border-dashed border-primary/40 animate-[spin_6s_linear_infinite]" /> : null}
-    <span
-      className={cn(
-        "grid size-6 shrink-0 place-items-center rounded-full border-2 transition-[background-color,border-color] duration-500 ease-out-expo",
-        status === "done" && "border-verified bg-verified text-white",
-        status === "failed" && "border-destructive bg-destructive text-white",
-        status === "running" && "border-primary/50 bg-primary/10",
-        status === "pending" && "border-input bg-card",
-      )}
-    >
-      {status === "done" ? (
-        <CheckIcon className="size-3.5 [animation:pop_var(--dur-base)_var(--ease-out)]" strokeWidth={3} />
-      ) : status === "failed" ? (
-        <XIcon className="size-3.5" strokeWidth={3} />
-      ) : status === "running" ? (
-        <span className="size-2 rounded-full bg-primary [animation:dot-pulse_900ms_ease-in-out_infinite]" />
-      ) : null}
-    </span>
-    </span>
-  );
-}
-
-/**
- * Pre-flight checks, inside the batch, as one collapsible panel. They open and tick through while checking. When every check
- * passes they stay open to be read, then fold to their header once the admin moves on (any click outside the panel, or
- * Approve). A failure keeps them open and cannot be folded. Re-running opens them again. The header can always reopen them.
- */
-function PreflightBand({ checks, phase, allPass, onFix }: { checks: Check[]; phase: Phase; allPass: boolean; onFix: (f: Fix) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  // What the admin chose with the header (or by clicking away); null = the phase's default. Reset whenever the phase changes.
-  const [userOpen, setUserOpen] = useState<boolean | null>(null);
-  const [lastPhase, setLastPhase] = useState(phase);
-  if (lastPhase !== phase) {
-    setLastPhase(phase);
-    setUserOpen(null);
-  }
-
-  const visible = phase !== "review" && checks.length > 0;
-  const checking = phase === "simulating";
-  const failed = checks.filter((c) => c.state === "fail").length;
-  const passed = checks.filter((c) => c.state === "pass").length;
-  const pinned = checking || (phase === "simulated" && !allPass);
-  const open = pinned || (userOpen ?? phase === "simulated");
-
-  // All green and still open: fold as soon as the admin clicks anywhere else (the Approve button included).
-  const foldOnLeave = phase === "simulated" && allPass && open;
-  useEffect(() => {
-    if (!foldOnLeave) return;
-    const onDown = (e: PointerEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setUserOpen(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
-  }, [foldOnLeave]);
-
-  const summary = checking
-    ? `Checking ${Math.min(passed + failed + 1, checks.length)} of ${checks.length}…`
-    : failed > 0
-      ? `${failed} of ${checks.length} need${failed === 1 ? "s" : ""} attention`
-      : allPass
-        ? `All ${checks.length} checks passed`
-        : "Checks done";
-
-  return (
-    <Reveal open={visible}>
-      <div ref={ref} className="px-5 pt-4 sm:px-6">
-        <div
-          className={cn(
-            "rounded-2xl border transition-colors duration-300",
-            failed > 0 && !checking ? "border-destructive/25 bg-failed-soft/30" : allPass && !open ? "border-verified/25 bg-verified-soft/60" : "border-border/80 bg-muted/20",
-          )}
-        >
-          <button
-            type="button"
-            onClick={() => !pinned && setUserOpen(!open)}
-            aria-expanded={open}
-            aria-controls="preflight-list"
-            aria-disabled={pinned}
-            className={cn("flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50", pinned ? "cursor-default" : "cursor-pointer")}
-          >
-            <span
-              className={cn(
-                "grid size-5 shrink-0 place-items-center rounded-full text-white transition-colors duration-300",
-                checking ? "bg-primary" : failed > 0 ? "bg-destructive" : "bg-verified",
-              )}
-            >
-              {checking ? (
-                <span className="size-1.5 rounded-full bg-white [animation:dot-pulse_700ms_ease-in-out_infinite]" />
-              ) : failed > 0 ? (
-                <XIcon className="size-3" strokeWidth={3} />
-              ) : (
-                <CheckIcon className="size-3 [animation:pop_var(--dur-base)_var(--ease-out)]" strokeWidth={3} />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">Pre-flight checks</p>
-              <p className={cn("text-xs font-medium", checking ? "text-foreground" : failed > 0 ? "text-destructive" : "text-verified")}>{summary}</p>
-            </div>
-            <span className="hidden text-[11px] text-muted-foreground sm:inline">Read from devnet, nothing is sent</span>
-            {!pinned ? <ChevronDownIcon aria-hidden className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-300", open && "rotate-180")} /> : null}
-          </button>
-
-          <Reveal open={open}>
-            <ul id="preflight-list" className="grid gap-1.5 px-4 pb-4">
-              {checks.map((c) => (
-                <li
-                  key={c.id}
-                  className={cn(
-                    "flex items-center gap-3 rounded-xl px-2.5 py-2 transition-[background-color,opacity] duration-300",
-                    c.state === "fail" && "bg-failed-soft/70",
-                    c.state === "running" && "bg-accent/40",
-                    c.state === "idle" && "opacity-50",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "grid size-5 shrink-0 place-items-center rounded-full text-white transition-colors duration-300",
-                      c.state === "pass" ? "bg-verified" : c.state === "fail" ? "bg-destructive" : c.state === "running" ? "bg-primary" : "bg-muted",
-                    )}
-                  >
-                    {c.state === "pass" ? (
-                      <CheckIcon className="size-3 [animation:pop_var(--dur-base)_var(--ease-out)]" strokeWidth={3} />
-                    ) : c.state === "fail" ? (
-                      <XIcon className="size-3" strokeWidth={3} />
-                    ) : c.state === "running" ? (
-                      <span className="size-1.5 rounded-full bg-white [animation:dot-pulse_700ms_ease-in-out_infinite]" />
-                    ) : null}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium text-foreground">{c.label}</p>
-                    <p className="text-[11px] text-muted-foreground">{c.state === "idle" ? "Waiting" : c.state === "running" ? "Checking…" : c.detail}</p>
-                  </div>
-                  {c.state === "fail" && c.fix ? (
-                    <Button size="sm" variant="outline" className="h-7 shrink-0 text-[11px]" onClick={() => onFix(c.fix!)}>
-                      {c.fix.kind === "resume" ? "Resume vault" : c.fix.label}
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </Reveal>
-        </div>
-      </div>
-    </Reveal>
   );
 }

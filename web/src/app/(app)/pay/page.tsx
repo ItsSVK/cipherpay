@@ -281,20 +281,33 @@ export default function MyPay() {
                     </div>
                   </div>
                   <div className="text-right">
-                    {p.amount === null ? (
-                      // Real payments: the employer's record keeps the amount encrypted for the employer only. It is in your balance above.
-                      <span className="text-xs text-muted-foreground" title="The employer's record keeps this amount encrypted for the employer. It is included in your balance above.">
+                    {p.received?.status === "none" ? (
+                      // Saved before payments carried an amount encrypted to the recipient. It is still in your balance above.
+                      <span className="text-xs text-muted-foreground" title="This payment was recorded before amounts were saved for the recipient. It is included in your balance above.">
                         Amount private
                       </span>
+                    ) : p.received?.status === "invalid" ? (
+                      <span className="text-xs text-destructive" title="The amount in the employer's record doesn't decrypt with your key or doesn't match the payment on-chain, so it isn't shown. Your balance above is unaffected.">
+                        Doesn&apos;t match chain
+                      </span>
                     ) : (
-                      <Cipher
-                        value={formatUsdc(p.amount)}
-                        seed={`pay-${p.id}`}
-                        revealed={shown}
-                        delay={i * 90}
-                        suffix="USDC"
-                        className="font-mono text-base font-semibold tnum"
-                      />
+                      <>
+                        <Cipher
+                          value={p.amount === null ? "0.00" : formatUsdc(p.amount)}
+                          seed={`pay-${p.id}`}
+                          revealed={p.received ? p.amount !== null : shown}
+                          delay={i * 90}
+                          suffix="USDC"
+                          className="font-mono text-base font-semibold tnum"
+                        />
+                        {p.received?.status === "checking" ? (
+                          <p className="mt-0.5 text-[10.5px] text-muted-foreground">Checking on-chain…</p>
+                        ) : p.received?.status === "ready" && !p.received.verified ? (
+                          <p className="mt-0.5 text-[10.5px] text-muted-foreground" title="The network couldn't be asked for this transaction just now. It is checked again on the next load.">
+                            Not yet checked on-chain
+                          </p>
+                        ) : null}
+                      </>
                     )}
                   </div>
                 </li>

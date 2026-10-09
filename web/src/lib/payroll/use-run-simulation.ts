@@ -20,6 +20,8 @@ export interface RecipientRun {
   deadline?: number;
   /** Live runs only: the payment was submitted but not confirmed either way. Check the explorer before retrying. */
   uncertain?: boolean;
+  /** Live runs only: the amount encrypted to the recipient, from the payment's proofs (lib/received-amount.ts). Saved with the run. */
+  receivedAmount?: string;
 }
 
 const CONCURRENCY = 3;

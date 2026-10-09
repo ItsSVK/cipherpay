@@ -135,7 +135,7 @@ export function useLiveRun(items: LiveItem[], stageCount: number, settings: RunS
               }),
             onSigned: () => patch(id, { deadline: undefined, note: undefined }),
           });
-          patch(id, { status: "done", completed: stageCount, signature: result.signature, note: result.closeWarning });
+          patch(id, { status: "done", completed: stageCount, signature: result.signature, receivedAmount: result.receivedAmount, note: result.closeWarning });
         } catch (e) {
           const maybePaid = e instanceof PaymentError && e.maybePaid;
           patch(id, {

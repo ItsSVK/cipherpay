@@ -77,6 +77,8 @@ export interface RunItem {
   name: string;
   amount: bigint;
   signature: string;
+  /** Live runs: the amount encrypted to the recipient (lib/received-amount.ts), so the recipient can read this payment. */
+  receivedAmount?: string;
 }
 
 export interface Run {

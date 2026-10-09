@@ -50,13 +50,17 @@ export interface SealedRun {
   items: { id: number; wallet: string; name: string; amountCt: string | null; legacyAmount: string | null; signature: string; status: string }[];
 }
 
-/** One confirmed payment the employer's record says was sent to this wallet. No amount (it is sealed for the employer); the signature lets anyone check it on-chain. */
+/**
+ * One confirmed payment the employer's record says was sent to this wallet. The amount comes only as `receivedAmountCt`, encrypted to this
+ * wallet's own key (null for payments saved before that existed); the signature lets anyone check it on-chain.
+ */
 export interface ReceivedPayment {
   id: string;
   employer: string;
   label: string;
   createdAt: string;
   signature: string;
+  receivedAmountCt: string | null;
 }
 
 export interface NewSealedRun {
@@ -64,7 +68,8 @@ export interface NewSealedRun {
   label: string;
   payrollId: string | null;
   totalCt: string;
-  items: { wallet: string; name: string; amountCt: string; signature: string | null; status: "confirmed" | "failed"; error?: string | null }[];
+  /** `receivedAmountCt`: the amount encrypted to the recipient (lib/received-amount.ts), so the recipient can read it. Null if unknown. */
+  items: { wallet: string; name: string; amountCt: string; receivedAmountCt: string | null; signature: string | null; status: "confirmed" | "failed"; error?: string | null }[];
 }
 
 /** Ciphertexts for rows saved before sealing existed (see POST /api/seal). */

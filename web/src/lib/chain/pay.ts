@@ -24,6 +24,7 @@ import { DEVNET_WUSDC_MINT } from "./constants";
 import { ataFor, type ConfidentialAccountView } from "./read";
 import type { AppRpc } from "./rpc";
 import { proveTransfer } from "@/lib/crypto/proof-client";
+import { encodeReceivedAmount } from "@/lib/received-amount";
 
 const WUSDC = address(DEVNET_WUSDC_MINT);
 const COMPUTE_BUDGET_PROGRAM = address("ComputeBudget111111111111111111111111111111");
@@ -49,6 +50,8 @@ export interface PaymentPlan {
   close: TxSpec;
   contextAddresses: { equality: Address; validity: Address; range: Address };
   newBalance: bigint;
+  /** The amount encrypted to the recipient (lib/received-amount.ts), saved with the run so the recipient can read this payment. */
+  receivedAmount: string;
 }
 
 export interface PaymentInput {
@@ -139,6 +142,7 @@ export async function buildPaymentPlan(input: PaymentInput): Promise<PaymentPlan
     },
     contextAddresses: { equality: eqCtx.address, validity: valCtx.address, range: rangeCtx.address },
     newBalance: proofs.newBalance,
+    receivedAmount: encodeReceivedAmount(proofs.destinationCiphertextLo, proofs.destinationCiphertextHi),
   };
 }
 

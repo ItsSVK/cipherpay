@@ -275,8 +275,7 @@ Employee list, payout rules and payroll-run history are **off-chain** (decision 
   the `amount` / `total` columns stay (NOT NULL can't be dropped in SQLite without a table rebuild, which would cascade-delete child rows on D1);
   new rows write `''`. `/api/company` returns a row's old plaintext as `legacy*` only while it is unsealed; on the next unlock the browser seals it
   and `POST /api/seal` stores the ciphertext and clears the plaintext (own rows only, never overwrites a sealed one). Drop those columns once
-  remote is fully sealed. **Consequence:** `/api/payments` returns no amount (employees can't open the employer's seal), so My pay shows
-  "Amount private" for real payments. Verified against the dev server + local D1 with throwaway wallets (27 checks: plaintext refused, DB
+  remote is fully sealed. **Consequence:** employees can't open the employer's seal, so the recipient gets its own copy (next bullet). Verified against the dev server + local D1 with throwaway wallets (27 checks: plaintext refused, DB
   holds no plaintext, open/round-trip, wrong key, swapped ciphertext caught, id reuse 409, legacy seal + cross-wallet 403). Unit tests:
   `record-seal.test.ts`. **Not browser-run.** Remote needs `bun run db:migrate:remote`.
 - **Auth = one wallet signature, then a session.** `POST /api/auth/nonce` returns the exact message to sign (site, wallet, single-use
@@ -291,6 +290,19 @@ Employee list, payout rules and payroll-run history are **off-chain** (decision 
   `removeAddress`, `addPayroll`, `removePayroll`, `recordRun(label, items, payrollId)`. A wallet that has not signed in sees `PayrollGate` ("Sign in with wallet") on Addresses / Run payroll /
   Split, and an inline prompt for run history on the Overview. Disconnect also calls `/api/auth/logout`. `useVault()` merges this data over the
   chain-derived vault flags (`vault.employees` = saved addresses, `vault.payrolls` = payrolls with amounts); `ChainProvider` checks activation for the persisted employees.
+- **Per-payment amounts for the recipient (2026-10-09, migration `0005`).** A confidential Transfer encrypts the amount's lo/hi halves for the
+  source, the destination and the auditor with one shared commitment per half. `composeTransferProofs` now also returns the DESTINATION's two
+  ciphertexts (byte-identical to the ones in the on-chain validity proof, which is what Token-2022 credits to pending), `payOne` returns them encoded
+  (`lib/received-amount.ts`: `v1.` + base64url of lo 64 | hi 64 = 171 chars, shared with the server's zod check) and the run saves them per item in
+  `payroll_run_items.received_amount_ct`. `/api/payments` returns them; My pay opens them with the employee's ElGamal secret in the proof worker
+  (`openReceived` op, `lib/chain/received-amount-local.ts`) and then checks each against its `pay_employee` transaction
+  (`lib/chain/received-check.ts`: vault program, `employee_token_account` = this wallet's ATA, and the first 32 bytes (commitment) of the stored lo/hi
+  equal the instruction's auditor ciphertexts; Token-2022 ties those to the validity proof). Mismatch or wrong key -> "Doesn't match chain", amount withheld;
+  RPC unavailable -> amount shown with "Not yet checked on-chain". Rows saved before this have no ciphertext and still say "Amount private". Hook:
+  `components/chain/use-received-amounts.ts` (checks cached per signature, 3 at a time). The split page's run label no longer includes the total
+  (labels are plaintext and shown to recipients). Tests: `received-amount.test.ts` (matches the proof context, opens to the amount, wrong key fails,
+  wrong account / other payment / mixed halves rejected). Local D1 migrated, `next build` passes. **Not run against a validator or in a browser yet;
+  remote needs `bun run db:migrate:remote`.**
 - **Payrolls (2026-10-07).** Run payroll now starts from a payroll: `components/app/payroll-picker.tsx` has `PayrollPicker` (choose, delete) and `AddPayroll` (a sheet:
   name, then rows of saved-address dropdown + amount, one submit). The page maps the chosen payroll's entries to the run engine's recipient list, so the engine is
   unchanged; a run is saved with its `payrollId`. Demo wallets get the same flow from the mock store (seeded with one payroll). Verified against the running dev
@@ -467,6 +479,24 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   now deduped by ciphertext key in `use-confidential-balance.ts`; (d) the operator panel's **1 s countdown clock only runs while something is counting
   down**. Proof generation and decryption used to run on the **main thread** (~5 long tasks per payroll run, max ~340 ms); that is fixed, see "Hardening" below. Known and NOT fixed: `@solana-program/token-2022`'s own `decryptConfidentialTransferBalance` leaks 3 wasm objects per
   call inside `node_modules`; `useVault()`/`useEmployee()` still return fresh object literals every render.
+- **Split payout redesigned on the Run payroll pattern (2026-10-09).** Same layout and flow as Run payroll: work plate + Run control,
+  `review -> simulating -> simulated -> executing -> done` (Simulate split, pre-flight checks, Approve & run split), per-destination
+  payment lanes (`Flow`), `SignaturePrompt`, Retry failed, Start over, `SigningCard`, `PhaseRail`, demo failure switch. The shared
+  pieces moved out of `admin/payroll/page.tsx` into `components/app/run-payroll-parts.tsx` (Run payroll's behaviour unchanged). Split
+  checks: parts add up to the invoice, treasury covers it, every paid destination activated (no skip fix: dropping one would change the
+  split), SOL, automatic-payroll signing, vault not paused (Resume fix). Rule errors (invoice, 100%, names, wallets) show in place when
+  Simulate is pressed. **Destinations are now picked from saved addresses** (a checklist, the same `addresses` the payrolls use) instead
+  of typed-in wallets, so `split-plan.ts` rows are keyed by address id and activation comes from `v.isActivated` (the chain provider already
+  reads every saved address); "Split evenly" gives the odd basis points to the primary. No saved addresses = an empty state linking to
+  Addresses. Verified in headless Chrome over CDP against `next dev` in demo mode at 1440px and 390px: pick 3, split evenly (33.34/33.33/33.33),
+  unlock, simulate, approve, run to "Split sent · 3 paid". The real-wallet path was not clicked through (same engine as Run payroll).
+- **Start chooser for fresh wallets (2026-10-09).** `components/app/start-chooser.tsx`, mounted in `ConnectedShell`. A member wallet
+  with no activated confidential account AND no vault (`!account.activated && !company.created`) is asked "Receive pay" (-> `/pay`) or
+  "Send payouts" (-> `/admin`). Only shown once the chain read has succeeded (`chain.status === "ready"`, or demo), so an RPC error
+  never makes a set-up wallet look fresh. Nothing is stored: closing it hides it for the current page only, so it
+  comes back on every reload and every reconnect until one side exists on chain (changed same day, by request). The auditor option is a future entry in its `OPTIONS` array. Verified in headless Chrome
+  against `next dev` in demo mode ("New wallet") at 1440px and 390px: shown, selection reveals steps, "Set up my company" lands on
+  `/admin`, shown again after close + reload and after disconnect + reconnect. Real-wallet path not clicked through.
 - **Signing pre-flight checks (2026-10-09).** A run reads automatic vs manual once at start, and `pay_employee` fails on-chain once the
   operator's payment count or time runs out, so a run larger than what is left used to stop part way. `lib/payroll/signing-check.ts`
   (`checkSigning`, `suggestSigning`, 8 tests) adds two checks in automatic mode: "covers every payment" (`paymentsLeft >= recipients`) and

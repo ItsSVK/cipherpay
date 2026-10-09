@@ -46,6 +46,8 @@ export interface PayOneInput {
 export interface PayOneResult {
   /** The pay_employee transaction signature (what the auditor view is keyed on). */
   signature: string;
+  /** The amount encrypted to the recipient (lib/received-amount.ts), for the run record. */
+  receivedAmount: string;
   /** Set if the payment landed but the proof accounts could not be closed (their rent just stays with the helper). */
   closeWarning?: string;
 }
@@ -131,8 +133,8 @@ export async function payOne(input: PayOneInput): Promise<PayOneResult> {
   stage("close");
   try {
     await closeContexts();
-    return { signature };
+    return { signature, receivedAmount: plan.receivedAmount };
   } catch (e) {
-    return { signature, closeWarning: `The payment went through, but the temporary proof accounts could not be closed: ${describe(e)} Their rent stays in your payroll helper.` };
+    return { signature, receivedAmount: plan.receivedAmount, closeWarning: `The payment went through, but the temporary proof accounts could not be closed: ${describe(e)} Their rent stays in your payroll helper.` };
   }
 }

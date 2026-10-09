@@ -11,6 +11,7 @@ export type DecryptView = Pick<ConfidentialAccountView, "token" | "elgamalPubkey
 export type WorkerRequest =
   | { id: number; op: "transfer"; input: TransferProofInput }
   | { id: number; op: "withdraw"; input: WithdrawProofInput }
-  | { id: number; op: "decrypt"; view: DecryptView; keys: DerivedKeys };
+  | { id: number; op: "decrypt"; view: DecryptView; keys: DerivedKeys }
+  | { id: number; op: "openReceived"; encoded: (string | null)[]; secretKey: Uint8Array };
 
 export type WorkerResponse = { id: number; ok: true; value: unknown } | { id: number; ok: false; name: string; message: string };

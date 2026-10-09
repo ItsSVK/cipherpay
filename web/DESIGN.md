@@ -268,6 +268,18 @@ Appears in place when the engine reports a wallet request. Title "Approve in you
 `Flow` (built in this tab → your wallet → devnet), real seconds left, and a hairline bar draining to the real deadline (amber under
 10 s). Turns into "Signed" briefly when approved; a declined request just closes.
 
+### Run pages (`run-payroll-parts.tsx`)
+Run payroll and Split payout are the same page shape and share one kit: work plate (rows that turn into lanes) + sticky
+**Run control** (total panel, `SigningCard`, one `ProgressButton`, `PhaseRail`, lock note). Shared: `usePreflight` + `PreflightBand`,
+`SignaturePrompt`, `RetryFailedAlert`, `LaneMark` + `laneSteps` / `laneStatus` / `laneDetail`, `StartOverButton`, `runStatus` /
+`runFlow`. Phases are `review → simulating → simulated → executing → done`. A third run-like page reuses these, it does not copy them.
+On Split payout the destinations are a **checklist of saved addresses** (like `AddPayroll`): ticking one opens its share field in place
+and fills it with what is still unassigned; "Split evenly" in the header strip shares 100% out. The primary shows a `Primary` badge and
+other ticked rows get a "Make primary" pill on hover (always visible on touch). Rows and the header strip share fixed column widths
+(share, amount) so figures line up; on phones the amount column folds into the address line while editing. The invoice band folds away
+once checks start, unticked rows fold away, and share and amount top-align with the name line. The allocation bar is indigo (primary solid, others a tint) with the
+unassigned rest as a dashed slot; no categorical hues (they would collide with green/amber/red).
+
 ### Lifecycle rail (`PhaseRail`)
 Vertical list of a run's states with drawing connectors. Reached states are green checks; the current one is an indigo ring that
 pulses; a terminal "Done" is a check, not a ring; a failure is red.
@@ -295,6 +307,13 @@ one-sentence description, `border-b`), body (`px-6 py-5`, settings as plain labe
 action. While the thing is live, the settings rows are replaced by one inner panel of hero figures (e.g. time left / payments left).
 Small integer inputs use a **stepper** (− mono value +, `h-9 rounded-lg border-input`), not a bare number field.
 
+### Choice dialog (`StartChooser`)
+For "pick one path" questions (e.g. where a fresh wallet starts). Same three zones as a settings dialog. Body is a vertical
+`role="radiogroup"` of bordered `rounded-xl` option rows: `size-8 rounded-lg` icon tile (indigo when selected, mist otherwise), title +
+one-line blurb, and a round radio tick on the right. Selecting a row tints it (`bg-accent/60`) and opens its numbered first steps in
+place with `Reveal`. Nothing is preselected; the footer `ProgressButton` reads "Choose one to continue" until a choice, then names
+the destination ("Set up my company"). Options come from a data array, so a new role (auditor) is one more entry.
+
 ### Key state (`KeyChip`, `LockIcon`, `UnlockDialog`)
 Key state is always visible in the top bar: the chip pulses while locked, the shackle lifts on unlock, and the unlock dialog draws
 the real derivation with `KeyDerivation` (signature → ElGamal key + AES key). Anything that needs keys calls `keys.requireKeys()`,
@@ -315,6 +334,12 @@ translucency or blur. Style lives in `TooltipContent`; don't override it per use
 
 ### Empty states (`EmptyState`)
 Icon, one-line title that names the next step ("Create your first payroll"), one sentence, and the action button.
+
+### Page loading (`PageLoading`)
+Whole-page wait while chain/D1 state is read. Centred in the content area (`min-h-[50vh]`): a `size-14 rounded-2xl` Key Wash tile
+with a block glyph and two staggered `orb-ripple` rings, the label (`text-sm font-semibold`, says what is being read), a churning
+`HexTicker`, and a 2px indigo `sweep` track. Fades in after 180ms so a fast read shows nothing. No skeletons of the page behind it
+(they guess at a layout the page may not have).
 
 ## Motion
 
@@ -344,6 +369,6 @@ Easing `--ease-out` (cubic-bezier(.16,1,.3,1)); 150ms feedback, 260ms state chan
 
 ## Open notes
 - "Cipherpay" and its mark (`components/app/brand.tsx`) are placeholders until the product name is decided.
-- Previous language still in use, to migrate to this system when those screens are next touched: `PipelineTrack` + `RunningLine`
-  on Split payout (`admin/split/page.tsx`), `HexTicker` in `StepList` (withdraw steps), and a `Fingerprint` colour block on the
-  auditor page. New work uses `Flow` and plain addresses.
+- Previous language still in use, to migrate to this system when those screens are next touched: `HexTicker` in `StepList`
+  (withdraw steps), and a `Fingerprint` colour block on the auditor page. New work uses `Flow` and plain addresses.
+  (`PipelineTrack` is now only on the landing page demo.)

@@ -2,6 +2,7 @@
 
 import { useChain } from "@/components/chain/chain-state";
 import { useConfidentialBalance, type BalanceStatus } from "@/components/chain/use-confidential-balance";
+import { useReceivedAmounts, type ReceivedAmount } from "@/components/chain/use-received-amounts";
 import { usePayrollData } from "@/components/data/payroll-data";
 import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
@@ -33,6 +34,7 @@ export function useEmployee() {
   const status = useAccountStatus();
   const decrypted = useConfidentialBalance(isDemo ? null : (chain.wallet?.wusdc ?? null));
   const data = usePayrollData();
+  const received = useReceivedAmounts(isDemo ? [] : data.payments, isDemo ? null : (chain.wallet?.wusdc?.address ?? null));
   const wallet = address ?? "";
 
   const actions = {
@@ -44,7 +46,7 @@ export function useEmployee() {
 
   if (isDemo) {
     const a = store.accountOf(wallet);
-    return { wallet, ...a, payments: a.payments.map((p) => ({ ...p, employer: null as string | null, status: p.status as "pending" | "available" | null })), paymentsStatus: "demo" as const, paymentsSigningIn: false, paymentsError: null as string | null, signInForPayments: async () => {}, ...actions, isLive: false, loading: false, awaitingApproval: false, hasSol: a.sol >= MIN_SOL, balanceStatus: "ready" as BalanceStatus, balanceError: null as string | null };
+    return { wallet, ...a, payments: a.payments.map((p) => ({ ...p, employer: null as string | null, status: p.status as "pending" | "available" | null, received: null as ReceivedAmount | null })), paymentsStatus: "demo" as const, paymentsSigningIn: false, paymentsError: null as string | null, signInForPayments: async () => {}, ...actions, isLive: false, loading: false, awaitingApproval: false, hasSol: a.sol >= MIN_SOL, balanceStatus: "ready" as BalanceStatus, balanceError: null as string | null };
   }
 
   const w = chain.wallet;
@@ -63,8 +65,11 @@ export function useEmployee() {
     publicWusdc: w?.wusdc?.publicBalance ?? 0n,
     publicUsdc: w?.usdc ?? 0n,
     // The chain keeps only the combined balance, so per-payment history is what employers recorded for this wallet (signed in with one signature).
-    // No amount: the employer's record holds it encrypted for the employer, and the payment event holds it encrypted for the auditor.
-    payments: data.payments.map((p) => ({ id: p.id, date: new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }), from: p.label, employer: p.employer as string | null, amount: null as bigint | null, status: null as "pending" | "available" | null, signature: p.signature })),
+    // Each amount comes encrypted to this wallet's key and is opened locally, then checked against the on-chain payment (`received`).
+    payments: data.payments.map((p) => {
+      const r = received.get(p.id) ?? null;
+      return { id: p.id, date: new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }), from: p.label, employer: p.employer as string | null, amount: r?.status === "ready" ? r.amount : null, status: null as "pending" | "available" | null, signature: p.signature, received: r };
+    }),
     paymentsStatus: data.status,
     paymentsSigningIn: data.signingIn,
     paymentsError: data.error,

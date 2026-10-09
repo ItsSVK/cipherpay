@@ -1,6 +1,7 @@
 import "server-only";
 import { isAddress } from "@solana/kit";
 import { z } from "zod";
+import { RECEIVED_AMOUNT_PATTERN } from "@/lib/received-amount";
 import { SEALED_AMOUNT_PATTERN } from "@/lib/sealed-amount";
 
 // Every route validates its input here. Nothing client-supplied is trusted, least of all "who am I": the employer is
@@ -59,6 +60,8 @@ export const runInput = z
             wallet: walletSchema,
             name: z.string().trim().min(1).max(80),
             amountCt: sealedAmountSchema,
+            /** The amount encrypted to the recipient (lib/received-amount.ts). Shape only; the recipient's browser checks it against the chain. */
+            receivedAmountCt: z.string().regex(RECEIVED_AMOUNT_PATTERN, "Not a received-amount ciphertext").nullable().optional(),
             signature: signatureSchema.nullable(),
             status: z.enum(["confirmed", "failed"]),
             error: z.string().max(500).nullable().optional(),

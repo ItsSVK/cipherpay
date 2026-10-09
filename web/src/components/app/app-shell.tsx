@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { LogOutIcon, MenuIcon, RefreshCwIcon, ZapIcon } from "lucide-react";
+import { LogOutIcon, MenuIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -26,8 +26,9 @@ import { navFor, sectionFromPath, type NavGroup, type Role } from "./nav";
 import { StatusBadge } from "./status-badge";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ConfirmDialog } from "./confirm-dialog";
-import { OperatorProvider, useOperator, mmss } from "./operator-context";
+import { OperatorProvider } from "./operator-context";
 import { OperatorModal } from "./operator-modal";
+import { StartChooser } from "./start-chooser";
 
 function NavList({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathname: string; onNavigate?: () => void }) {
   return (
@@ -83,49 +84,15 @@ function NavList({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathnam
   );
 }
 
-function SidebarHelperButton() {
-  const { live, secondsLeft, setModalOpen } = useOperator();
-  return (
-    <button
-      type="button"
-      onClick={() => setModalOpen(true)}
-      className={cn(
-        "group flex w-full items-center justify-between gap-2.5 rounded-xl border p-2.5 text-xs font-medium transition-all duration-200 active:scale-[0.985] text-left",
-        live
-          ? "border-verified/40 bg-verified-soft/40 text-foreground hover:bg-verified-soft/60 shadow-2xs"
-          : "border-border/80 bg-card/70 text-muted-foreground hover:border-primary/30 hover:bg-muted/50 hover:text-foreground"
-      )}
-      aria-label="Configure Automatic Payroll Helper"
-    >
-      <div className="flex items-center gap-2 min-w-0">
-        <div className={cn("grid size-6 shrink-0 place-items-center rounded-lg transition-colors", live ? "bg-verified text-white shadow-xs" : "bg-secondary text-muted-foreground group-hover:text-primary")}>
-          <ZapIcon className={cn("size-3.5", live && "fill-white")} />
-        </div>
-        <div className="min-w-0">
-          <p className="font-medium truncate text-foreground leading-tight">Payroll Helper</p>
-          <p className="text-[10px] text-muted-foreground leading-tight truncate">
-            {live ? `${mmss(secondsLeft)} left` : "Hands-free dispatch"}
-          </p>
-        </div>
-      </div>
-      <StatusBadge tone={live ? "verified" : "neutral"} pulse={live} className="text-[10px] h-5 px-1.5 shrink-0">
-        {live ? "Active" : "Setup"}
-      </StatusBadge>
-    </button>
-  );
-}
-
 function SidebarBody({
   groups,
   pathname,
   isDemo,
-  isAuditor,
   onNavigate,
 }: {
   groups: NavGroup[];
   pathname: string;
   isDemo: boolean;
-  isAuditor: boolean;
   onNavigate?: () => void;
 }) {
   return (
@@ -136,8 +103,6 @@ function SidebarBody({
       </div>
 
       <div className="grid gap-2.5">
-        {!isAuditor ? <SidebarHelperButton /> : null}
-
         <div className="grid gap-2 rounded-xl border border-border/80 bg-card/80 p-3.5 text-xs leading-relaxed text-muted-foreground shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-medium text-foreground">
@@ -171,6 +136,10 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
   const account = useAccountStatus();
   const chain = useChain();
   const companyReady = company.ready;
+  // A fresh wallet (no activated account, no company started) is asked where to start. Only once the chain has
+  // really answered: a failed read would otherwise look like an empty wallet.
+  const stateKnown = wallet.isDemo || chain.status === "ready";
+  const freshWallet = role === "member" && stateKnown && !account.loading && !company.loading && !account.activated && !company.created;
 
   let redirect: string | null = null;
   if (role === "auditor") {
@@ -200,7 +169,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
     <OperatorProvider>
       <div className="min-h-dvh lg:grid lg:grid-cols-[244px_minmax(0,1fr)]">
         <aside className="sticky top-0 hidden h-dvh border-r bg-sidebar/80 backdrop-blur-md lg:block">
-          <SidebarBody groups={groups} pathname={pathname} isDemo={wallet.isDemo} isAuditor={role === "auditor"} />
+          <SidebarBody groups={groups} pathname={pathname} isDemo={wallet.isDemo} />
         </aside>
         <div className="min-w-0">
           <div className="sticky top-0 z-30 flex h-15 items-center justify-between gap-3 border-b border-border/70 bg-background/85 px-4 backdrop-blur-md sm:px-8">
@@ -215,7 +184,6 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
                     groups={groups}
                     pathname={pathname}
                     isDemo={wallet.isDemo}
-                    isAuditor={role === "auditor"}
                     onNavigate={() => setMenu(false)}
                   />
                 </SheetContent>
@@ -270,6 +238,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
       </div>
       <UnlockDialog />
       <OperatorModal />
+      <StartChooser key={address} eligible={freshWallet} />
       <ConfirmDialog
         open={disconnectModal}
         onOpenChange={setDisconnectModal}

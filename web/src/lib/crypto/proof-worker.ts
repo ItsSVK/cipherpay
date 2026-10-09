@@ -6,6 +6,7 @@
 // is same-origin and in the same browser tab, so the "keys never leave the browser" rule still holds, and it keeps NOTHING between
 // requests: every secret it was handed is overwritten with zeros as soon as the request finishes, success or failure.
 import { decryptAccountBalanceLocal } from "@/lib/chain/decrypt-local";
+import { openReceivedAmountsLocal } from "@/lib/chain/received-amount-local";
 import { composeTransferProofs } from "@/lib/chain/transfer-proofs";
 import { composeWithdrawProofs } from "@/lib/chain/withdraw-proofs";
 import type { WorkerRequest, WorkerResponse } from "./proof-protocol";
@@ -32,6 +33,12 @@ async function handle(req: WorkerRequest): Promise<unknown> {
       } finally {
         req.keys.aeKey.fill(0);
         req.keys.elgamalKeypair.secretKey.fill(0);
+      }
+    case "openReceived":
+      try {
+        return await openReceivedAmountsLocal(req.encoded, req.secretKey);
+      } finally {
+        req.secretKey.fill(0);
       }
   }
 }

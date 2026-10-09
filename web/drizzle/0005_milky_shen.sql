@@ -1,0 +1,1 @@
+ALTER TABLE `payroll_run_items` ADD `received_amount_ct` text;
