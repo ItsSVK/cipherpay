@@ -262,7 +262,23 @@ Employee list, payout rules and payroll-run history are **off-chain** (decision 
 **Cloudflare D1 via Drizzle** (decided D6, wired 2026-10-05). Demo wallets keep using the in-memory mock store.
 
 - **Schema** (`src/server/db/schema.ts`, migration in `drizzle/`): `addresses` (renamed from `employees` 2026-10-07, migration `0002`: columns `id, employer, name, wallet, created_at`; `role` and `amount` were dropped, amounts are now chosen per run), `payrolls` + `payroll_entries` (added 2026-10-07, migration `0003`: a named list of (saved address, amount per run); the same address can be in many payrolls at different amounts; an address that is in a payroll cannot be deleted, the API answers 409 naming the payroll), `payroll_runs` (now has a nullable `payroll_id`, set null if the payroll is deleted so history stays), `payroll_run_items`, plus `auth_nonces` and
-  `sessions`. Everything is keyed by `employer` = the admin wallet. Amounts are base-unit strings. No keys, ever.
+  `sessions`. Everything is keyed by `employer` = the admin wallet. **Amounts are sealed** (next bullet). No keys, ever.
+- **Sealed amounts (2026-10-08, migration `0004`).** Payroll entry amounts, run totals and run item amounts are encrypted in the admin's
+  browser before they are sent, so the server and D1 hold only ciphertext (`amount_ct`, `total_ct`). Key: AES-256-GCM, derived with HKDF-SHA256
+  from the wallet's ElGamal secret (`lib/crypto/record-seal.ts`, info `cipherpay/payroll-amounts/v1`; same wallet signature, separate key from
+  Token-2022's AES key, non-extractable). Format `v1.` + base64url(nonce 12 | ct 8 | tag 16), always 48 chars (`lib/sealed-amount.ts`, shared
+  with the server's zod check). Each ciphertext is bound (GCM associated data) to `employer | payroll id | address id` or `employer | run id |
+  total / item wallet`, so the database can't swap or move amounts unnoticed; that's why the browser now chooses payroll and run ids (the API
+  answers 409 for a taken id) and a run can't list a wallet twice. `useOpenRecords` (inside the key provider, used by `useVault`) decrypts while
+  keys are unlocked; locked, `Payroll.sealed` / `Run.sealed` are set and amounts are 0n placeholders (`SealedAmount` renders them; the run engine
+  refuses to pay a non-positive amount). The server can no longer validate amounts or compute totals: the browser does. **Old plaintext rows:**
+  the `amount` / `total` columns stay (NOT NULL can't be dropped in SQLite without a table rebuild, which would cascade-delete child rows on D1);
+  new rows write `''`. `/api/company` returns a row's old plaintext as `legacy*` only while it is unsealed; on the next unlock the browser seals it
+  and `POST /api/seal` stores the ciphertext and clears the plaintext (own rows only, never overwrites a sealed one). Drop those columns once
+  remote is fully sealed. **Consequence:** `/api/payments` returns no amount (employees can't open the employer's seal), so My pay shows
+  "Amount private" for real payments. Verified against the dev server + local D1 with throwaway wallets (27 checks: plaintext refused, DB
+  holds no plaintext, open/round-trip, wrong key, swapped ciphertext caught, id reuse 409, legacy seal + cross-wallet 403). Unit tests:
+  `record-seal.test.ts`. **Not browser-run.** Remote needs `bun run db:migrate:remote`.
 - **Auth = one wallet signature, then a session.** `POST /api/auth/nonce` returns the exact message to sign (site, wallet, single-use
   nonce, 5-minute expiry; built by `lib/auth/message.ts`), the wallet signs it with `signMessage`, `POST /api/auth/verify` rebuilds the
   message server-side, verifies the Ed25519 signature (`lib/auth/verify.ts`, WebCrypto), burns the nonce and sets an httpOnly `cp_session`
@@ -451,6 +467,13 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   now deduped by ciphertext key in `use-confidential-balance.ts`; (d) the operator panel's **1 s countdown clock only runs while something is counting
   down**. Proof generation and decryption used to run on the **main thread** (~5 long tasks per payroll run, max ~340 ms); that is fixed, see "Hardening" below. Known and NOT fixed: `@solana-program/token-2022`'s own `decryptConfidentialTransferBalance` leaks 3 wasm objects per
   call inside `node_modules`; `useVault()`/`useEmployee()` still return fresh object literals every render.
+- **Signing pre-flight checks (2026-10-09).** A run reads automatic vs manual once at start, and `pay_employee` fails on-chain once the
+  operator's payment count or time runs out, so a run larger than what is left used to stop part way. `lib/payroll/signing-check.ts`
+  (`checkSigning`, `suggestSigning`, 8 tests) adds two checks in automatic mode: "covers every payment" (`paymentsLeft >= recipients`) and
+  "lasts the whole run" (`secondsLeft >= recipients * SECONDS_PER_PAYMENT + OPERATOR_MARGIN_SECONDS`; 30 s per payment is an ESTIMATE). Manual
+  mode is an informational pass. A failing check's fix "Adjust automatic payroll" prefills the smallest TTL option and cap that fit and opens the
+  dialog (the admin turns the live authorization off and on again). Approve re-checks right before sending (time passes after simulating), and the
+  checks re-run by themselves when the authorization changes while the run awaits approval. **Not browser-run.**
 - **The admin signs a MESSAGE, not a transaction, to turn automatic payroll on or off (2026-10-06).** This is the fix for the slow-wallet
   problem below. `lib/chain/authorization.ts` builds the exact text the admin signs (`authorizationMessage`, which **must match
   `authorization_message` in `../programs/vault/src/instructions/authorize_operator.rs` byte for byte** -- both sides pin the literals in
@@ -585,6 +608,9 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
 
 ## Working style expected on this project
 
+- **UI work follows `DESIGN.md` (this folder).** Read it before changing or adding any screen or component, reuse the components it
+  names (`.plate` + icon header, `StatusBadge`, `Cipher`, `ProgressButton`, `Flow`, `Reveal`, `PhaseRail`, checklist sheets), and obey
+  its Do's and Don'ts. If a change introduces a pattern it doesn't cover, add the pattern to `DESIGN.md` in the same change.
 - **"Done" means it works against a real validator**, not that it type-checks or the UI renders.
   Several things here have passed locally and failed on a real cluster (transaction size above all).
   Test critical-path flows on local surfpool or devnet.

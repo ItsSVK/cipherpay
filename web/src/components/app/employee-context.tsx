@@ -63,7 +63,8 @@ export function useEmployee() {
     publicWusdc: w?.wusdc?.publicBalance ?? 0n,
     publicUsdc: w?.usdc ?? 0n,
     // The chain keeps only the combined balance, so per-payment history is what employers recorded for this wallet (signed in with one signature).
-    payments: data.payments.map((p) => ({ id: p.id, date: new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }), from: p.label, employer: p.employer as string | null, amount: p.amount, status: null as "pending" | "available" | null, signature: p.signature })),
+    // No amount: the employer's record holds it encrypted for the employer, and the payment event holds it encrypted for the auditor.
+    payments: data.payments.map((p) => ({ id: p.id, date: new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }), from: p.label, employer: p.employer as string | null, amount: null as bigint | null, status: null as "pending" | "available" | null, signature: p.signature })),
     paymentsStatus: data.status,
     paymentsSigningIn: data.signingIn,
     paymentsError: data.error,

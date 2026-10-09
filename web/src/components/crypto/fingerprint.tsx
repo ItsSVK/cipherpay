@@ -21,10 +21,22 @@ export function Fingerprint({ seed, className, size = 14 }: { seed: string; clas
   );
 }
 
-export function Address({ value, className, head = 4, tail = 4 }: { value: string; className?: string; head?: number; tail?: number }) {
+export function Address({
+  value,
+  className,
+  head = 4,
+  tail = 4,
+  showFingerprint = false,
+}: {
+  value: string;
+  className?: string;
+  head?: number;
+  tail?: number;
+  showFingerprint?: boolean;
+}) {
   return (
-    <span className={cn("inline-flex items-center gap-2 font-mono text-[0.8em]", className)} title={value}>
-      <Fingerprint seed={value} />
+    <span className={cn("inline-flex items-center gap-1.5 font-mono text-[0.8em]", className)} title={value}>
+      {showFingerprint ? <Fingerprint seed={value} /> : null}
       <span className="tnum">{shortAddress(value, head, tail)}</span>
     </span>
   );

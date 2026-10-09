@@ -1,40 +1,44 @@
 "use client";
 
 import { useState } from "react";
-import { PlusIcon, SparklesIcon } from "lucide-react";
+import { CheckIcon, LockIcon, PlusIcon, WalletIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useChain } from "@/components/chain/chain-state";
 import { USDC_FAUCET_URL, useFundTreasury } from "@/components/chain/use-fund-treasury";
-import { StepList, type Step } from "@/components/crypto/step-list";
 import { useKeys } from "@/components/crypto/key-context";
+import { ProgressButton, type ButtonProgress } from "@/components/app/progress-button";
 import { SolNotice } from "@/components/app/sol-notice";
 import { useVault } from "@/components/app/vault-context";
-import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { useStepper } from "@/hooks/use-stepper";
 import { formatUsdc, parseUsdc } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const DEMO_STEPS: Step[] = [
-  { label: "Wrap USDC into WUSDC", detail: "Public. Real USDC is locked and an equal confidential-capable token is minted.", visibility: "public" },
-  { label: "Fund the treasury", detail: "Public transfer into the vault's treasury account.", visibility: "public" },
-  { label: "Deposit confidentially", detail: "Moves the balance into the encrypted pending balance.", visibility: "encrypted" },
-  { label: "Apply pending balance", detail: "Makes the deposit spendable by payroll.", visibility: "encrypted" },
-];
-
-const LIVE_STEPS: Step[] = [
-  { label: "Prepare in your browser", detail: "Reads the treasury and works out its new encrypted balance. Nothing leaves this tab.", visibility: "encrypted" },
-  { label: "Approve in your wallet", detail: "One transaction for everything below. Your wallet shows it before you sign." },
-  { label: "Wrap USDC and move it into the treasury", detail: "Public. Anyone can see that your company funded its treasury, and how much.", visibility: "public" },
-  { label: "Deposit it and make it spendable", detail: "The deposit becomes an encrypted balance that only your key can read.", visibility: "encrypted" },
-];
-
+/** The demo engine walks four fake steps; the sheet only needs to know which stage that maps to. */
+const DEMO_STEP_COUNT = 4;
 const QUICK_AMOUNTS = ["10", "25", "50", "100"];
 
-export function FundSheet() {
+type Stage = "idle" | "preparing" | "wallet" | "confirming" | "done";
+
+const STAGE: Record<Exclude<Stage, "idle">, { label: string; fill: number; hint: string }> = {
+  preparing: { label: "Preparing…", fill: 15, hint: "Reading the treasury and working out its new encrypted balance, in this tab." },
+  wallet: { label: "Approve in wallet", fill: 40, hint: "One approval covers the whole deposit. Check your wallet popup." },
+  confirming: { label: "Confirming on devnet…", fill: 75, hint: "Wrapping your USDC, moving it in and encrypting it." },
+  done: { label: "Deposited", fill: 100, hint: "Deposited. The treasury balance updates in a moment." },
+};
+
+const IDLE_HINT = "The deposit amount is public on-chain. Inside the treasury, the balance is encrypted.";
+
+export function FundSheet({
+  variant = "outline",
+  size = "default",
+  className,
+}: {
+  variant?: "default" | "outline" | "secondary" | "ghost";
+  size?: "default" | "sm" | "lg";
+  className?: string;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("25");
   const keys = useKeys();
@@ -45,14 +49,51 @@ export function FundSheet() {
   const usdc = chain.wallet?.usdc ?? 0n;
   const invalid = parsed === null || parsed <= 0n;
   const overBalance = v.isLive && !invalid && parsed > usdc;
+  const maxAmount = formatUsdc(usdc).replace(/,/g, "");
 
-  const mock = useStepper(DEMO_STEPS.length, 950, () => {
+  const mock = useStepper(DEMO_STEP_COUNT, 950, () => {
     if (parsed !== null) v.fund(parsed);
     toast.success("Treasury funded", { description: `${formatUsdc(parsed ?? 0n)} USDC added to the encrypted balance.` });
   });
-  const act = v.isLive ? live : mock;
-  const done = v.isLive ? live.phase === "done" : mock.done;
-  const busy = act.running;
+
+  const stage: Stage = v.isLive
+    ? live.phase === "preparing"
+      ? "preparing"
+      : live.phase === "signing"
+        ? "wallet"
+        : live.phase === "confirming"
+          ? "confirming"
+          : live.phase === "done"
+            ? "done"
+            : "idle"
+    : mock.done
+      ? "done"
+      : mock.running
+        ? mock.completed === 0
+          ? "preparing"
+          : mock.completed === 1
+            ? "wallet"
+            : "confirming"
+        : "idle";
+  const busy = stage !== "idle" && stage !== "done";
+  const done = stage === "done";
+  const locked = busy || done;
+  const error = v.isLive ? live.error : null;
+
+  const progress: ButtonProgress | null = busy ? { label: STAGE[stage].label, fill: STAGE[stage].fill } : null;
+  const hint = stage === "idle" ? IDLE_HINT : STAGE[stage].hint;
+
+  const reset = () => (v.isLive ? live.reset() : mock.reset());
+
+  const amountNote = invalid ? (
+    <span className="text-destructive">Enter an amount with up to 6 decimals.</span>
+  ) : overBalance ? (
+    <span className="text-destructive">More than the {formatUsdc(usdc)} USDC in your wallet.</span>
+  ) : v.isLive && usdc === 0n ? (
+    <a href={USDC_FAUCET_URL} target="_blank" rel="noreferrer" className="text-primary underline-offset-4 hover:underline">
+      No devnet USDC yet. Get some from Circle&apos;s faucet
+    </a>
+  ) : null;
 
   return (
     <Sheet
@@ -60,135 +101,196 @@ export function FundSheet() {
       onOpenChange={(o) => {
         if (busy) return;
         setOpen(o);
-        if (!o && v.isLive && live.phase !== "idle") live.reset();
+        if (!o && stage !== "idle") reset();
       }}
     >
-      <SheetTrigger render={<Button className="h-9 gap-1.5 text-xs font-medium" />}>
+      <SheetTrigger render={<Button variant={variant} size={size} className={cn("gap-1.5 text-xs font-medium", className)} />}>
         <PlusIcon className="size-3.5" /> Fund Treasury
       </SheetTrigger>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent className="w-full overflow-x-hidden overflow-y-auto sm:max-w-md">
         <SheetHeader>
-          <SheetTitle className="text-lg">Fund Treasury</SheetTitle>
-          <SheetDescription>
-            Deposit liquidity into your encrypted vault. Funding deposits are public on-chain; payroll distributions remain confidential.
-          </SheetDescription>
+          <SheetTitle className="text-lg">Fund treasury</SheetTitle>
+          <SheetDescription>Move devnet USDC from your wallet into the encrypted payroll treasury.</SheetDescription>
         </SheetHeader>
-        <div className="grid gap-5 px-4 pb-6 pt-2">
+
+        <div className="grid min-w-0 grid-cols-1 gap-4 px-4 pb-6">
           {v.isLive ? <SolNotice /> : null}
 
-          <div className="grid gap-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="fund-amount">Amount (USDC)</Label>
-                <InfoTooltip content="USDC is wrapped into confidential Token-2022 format and deposited directly into the vault treasury account." />
-              </div>
+          {/* Amount */}
+          <div
+            className={cn(
+              "rounded-2xl border bg-gradient-to-b from-muted/40 to-muted/10 p-4 transition-colors focus-within:border-primary/50",
+              (invalid || overBalance) && "border-destructive/40 focus-within:border-destructive/60",
+              locked && "opacity-70",
+            )}
+          >
+            <div className="flex items-center justify-between text-[11px]">
+              <label htmlFor="fund-amount" className="font-semibold uppercase tracking-wider text-muted-foreground/80">
+                Amount
+              </label>
               {v.isLive ? (
-                <button
-                  type="button"
-                  disabled={busy || done || usdc === 0n}
-                  onClick={() => setAmount(formatUsdc(usdc).replace(/,/g, ""))}
-                  className="text-xs text-primary underline-offset-4 hover:underline disabled:opacity-50 disabled:no-underline font-medium"
-                >
-                  Max: {formatUsdc(usdc)}
-                </button>
+                <span className="text-muted-foreground">
+                  Wallet <span className="font-mono tnum font-medium text-foreground">{formatUsdc(usdc)}</span> USDC
+                </span>
               ) : null}
             </div>
 
-            <Input
-              id="fund-amount"
-              inputMode="decimal"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              disabled={busy || done}
-              aria-invalid={invalid || overBalance}
-              className="h-11 font-mono text-lg font-medium tnum"
-            />
-
-            <div className="flex flex-wrap gap-1.5 pt-1" role="group" aria-label="Quick amount presets">
-              {QUICK_AMOUNTS.map((q) => (
-                <button
-                  key={q}
-                  type="button"
-                  disabled={busy || done}
-                  onClick={() => setAmount(q)}
-                  className={cn(
-                    "rounded-lg border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                    amount === q
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "bg-muted/40 text-muted-foreground hover:border-primary/40 hover:text-foreground"
-                  )}
-                >
-                  +{q} USDC
-                </button>
-              ))}
+            <div className="mt-2 flex items-baseline gap-2">
+              <input
+                id="fund-amount"
+                // size=1 drops the input's intrinsic ~20-character width, which otherwise stretches the sheet sideways
+                size={1}
+                inputMode="decimal"
+                autoComplete="off"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                disabled={locked}
+                aria-invalid={invalid || overBalance}
+                placeholder="0.00"
+                className="w-full min-w-0 flex-1 bg-transparent font-mono text-4xl font-semibold tracking-tight text-foreground tnum outline-none placeholder:text-muted-foreground/40 disabled:cursor-not-allowed"
+              />
+              <span className="text-sm font-semibold text-muted-foreground">USDC</span>
             </div>
 
-            {invalid ? <p className="text-xs text-destructive">Enter an amount with up to 6 decimals.</p> : null}
-            {overBalance ? <p className="text-xs text-destructive">Wallet holds {formatUsdc(usdc)} devnet USDC.</p> : null}
+            <div className="mt-3 flex gap-1.5" role="group" aria-label="Quick amounts">
+              {[...QUICK_AMOUNTS, ...(v.isLive && usdc > 0n ? ["max"] : [])].map((q) => {
+                const value = q === "max" ? maxAmount : q;
+                const selected = amount === value;
+                return (
+                  <button
+                    key={q}
+                    type="button"
+                    disabled={locked}
+                    onClick={() => setAmount(value)}
+                    className={cn(
+                      "flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium tnum transition-colors duration-150 disabled:pointer-events-none",
+                      selected ? "border-primary/50 bg-primary/10 text-primary" : "border-border/70 bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                    )}
+                  >
+                    {q === "max" ? "Max" : q}
+                  </button>
+                );
+              })}
+            </div>
 
-            {v.isLive ? (
-              <p className="text-xs text-muted-foreground">
-                Available devnet USDC: <span className="font-mono tnum text-foreground font-medium">{formatUsdc(usdc)}</span>.{" "}
-                {usdc === 0n ? (
-                  <a href={USDC_FAUCET_URL} target="_blank" rel="noreferrer" className="text-primary underline-offset-4 hover:underline">
-                    Get test USDC from Circle Faucet
-                  </a>
-                ) : null}
-              </p>
-            ) : null}
+            {/* Fixed-height note so a validation message never shifts the layout */}
+            <p className="mt-2 h-4 truncate text-xs">{amountNote}</p>
           </div>
 
-          <div className="rounded-xl border bg-muted/20 p-3.5">
-            <StepList steps={v.isLive ? LIVE_STEPS : DEMO_STEPS} completed={act.completed} running={act.running} />
+          {/* Where the money goes */}
+          <div className="rounded-2xl border border-border/80 p-4">
+            <div className="flex items-center gap-3">
+              <FlowNode icon={<WalletIcon className="size-4" />} title="Your wallet" tag="Public" tone="pending" />
+              <FlowTrack active={busy} done={done} />
+              <FlowNode
+                icon={done ? <CheckIcon className="size-4 [animation:pop_var(--dur-base)_var(--ease-out)]" strokeWidth={3} /> : <LockIcon className="size-4" />}
+                title="Treasury"
+                tag="Encrypted"
+                tone="verified"
+                glow={done}
+              />
+            </div>
+            <p className="mt-3 min-h-8 text-xs leading-relaxed text-muted-foreground" role="status" aria-live="polite">
+              {hint}
+            </p>
           </div>
 
-          {v.isLive && live.error ? (
+          {error ? (
             <p role="alert" className="rounded-xl border border-destructive/30 bg-failed-soft p-3 text-xs text-destructive">
-              {live.error}
+              {error}
             </p>
           ) : null}
 
-          {v.isLive && done ? (
-            <p role="status" className="rounded-xl bg-verified-soft p-3 text-xs text-verified">
-              Transaction confirmed on devnet. Treasury balance updating…
-            </p>
-          ) : null}
-
-          {v.isLive && !live.canSign ? (
-            <p className="text-xs text-muted-foreground">{live.cannotSignReason}</p>
-          ) : null}
+          {v.isLive && !live.canSign ? <p className="text-xs text-muted-foreground">{live.cannotSignReason}</p> : null}
 
           {done ? (
-            <Button
-              variant="outline"
-              className="h-10 w-full"
+            <ProgressButton
+              progress={null}
+              className="h-11 w-full text-sm"
+              idleClassName="border border-verified/30 bg-verified-soft text-verified hover:bg-verified/15"
               onClick={() => {
-                if (v.isLive) live.reset();
-                else mock.reset();
+                reset();
                 setOpen(false);
               }}
             >
-              Done
-            </Button>
+              <CheckIcon className="size-4" strokeWidth={3} /> Done
+            </ProgressButton>
           ) : (
-            <Button
-              disabled={invalid || busy || overBalance || (v.isLive && !live.canSign)}
+            <ProgressButton
+              progress={progress}
+              disabled={invalid || overBalance || (v.isLive && !live.canSign)}
               onClick={() => {
                 if (!keys.requireKeys()) return;
                 if (parsed === null) return;
-                if (v.isLive) {
-                  void live.run(parsed);
-                  return;
-                }
-                mock.run();
+                if (v.isLive) void live.run(parsed);
+                else mock.run();
               }}
-              className="h-11 w-full text-sm font-medium"
+              className="h-11 w-full text-sm"
+              idleClassName="bg-primary text-primary-foreground shadow-xs hover:bg-primary/90"
             >
-              {busy ? "Processing Deposit…" : v.isLive && live.error ? "Retry Deposit" : keys.ready ? "Deposit & Encrypt" : "Unlock Keys to Continue"}
-            </Button>
+              {!keys.ready
+                ? "Unlock keys to continue"
+                : error
+                  ? "Retry deposit"
+                  : `Deposit ${invalid ? "" : `${formatUsdc(parsed)} `}USDC`}
+            </ProgressButton>
           )}
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function FlowNode({
+  icon,
+  title,
+  tag,
+  tone,
+  glow,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  tag: string;
+  tone: "pending" | "verified";
+  glow?: boolean;
+}) {
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-1.5 text-center">
+      <span
+        className={cn(
+          "grid size-10 place-items-center rounded-xl ring-1 transition-shadow duration-500",
+          tone === "pending" ? "bg-pending-soft text-pending ring-pending/25" : "bg-verified-soft text-verified ring-verified/25",
+          glow && "shadow-[0_0_0_6px_color-mix(in_oklch,var(--verified)_15%,transparent)]",
+        )}
+      >
+        {icon}
+      </span>
+      <span className="text-xs font-medium text-foreground">{title}</span>
+      <span className={cn("text-[10px] font-semibold uppercase tracking-wider", tone === "pending" ? "text-pending" : "text-verified")}>{tag}</span>
+    </div>
+  );
+}
+
+/** Dashed line between the two nodes; while working, packets travel along it; once done it turns solid green. */
+function FlowTrack({ active, done }: { active: boolean; done: boolean }) {
+  return (
+    <div className="relative mt-3 h-4 flex-1 self-start" aria-hidden>
+      <div
+        className={cn(
+          "absolute inset-x-0 top-1/2 h-px -translate-y-1/2 transition-colors duration-500",
+          done ? "bg-verified" : "bg-[repeating-linear-gradient(90deg,var(--border)_0_6px,transparent_6px_12px)]",
+          active && "bg-[repeating-linear-gradient(90deg,color-mix(in_oklch,var(--primary)_45%,transparent)_0_6px,transparent_6px_12px)] [animation:tape-feed_0.8s_linear_infinite]",
+        )}
+      />
+      {active
+        ? [0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_8px_var(--primary)] [animation:flow-packet_1.8s_ease-in-out_infinite]"
+              style={{ animationDelay: `${i * 0.6}s` }}
+            />
+          ))
+        : null}
+    </div>
   );
 }

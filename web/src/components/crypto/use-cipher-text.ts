@@ -23,6 +23,8 @@ interface Options {
   delay?: number;
   /** Time each character takes to lock in (ms). */
   perChar?: number;
+  /** A real ciphertext to show while encrypted, instead of the generated stand-in. */
+  cipherText?: string;
 }
 
 interface Anim {
@@ -35,11 +37,11 @@ interface Anim {
  * noise glyphs, then lock to their target (plaintext when revealing, ciphertext when hiding).
  * At rest the hook returns the target directly, so SSR and first paint always match.
  */
-export function useCipherText({ plain, seed, revealed, delay = 0, perChar = 70 }: Options) {
+export function useCipherText({ plain, seed, revealed, delay = 0, perChar = 70, cipherText }: Options) {
   const reduced = useReducedMotion();
-  const cipher = makeCipher(plain, seed);
+  const cipher = cipherText ?? makeCipher(plain, seed);
   const target = revealed ? plain : cipher;
-  const key = `${revealed}|${plain}|${seed}`;
+  const key = `${revealed}|${plain}|${seed}|${cipherText ?? ""}`;
 
   const [anim, setAnim] = useState<Anim | null>(null);
   const [prevKey, setPrevKey] = useState(key);

@@ -281,14 +281,21 @@ export default function MyPay() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <Cipher
-                      value={formatUsdc(p.amount)}
-                      seed={`pay-${p.id}`}
-                      revealed={shown}
-                      delay={i * 90}
-                      suffix="USDC"
-                      className="font-mono text-base font-semibold tnum"
-                    />
+                    {p.amount === null ? (
+                      // Real payments: the employer's record keeps the amount encrypted for the employer only. It is in your balance above.
+                      <span className="text-xs text-muted-foreground" title="The employer's record keeps this amount encrypted for the employer. It is included in your balance above.">
+                        Amount private
+                      </span>
+                    ) : (
+                      <Cipher
+                        value={formatUsdc(p.amount)}
+                        seed={`pay-${p.id}`}
+                        revealed={shown}
+                        delay={i * 90}
+                        suffix="USDC"
+                        className="font-mono text-base font-semibold tnum"
+                      />
+                    )}
                   </div>
                 </li>
               ))}

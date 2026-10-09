@@ -2,7 +2,11 @@ import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // NON-SECRET data only (see web/CLAUDE.md). No keys, and never the raw signature used to derive keys.
-// Token amounts are stored as base-10 strings of base units (bigint-safe), never floats.
+// Amounts are SEALED: encrypted in the admin's browser (lib/crypto/record-seal.ts) and stored as `*_ct` strings
+// (format in lib/sealed-amount.ts). The server can't read them. The old plaintext columns (`amount`, `total`) stay
+// only because SQLite can't drop NOT NULL without rebuilding the table, and rebuilding a table other tables reference
+// would cascade-delete their rows on D1. New rows write '' there; the admin's browser seals old rows on its next
+// unlock and clears the plaintext (POST /api/seal). Drop those columns once every row is sealed.
 // Everything is scoped by `employer`: the admin wallet address that signed in. The API takes it from the
 // session, never from the request body, so one wallet can never read or write another's records.
 
@@ -47,7 +51,8 @@ export const payrollEntries = sqliteTable(
     addressId: text("address_id")
       .notNull()
       .references(() => addresses.id, { onDelete: "restrict" }),
-    amount: text("amount").notNull(), // base units, string
+    legacyAmount: text("amount").notNull(), // pre-sealing plaintext; '' once sealed
+    amountCt: text("amount_ct"), // sealed amount; null only for a row not sealed yet
   },
   (t) => [uniqueIndex("payroll_entries_payroll_address").on(t.payrollId, t.addressId), index("payroll_entries_address").on(t.addressId)],
 );
@@ -63,7 +68,8 @@ export const payrollRuns = sqliteTable(
     // draft | pending_approval | approved | executing | done | failed
     status: text("status").notNull().default("done"),
     recipients: integer("recipients").notNull(),
-    total: text("total").notNull(), // base units, string
+    legacyTotal: text("total").notNull(), // pre-sealing plaintext; '' once sealed
+    totalCt: text("total_ct"), // sealed total of the confirmed items, computed by the browser
     createdAt: createdAt(),
   },
   (t) => [index("payroll_runs_employer").on(t.employer, t.createdAt)],
@@ -78,7 +84,8 @@ export const payrollRunItems = sqliteTable(
       .references(() => payrollRuns.id, { onDelete: "cascade" }),
     recipient: text("recipient").notNull(), // wallet address
     name: text("name").notNull(),
-    amount: text("amount").notNull(), // base units, string
+    legacyAmount: text("amount").notNull(), // pre-sealing plaintext; '' once sealed
+    amountCt: text("amount_ct"), // sealed amount; null only for a row not sealed yet
     // pending | proofs_ready | sent | confirmed | failed
     status: text("status").notNull().default("confirmed"),
     signature: text("signature"), // pay_employee tx signature (the auditor view and the indexer key on these)

@@ -198,12 +198,12 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
 
   const body = (
     <OperatorProvider>
-      <div className="min-h-dvh lg:grid lg:grid-cols-[250px_1fr]">
+      <div className="min-h-dvh lg:grid lg:grid-cols-[244px_minmax(0,1fr)]">
         <aside className="sticky top-0 hidden h-dvh border-r bg-sidebar/80 backdrop-blur-md lg:block">
           <SidebarBody groups={groups} pathname={pathname} isDemo={wallet.isDemo} isAuditor={role === "auditor"} />
         </aside>
         <div className="min-w-0">
-          <div className="sticky top-0 z-30 flex h-14 items-center justify-between gap-3 border-b bg-background/85 px-4 backdrop-blur-md sm:px-6">
+          <div className="sticky top-0 z-30 flex h-15 items-center justify-between gap-3 border-b border-border/70 bg-background/85 px-4 backdrop-blur-md sm:px-8">
             <div className="flex items-center gap-2 lg:hidden">
               <Sheet open={menu} onOpenChange={setMenu}>
                 <SheetTrigger render={<Button variant="ghost" size="icon" aria-label="Open menu" />}>
@@ -232,7 +232,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
             </div>
             <div className="flex items-center gap-2 sm:gap-2.5">
               <KeyChip seed={address} />
-              <div className="hidden items-center gap-2 rounded-full border bg-card/90 px-3 py-1 shadow-2xs sm:inline-flex">
+              <div className="hidden items-center gap-2 rounded-full border border-border/80 bg-card px-3 py-1 shadow-2xs sm:inline-flex">
                 <span className="hidden text-xs font-semibold tracking-wide text-foreground/80 md:inline">{label ?? "Wallet"}</span>
                 <Address value={address} className="text-xs text-muted-foreground font-mono" />
                 {!account.loading ? <span className="font-mono text-xs tnum text-muted-foreground">{solText(account.sol)}</span> : null}
@@ -263,12 +263,12 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
               </Button>
             </div>
           </div>
-          <main className="mx-auto w-full max-w-[1120px] px-4 py-8 sm:px-6 lg:py-10">
+          <main className="mx-auto w-full max-w-[1200px] px-4 py-8 sm:px-8 lg:py-10">
             {inPlace ? children : null}
           </main>
         </div>
       </div>
-      <UnlockDialog seed={address} />
+      <UnlockDialog />
       <OperatorModal />
       <ConfirmDialog
         open={disconnectModal}

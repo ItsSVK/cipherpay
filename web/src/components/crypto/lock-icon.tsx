@@ -3,7 +3,17 @@ import { cn } from "@/lib/utils";
 /** A padlock whose shackle lifts and swings when `open`. One drawn SVG so the motion is smooth. */
 export function LockIcon({ open, className }: { open: boolean; className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={cn("size-4", className)} aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn("size-4 overflow-visible", className)}
+      style={{ overflow: "visible" }}
+      aria-hidden
+    >
       <path
         d="M8 11V7.5a4 4 0 0 1 8 0V11"
         style={{

@@ -112,6 +112,11 @@ export function useLiveRun(items: LiveItem[], stageCount: number, settings: RunS
       for (const id of ids) {
         const item = itemsRef.current.find((i) => i.id === id);
         if (!item || !alive.current) continue;
+        // Saved amounts are encrypted and read back as 0 placeholders while the keys are locked; never pay a placeholder.
+        if (item.amount <= 0n) {
+          patch(id, { status: "failed", error: "This amount isn't available (were the keys locked?). Unlock and retry.", uncertain: false, note: undefined, deadline: undefined });
+          continue;
+        }
         patch(id, { status: "running", completed: 0, error: undefined, uncertain: false, note: undefined, deadline: undefined });
         try {
           const result = await payOne({

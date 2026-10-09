@@ -5,7 +5,14 @@ import { getDb } from "@/server/db";
 import { addresses, payrollEntries, payrollRunItems, payrollRuns, payrolls } from "@/server/db/schema";
 import { jsonError } from "@/server/http";
 
-/** Everything the Company pages need for the signed-in wallet: its saved addresses and its run history. Amounts are base-unit strings. */
+/**
+ * Everything the Company pages need for the signed-in wallet: its saved addresses, payrolls and run history. Amounts are
+ * sealed (`*Ct`), for the admin's browser to open. `legacy*` is the plaintext of a row saved before sealing existed, sent
+ * only so the browser can seal it (POST /api/seal); it is null for every sealed row.
+ */
+/** The plaintext of a row that has not been sealed yet; null once it has. */
+const legacy = (sealed: string | null, plain: string) => (sealed === null && plain !== "" ? plain : null);
+
 export async function GET(request: NextRequest) {
   const employer = await getSessionAddress(request);
   if (!employer) return jsonError("Not signed in", 401);
@@ -23,7 +30,7 @@ export async function GET(request: NextRequest) {
     payrolls: lists.map((p) => ({
       id: p.id,
       name: p.name,
-      entries: entries.filter((e) => e.payrollId === p.id).flatMap((e) => { const a = byId.get(e.addressId); return a ? [{ addressId: a.id, name: a.name, wallet: a.wallet, amount: e.amount }] : []; }),
+      entries: entries.filter((e) => e.payrollId === p.id).flatMap((e) => { const a = byId.get(e.addressId); return a ? [{ addressId: a.id, name: a.name, wallet: a.wallet, amountCt: e.amountCt, legacyAmount: legacy(e.amountCt, e.legacyAmount) }] : []; }),
     })),
     runs: runs.map((r) => ({
       id: r.id,
@@ -32,8 +39,9 @@ export async function GET(request: NextRequest) {
       createdAt: r.createdAt.toISOString(),
       status: r.status,
       recipients: r.recipients,
-      total: r.total,
-      items: items.filter((i) => i.runId === r.id).map((i) => ({ wallet: i.recipient, name: i.name, amount: i.amount, signature: i.signature ?? "", status: i.status })),
+      totalCt: r.totalCt,
+      legacyTotal: legacy(r.totalCt, r.legacyTotal),
+      items: items.filter((i) => i.runId === r.id).map((i) => ({ id: i.id, wallet: i.recipient, name: i.name, amountCt: i.amountCt, legacyAmount: legacy(i.amountCt, i.legacyAmount), signature: i.signature ?? "", status: i.status })),
     })),
   });
 }

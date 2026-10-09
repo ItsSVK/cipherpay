@@ -18,6 +18,8 @@ export interface PayrollEntry {
   name: string;
   wallet: string;
   amount: bigint;
+  /** The saved, sealed amount (`v1.…`) as the database holds it; absent for demo wallets and rows saved before sealing. */
+  amountCt?: string | null;
 }
 
 /** A named list of who is paid what. The same address can be in several payrolls. */
@@ -25,6 +27,8 @@ export interface Payroll {
   id: string;
   name: string;
   entries: PayrollEntry[];
+  /** The amounts are encrypted and not opened (keys locked, or they can't be decrypted with this wallet's keys); each `amount` is then 0n, not a real figure. */
+  sealed?: boolean;
 }
 
 export const ADMIN_WALLET = "8xQf2nPLtGZ4wVhKd6YbJ3sRcA9mTe1uXoHvN5zWkP7q";
@@ -83,6 +87,8 @@ export interface Run {
   recipients: number;
   total: bigint;
   items: RunItem[];
+  /** Same as `Payroll.sealed`: `total` and item amounts are 0n placeholders. */
+  sealed?: boolean;
 }
 
 const nameOf = (wallet: string) => EMPLOYEES.find((e) => e.wallet === wallet)?.name ?? (wallet === TAX_WALLET ? "Acme tax reserve" : wallet === FEE_WALLET ? "Platform fee" : "Recipient");

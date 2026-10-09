@@ -27,18 +27,13 @@ export function InfoTooltip({
           type="button"
           aria-label={ariaLabel}
           className={cn(
-            "inline-flex items-center justify-center rounded-full p-0.5 text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "inline-flex items-center justify-center rounded-full p-0.5 align-middle text-muted-foreground/70 transition-colors duration-150 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-popup-open:text-primary",
             className
           )}
         >
           <InfoIcon className={cn("size-3.5", iconClassName)} />
         </TooltipTrigger>
-        <TooltipContent
-          side={side}
-          className="max-w-xs rounded-lg border bg-popover/95 p-2.5 text-xs font-normal leading-relaxed text-popover-foreground shadow-md backdrop-blur-sm"
-        >
-          {content}
-        </TooltipContent>
+        <TooltipContent side={side}>{content}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );

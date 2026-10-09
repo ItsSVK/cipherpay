@@ -12,14 +12,16 @@ interface CipherProps {
   className?: string;
   /** Optional unit rendered after the value, never scrambled. */
   suffix?: string;
+  /** Real ciphertext (hex) to show while encrypted. Without it the glyphs are a generated stand-in. */
+  cipherText?: string;
 }
 
 /**
  * A confidential value. Encrypted it is a block of hex glyphs the same width as the plaintext;
  * on reveal each glyph scrambles and locks into place, then flashes green once.
  */
-export function Cipher({ value, revealed, seed, delay, className, suffix }: CipherProps) {
-  const { text, phase } = useCipherText({ plain: value, seed, revealed, delay });
+export function Cipher({ value, revealed, seed, delay, className, suffix, cipherText }: CipherProps) {
+  const { text, phase } = useCipherText({ plain: value, seed, revealed, delay, cipherText });
   const hidden = phase === "encrypted" || phase === "encrypting";
   return (
     <span

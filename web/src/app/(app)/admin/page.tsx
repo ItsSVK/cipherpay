@@ -2,60 +2,41 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRightIcon, CheckIcon, EyeIcon, EyeOffIcon, PauseCircleIcon, PlayCircleIcon, PlusIcon, ShieldCheckIcon, WalletCardsIcon } from "lucide-react";
-import { toast } from "sonner";
+import { ArrowRightIcon, EyeIcon, EyeOffIcon, KeyIcon, LockIcon, PlusIcon, ShieldCheckIcon, SlidersHorizontalIcon, WalletCardsIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Address, Fingerprint } from "@/components/crypto/fingerprint";
+import { Address } from "@/components/crypto/fingerprint";
 import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
 import { CopyButton } from "@/components/app/copy-button";
 import { FundSheet } from "@/components/app/fund-sheet";
-import { useLiveGuard } from "@/components/app/live-guard";
 import { usePayrollData } from "@/components/data/payroll-data";
 import { PageHeader } from "@/components/app/page-header";
 import { PageLoading } from "@/components/app/page-loading";
 import { SetupVault } from "@/components/app/setup-vault";
+import { SealedAmount } from "@/components/app/sealed-amount";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
 import { MetricCard } from "@/components/app/metric-card";
 import { DisclosureCard } from "@/components/app/disclosure-card";
 import { EmptyState } from "@/components/app/empty-state";
-import { ConfirmDialog } from "@/components/app/confirm-dialog";
+import { DispatchControl } from "@/components/app/dispatch-control";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import { formatUsdc } from "@/lib/format";
+import { formatUsdc, shortAddress } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export default function AdminOverview() {
   const keys = useKeys();
   const v = useVault();
-  const guard = useLiveGuard();
   const payroll = usePayrollData();
   const { vault } = v;
-  const shown = keys.ready && v.treasuryStatus === "ready";
-
-  const [pauseConfirmOpen, setPauseConfirmOpen] = useState(false);
-  const [targetPauseState, setTargetPauseState] = useState(false);
+  const [balanceHidden, setBalanceHidden] = useState(false);
+  const shown = keys.ready && v.treasuryStatus === "ready" && !balanceHidden;
 
   if (v.loading) return <PageLoading label="Reading vault configuration from devnet…" />;
   if (!v.ready) return <SetupVault />;
 
   const funded = vault.treasury > 0n;
-  const setup = [
-    { label: "Vault initialized", done: vault.created, hint: "On-chain authority established." },
-    { label: "Treasury encrypted", done: vault.treasuryConfigured, hint: "Token-2022 confidential extension enabled." },
-    { label: "Treasury funded", done: funded, hint: "USDC liquidity deposited for payouts." },
-  ];
-
-  const handleTogglePause = async () => {
-    if (!v.isLive && !guard()) return;
-    if (!(await v.setPaused(targetPauseState))) return;
-    toast(targetPauseState ? "Payroll paused" : "Payroll resumed", {
-      description: targetPauseState ? "Payouts blocked. Employee withdrawals remain open." : "Payouts can run again.",
-    });
-  };
-
   return (
     <div className="space-y-8">
       <PageHeader
@@ -63,152 +44,231 @@ export default function AdminOverview() {
         description="Encrypted treasury balance and on-chain payroll dispatch control."
         actions={
           <div className="flex flex-wrap items-center gap-2.5">
-            <FundSheet />
-            <Link href="/admin/payroll" className={cn(buttonVariants({ variant: "outline" }), "gap-1.5")}>
-              Run payroll <ArrowRightIcon className="size-4" />
+            <FundSheet variant="outline" className="h-9 px-3.5 text-xs font-medium" />
+            <Link
+              href="/admin/payroll"
+              className={cn(
+                buttonVariants({ variant: "default", size: "default" }),
+                "h-9 px-4 gap-2 text-xs font-semibold shadow-xs"
+              )}
+            >
+              Run payroll <ArrowRightIcon className="size-3.5" />
             </Link>
           </div>
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <MetricCard
-          title="Treasury Balance"
-          tooltip="Encrypted on-chain balance under your vault authority. Only your private key can decrypt the spendable sum."
-          value={formatUsdc(vault.treasury)}
-          seed={`treasury-${vault.treasury}`}
-          revealed={shown}
-          badgeText={shown ? "Decrypted locally" : keys.ready && v.treasuryStatus === "decrypting" ? "Decrypting…" : "Encrypted on-chain"}
-          badgeTone={shown ? "verified" : "key"}
-          subtitle="Encrypted on-chain. Public viewers see ciphertext."
+      {/* Main Operational Overview: Executive Cryptographic Hub */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] items-stretch">
+        {/* Left Column: Confidential Treasury Vault Component */}
+        <section
+          className="plate enter relative flex flex-col justify-between p-6 sm:p-7 overflow-hidden"
           style={{ ["--i" as string]: 1 }}
-          actions={
-            <div className="flex w-full flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                {keys.ready ? (
-                  <Button variant="outline" size="sm" onClick={keys.lock} className="h-8 gap-1.5 text-xs">
-                    <EyeOffIcon className="size-3.5" /> Hide Balance
-                  </Button>
-                ) : (
-                  <Button size="sm" onClick={() => keys.setDialogOpen(true)} className="h-8 gap-1.5 text-xs">
-                    <EyeIcon className="size-3.5" /> Decrypt with Key
-                  </Button>
-                )}
-                <InfoTooltip content="Decryption is performed in this browser tab using your ephemeral session key. Plaintext values are never transmitted to any server." />
+          aria-labelledby="treasury-heading"
+        >
+          {/* Subtle Ambient Decorative Glow */}
+          <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-primary/5 blur-3xl" aria-hidden />
+
+          <div className="space-y-5">
+            {/* Component Header: Icon + Title + Direct Decrypt Controller */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary shadow-2xs">
+                  <ShieldCheckIcon className="size-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h2 id="treasury-heading" className="text-sm font-semibold tracking-tight text-foreground">
+                      Confidential Treasury
+                    </h2>
+                    <InfoTooltip content="Encrypted on-chain balance under your vault authority. Only your private session key can decrypt the spendable sum." />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Token-2022 Zero-Knowledge Ledger</p>
+                </div>
               </div>
 
-              {v.treasuryPending > 0n && shown ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-pending">
-                  <span className="size-1.5 rounded-full bg-pending [animation:dot-pulse_1.5s_ease-in-out_infinite]" />
-                  {formatUsdc(v.treasuryPending)} USDC pending
-                </span>
+              {/* Hide / show the decrypted balance. Unlocking and locking keys lives only in the top bar. */}
+              {keys.ready ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setBalanceHidden((h) => !h)}
+                  aria-pressed={balanceHidden}
+                  className="h-8 gap-1.5 rounded-full px-3 text-xs font-semibold shadow-2xs"
+                >
+                  {balanceHidden ? <EyeIcon className="size-3.5" /> : <EyeOffIcon className="size-3.5 text-muted-foreground" />}
+                  <span>{balanceHidden ? "Show balance" : "Hide balance"}</span>
+                </Button>
               ) : null}
             </div>
-          }
-        >
-          {v.treasuryError ? (
-            <p className="mt-3 rounded-lg border border-destructive/30 bg-failed-soft p-2.5 text-xs text-destructive" role="alert">
-              {v.treasuryError}
-            </p>
-          ) : null}
-          {!funded && v.treasuryStatus !== "locked" && v.treasuryStatus !== "decrypting" ? (
-            <div className="mt-3 rounded-lg bg-muted/60 p-3 text-xs leading-relaxed text-muted-foreground">
-              The treasury is currently unfunded. Click &quot;Fund treasury&quot; to deposit test USDC prior to scheduling payroll.
-            </div>
-          ) : null}
-        </MetricCard>
 
-        <section className="plate enter flex flex-col justify-between p-6" style={{ ["--i" as string]: 2 }} aria-labelledby="vault-h">
-          <div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <h2 id="vault-h" className="text-sm font-medium text-muted-foreground">Vault Status</h2>
-                <InfoTooltip content="Active status permits scheduled payouts. Pausing blocks payouts while preserving employee withdrawal rights." />
+            {/* Hero Balance Plate */}
+            <div className="rounded-2xl border border-border/80 bg-gradient-to-b from-muted/30 to-muted/10 p-5 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                  Spendable Treasury Liquidity
+                </span>
+                <StatusBadge
+                  tone={shown ? "verified" : keys.ready && v.treasuryStatus === "decrypting" ? "pending" : "key"}
+                  pulse={keys.ready && v.treasuryStatus === "decrypting"}
+                >
+                  {shown ? "Decrypted locally" : keys.ready && v.treasuryStatus === "decrypting" ? "Decrypting…" : "Encrypted on-chain"}
+                </StatusBadge>
               </div>
+
+              <div className="py-0.5">
+                <Cipher
+                  value={formatUsdc(vault.treasury)}
+                  seed={`treasury-${vault.treasury}`}
+                  revealed={shown}
+                  cipherText={v.treasuryCipherHex}
+                  suffix="USDC"
+                  className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground font-mono tnum [&>span:last-child]:text-base sm:[&>span:last-child]:text-lg [&>span:last-child]:font-semibold [&>span:last-child]:text-muted-foreground"
+                />
+              </div>
+
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Balances are protected by Token-2022 confidential transfers. Block explorers observe zero-knowledge ciphertext only.
+              </p>
+
+              {v.treasuryPending > 0n && shown ? (
+                <div className="flex items-center gap-2 rounded-lg border border-pending/30 bg-pending-soft/70 px-3 py-1.5 text-xs font-medium text-pending">
+                  <span className="size-1.5 rounded-full bg-pending [animation:dot-pulse_1.5s_ease-in-out_infinite]" />
+                  {formatUsdc(v.treasuryPending)} USDC pending on-chain settlement
+                </div>
+              ) : null}
+
+              {v.treasuryError ? (
+                <p className="rounded-lg border border-destructive/30 bg-failed-soft p-2.5 text-xs text-destructive" role="alert">
+                  {v.treasuryError}
+                </p>
+              ) : null}
+
+              {!funded && v.treasuryStatus !== "locked" && v.treasuryStatus !== "decrypting" ? (
+                <div className="rounded-lg border border-border/80 bg-muted/40 p-2.5 text-xs leading-relaxed text-muted-foreground">
+                  Treasury is unfunded. Deposit test USDC to prepare payroll runs.
+                </div>
+              ) : null}
+            </div>
+
+            {/* Cryptographic Architecture Matrix */}
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded-xl border border-border/70 bg-card p-3 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Protocol</p>
+                <p className="font-semibold text-foreground text-xs truncate">Token-2022 ZK</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-card p-3 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Audit Trail</p>
+                <p className="font-semibold text-foreground text-xs truncate">ElGamal 256-bit</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-card p-3 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Session Key</p>
+                <p className="font-semibold text-foreground text-xs truncate">
+                  {keys.ready ? "Active (RAM)" : "Locked"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-5 pt-4 border-t border-border/50">
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              <LockIcon className="size-3 text-muted-foreground" />
+              Plaintext never leaves local browser memory
+            </span>
+          </div>
+        </section>
+
+        {/* Right Column: Vault Authority & Governance Component */}
+        <section
+          className="plate enter relative flex flex-col justify-between p-6 sm:p-7 overflow-hidden"
+          style={{ ["--i" as string]: 2 }}
+          aria-labelledby="vault-heading"
+        >
+          {/* Subtle Ambient Decorative Glow */}
+          <div className="pointer-events-none absolute -right-12 -top-12 size-40 rounded-full bg-verified/5 blur-3xl" aria-hidden />
+
+          <div className="space-y-5">
+            {/* Component Header: Icon + Title + Operational Status Badge */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-verified/10 text-verified shadow-2xs">
+                  <SlidersHorizontalIcon className="size-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h2 id="vault-heading" className="text-sm font-semibold tracking-tight text-foreground">
+                      Vault Authority
+                    </h2>
+                    <InfoTooltip content="Active status permits scheduled payouts. Pausing blocks payouts while preserving employee withdrawal rights." />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Dispatch Control & Guardrails</p>
+                </div>
+              </div>
+
               <StatusBadge tone={vault.paused ? "pending" : "verified"} pulse={!vault.paused}>
-                {vault.paused ? "Paused" : "Active"}
+                {vault.paused ? "Paused" : "Operational"}
               </StatusBadge>
             </div>
 
-            <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border bg-muted/40 p-3.5 transition-colors">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Pause Payroll</p>
-                <p className="text-xs text-muted-foreground">Blocks new payouts. Withdrawals remain open.</p>
-              </div>
-              <Switch
-                checked={vault.paused}
-                aria-label="Pause payroll switch"
-                disabled={v.pauseBusy}
-                onCheckedChange={(next) => {
-                  setTargetPauseState(next);
-                  setPauseConfirmOpen(true);
-                }}
-              />
-            </div>
+            {/* Pause / resume */}
+            <DispatchControl />
 
-            {v.pauseError ? (
-              <p role="alert" className="mt-3 rounded-lg border border-destructive/30 bg-failed-soft px-3 py-2 text-xs text-destructive">
-                {v.pauseError}
-              </p>
-            ) : null}
-
-            <dl className="mt-4 grid gap-2.5 text-xs">
-              <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2">
-                <dt className="text-muted-foreground">Vault Address</dt>
-                <dd className="flex items-center gap-1 font-mono">
-                  <Address value={v.vaultAddress} />
-                  <CopyButton value={v.vaultAddress} label="Copy vault address" />
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2">
-                <dt className="flex items-center gap-1 text-muted-foreground">
-                  Auditor Key
-                  <InfoTooltip content="Mint-level auditor public key configured for ElGamal compliance audit trail." />
-                </dt>
-                <dd className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-                  <Fingerprint seed="auditor-wallet:ElGamal key" />
-                  <span>demo key</span>
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <div className="mt-5 border-t border-border/60 pt-4">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-              Vault Readiness
-            </p>
-            <ul className="grid gap-1.5">
-              {setup.map((s) => (
-                <li key={s.label} className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-2">
-                    <span className={cn("grid size-4 place-items-center rounded-full text-white transition-colors", s.done ? "bg-verified" : "border border-border")}>
-                      {s.done ? <CheckIcon className="size-2.5" strokeWidth={3.5} /> : null}
-                    </span>
-                    <span className={s.done ? "text-foreground font-medium" : "text-muted-foreground"}>{s.label}</span>
+            {/* Cryptographic Identifiers (Zero colorful rainbow boxes) */}
+            <div className="grid gap-2 text-xs">
+              {/* Vault PDA Identifier */}
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-muted-foreground">Vault PDA</span>
+                  <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase">
+                    Authority
                   </span>
-                  <span className="text-[11px] text-muted-foreground">{s.hint}</span>
-                </li>
-              ))}
-            </ul>
+                </div>
+                <div className="flex items-center gap-1.5 font-mono text-xs">
+                  <span className="tnum font-medium text-foreground">{shortAddress(v.vaultAddress, 5, 5)}</span>
+                  <CopyButton value={v.vaultAddress} label="Copy vault address" />
+                </div>
+              </div>
+
+              {/* Auditor Key Identifier */}
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-card p-3">
+                <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                  <KeyIcon className="size-3.5 text-muted-foreground" />
+                  <span>Auditor Key</span>
+                  <InfoTooltip content="Mint-level auditor public key configured for ElGamal compliance audit trail." />
+                </div>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="font-mono text-xs text-foreground font-medium">ElGamal Compliance</span>
+                  <span className="size-1.5 rounded-full bg-verified" aria-hidden />
+                </div>
+              </div>
+            </div>
           </div>
+
         </section>
       </div>
 
-      <section className="enter space-y-3" style={{ ["--i" as string]: 3 }} aria-labelledby="runs-h">
-        <div className="flex items-center justify-between">
+      {/* Recent Payroll Runs Table */}
+      <section className="enter space-y-3.5" style={{ ["--i" as string]: 3 }} aria-labelledby="runs-heading">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 id="runs-h" className="text-lg font-semibold tracking-tight text-foreground">Recent Payroll Runs</h2>
+            <h2 id="runs-heading" className="text-lg font-semibold tracking-tight text-foreground">
+              Recent Payroll Runs
+            </h2>
             <p className="text-xs text-muted-foreground">Batched confidential transfers executed through this vault.</p>
           </div>
           {vault.runs.length > 0 ? (
-            <Link href="/admin/payroll" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 text-xs")}>
+            <Link
+              href="/admin/payroll"
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-8 px-3 text-xs font-medium")}
+            >
               New Run
             </Link>
           ) : null}
         </div>
 
         {payroll.status === "needs-auth" ? (
-          <div className="plate flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="plate flex flex-wrap items-center justify-between gap-4 p-6">
             <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
               Run records are saved off-chain and mapped to your vault authority. Sign a gasless wallet message to access run history.
             </p>
@@ -231,63 +291,78 @@ export default function AdminOverview() {
           />
         ) : (
           <div className="plate overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="pl-5 text-xs">Run Label</TableHead>
-                  <TableHead className="text-xs">Date</TableHead>
-                  <TableHead className="text-right text-xs">Recipients</TableHead>
-                  <TableHead className="text-right text-xs">Total Amount</TableHead>
-                  <TableHead className="pr-5 text-right text-xs">Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {vault.runs.map((r) => (
-                  <TableRow key={r.id} className="row-hover">
-                    <TableCell className="pl-5 text-sm font-medium">{r.label}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.date}</TableCell>
-                    <TableCell className="tnum text-right text-xs">{r.recipients}</TableCell>
-                    <TableCell className="text-right font-mono text-sm font-medium tnum">
-                      {formatUsdc(r.total)} <span className="font-sans text-xs text-muted-foreground">USDC</span>
-                    </TableCell>
-                    <TableCell className="pr-5 text-right">
-                      <StatusBadge tone={r.status === "done" ? "verified" : "failed"}>
-                        {r.status === "done" ? "Completed" : "Needs attention"}
-                      </StatusBadge>
-                    </TableCell>
+            <div className="w-full overflow-x-auto min-w-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-border/70 bg-muted/30 hover:bg-muted/30">
+                    <TableHead className="ps-6 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Run Label
+                    </TableHead>
+                    <TableHead className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Date
+                    </TableHead>
+                    <TableHead className="px-4 py-3 text-end text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Recipients
+                    </TableHead>
+                    <TableHead className="px-4 py-3 text-end text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Total Amount
+                    </TableHead>
+                    <TableHead className="pe-6 py-3 text-end text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Status
+                    </TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {vault.runs.map((r) => (
+                    <TableRow key={r.id} className="row-hover border-b border-border/50 last:border-0 transition-colors">
+                      <TableCell className="ps-6 py-4 text-sm font-medium text-foreground">
+                        {r.label}
+                      </TableCell>
+                      <TableCell className="px-4 py-4 text-xs text-muted-foreground">
+                        {r.date}
+                      </TableCell>
+                      <TableCell className="px-4 py-4 tnum font-mono text-end text-xs text-muted-foreground">
+                        {r.recipients}
+                      </TableCell>
+                      <TableCell className="px-4 py-4 text-end font-mono text-sm font-semibold tnum text-foreground">
+                        {r.sealed ? (
+                          <SealedAmount status={v.recordsStatus} />
+                        ) : (
+                          <>
+                            {formatUsdc(r.total)}{" "}
+                            <span className="font-sans text-xs font-normal text-muted-foreground">USDC</span>
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell className="pe-6 py-4 text-end">
+                        <StatusBadge tone={r.status === "done" ? "verified" : "failed"}>
+                          {r.status === "done" ? "Completed" : "Needs attention"}
+                        </StatusBadge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         )}
       </section>
 
+      {/* Compliance & Auditor Documentation Disclosure */}
       <DisclosureCard
         title="Compliance & Auditor Mechanics"
         description="Understanding on-chain vault visibility and Token-2022 confidential transfer controls."
       >
-        <p className="mb-2">
-          The treasury balance is stored in a Token-2022 confidential token account owned by the vault PDA. Balances are encrypted using ElGamal ciphertexts.
-        </p>
-        <p>
-          The mint-level auditor key possesses the mathematical ability to decrypt transfer amounts for regulatory reporting without gaining custody or withdrawal authorization.
-        </p>
+        <div className="space-y-2 text-xs leading-relaxed text-muted-foreground">
+          <p>
+            The treasury balance is stored in a Token-2022 confidential token account owned by the vault PDA. Balances are encrypted using ElGamal ciphertexts.
+          </p>
+          <p>
+            The mint-level auditor key possesses the mathematical ability to decrypt transfer amounts for regulatory reporting without gaining custody or withdrawal authorization.
+          </p>
+        </div>
       </DisclosureCard>
 
-      <ConfirmDialog
-        open={pauseConfirmOpen}
-        onOpenChange={setPauseConfirmOpen}
-        title={targetPauseState ? "Pause Payroll Vault?" : "Resume Payroll Vault?"}
-        description={
-          targetPauseState
-            ? "Pausing will reject new payroll transfer batches. Individual employee withdrawal operations will remain open and unaffected."
-            : "Resuming will re-enable batched confidential payroll dispatches."
-        }
-        confirmLabel={targetPauseState ? "Pause Vault" : "Resume Vault"}
-        variant={targetPauseState ? "destructive" : "default"}
-        onConfirm={handleTogglePause}
-      />
     </div>
   );
 }
