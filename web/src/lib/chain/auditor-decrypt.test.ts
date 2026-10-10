@@ -103,4 +103,15 @@ describe("auditor secret", () => {
     expect(await checkAuditorSecret(secret, onMint)).toBe(true);
     expect(await checkAuditorSecret(new ElGamalKeypair().secret().toBytes(), onMint)).toBe(false);
   });
+
+  test("that is not a valid scalar fails with a readable Error, not the WASM's bare string", async () => {
+    // A public key pasted into the secret field is the realistic case: 32 bytes, but not a canonical scalar. Fixed, not random: about
+    // 1 in 16 random 32-byte strings IS a canonical scalar. This one is the devnet WUSDC auditor pubkey (AUDITOR_ELGAMAL_PUBKEY_B64).
+    const pubkeyBytes = parseAuditorSecret("3r7q9NN0FJUN4qM41WNCdg4WGelodhhHsLfOtPB7hWk=")!;
+    for (const bytes of [pubkeyBytes, new Uint8Array(32).fill(0xff)]) {
+      const err = await auditorPubkeyForSecret(bytes).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toBe("These 32 bytes are not a valid ElGamal secret key.");
+    }
+  });
 });

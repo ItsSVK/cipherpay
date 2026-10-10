@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 // login. They give the employer wallet to look at and the auditor secret, and everything is read from devnet and decrypted in this tab.
 export default function AuditPage() {
   return (
-    <main className="mx-auto w-full max-w-[960px] px-4 py-10 sm:px-6 sm:py-16">
+    <main className="mx-auto w-full max-w-[1160px] px-4 py-10 sm:px-6 sm:py-14">
       <LiveAuditor />
     </main>
   );

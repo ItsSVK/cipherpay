@@ -93,7 +93,13 @@ export function parseAuditorSecret(input: string): Uint8Array | null {
 /** The ElGamal public key (as an address, the form the mint reports it in) that belongs to this secret. */
 export async function auditorPubkeyForSecret(secret: Uint8Array): Promise<Address> {
   const { ElGamalPubkey, ElGamalSecretKey } = await import("@solana/zk-sdk/bundler");
-  const sk = ElGamalSecretKey.fromBytes(secret);
+  let sk: InstanceType<typeof ElGamalSecretKey>;
+  try {
+    sk = ElGamalSecretKey.fromBytes(secret);
+  } catch {
+    // The WASM throws a bare string ("failed to deserialize secret key") for bytes that are not a canonical scalar.
+    throw new Error("These 32 bytes are not a valid ElGamal secret key.");
+  }
   const pk = ElGamalPubkey.fromSecretKey(sk);
   try {
     return getAddressDecoder().decode(pk.toBytes());

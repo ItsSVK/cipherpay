@@ -281,6 +281,17 @@ other ticked rows get a "Make primary" pill on hover (always visible on touch). 
 once checks start, unticked rows fold away, and share and amount top-align with the name line. The allocation bar is indigo (primary solid, others a tint) with the
 unassigned rest as a dashed slot; no categorical hues (they would collide with green/amber/red).
 
+### Audit log (`auditor-live.tsx`, `/app/auditor`)
+Work + control. Work: a "Payments" plate whose list area holds one in-plate message (icon, title, one sentence; `orb-ripple` while
+reading) until there are rows, a hairline track under the header that `sweep`s only while devnet is being read or a page decrypted,
+and a pager footer (Newer / Older, "Page 2 of 4", or "older history still on devnet"). Control: an "Auditor key" plate; its form
+(employer wallet, secret, a `Flow` of Check key → Find vault → Read history that opens with `Reveal` once started or failed, and a
+`ProgressButton`) closes in place and the session opens in its spot (a "Decrypted so far" hero `Cipher`, employer and vault
+addresses with copy, then the auditor public key under a hairline in base64 with a tooltip, because it is an ElGamal key and not
+an account, and Lock and clear). **Paged decryption:** pages hold 10 payments and each is decrypted the first time it is shown:
+its rows mount as real ciphertext (`cipherPreview` of the lo ciphertext), then open as a wave (`delay={i * 80}`); a page seen before
+is shown already open. The sealed rows stay at least 350 ms so a fast decrypt still reads as encrypted → decrypted.
+
 ### Lifecycle rail (`PhaseRail`)
 Vertical list of a run's states with drawing connectors. Reached states are green checks; the current one is an indigo ring that
 pulses; a terminal "Done" is a check, not a ring; a failure is red.

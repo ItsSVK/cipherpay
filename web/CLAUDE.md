@@ -241,6 +241,9 @@ A split payout is a batch with N recipients whose amounts come from a rule.
   Tests: `auditor-decrypt.test.ts` (real proofs, 5 amounts incl. both halves non-zero, wrong key -> null, other vault/program/discriminator
   skipped, secret formats, key vs mint pubkey). **Not run against devnet or in a browser.** Only top-level `pay_employee` instructions are
   read (inner CPI calls would be missed). Rendering of `/app/auditor` was checked on `next dev` (form shown, no nav/aside/connect gate).
+  **Redesigned 2026-10-10** (DESIGN.md "Audit log"): work + control layout, pages of 10 payments, each page decrypted the first time it is
+  shown with the `Cipher` wave (chain pages of 50 transactions are read on demand until a page is full). Locked state checked in headless
+  Chrome at 1440px and 390px; the unlocked list, paging and the decrypt animation were **not** run (needs a real auditor key + a vault with payments).
 
 ## Product copy rules (this is in scope, not polish)
 
