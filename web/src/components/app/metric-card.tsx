@@ -12,6 +12,8 @@ interface MetricCardProps {
   value: string;
   seed: string;
   revealed: boolean;
+  /** Real ciphertext preview to show while encrypted (see `cipherPreview`). */
+  cipherText?: string;
   suffix?: string;
   badgeText?: string;
   badgeTone?: Tone;
@@ -29,6 +31,7 @@ export function MetricCard({
   value,
   seed,
   revealed,
+  cipherText,
   suffix = "USDC",
   badgeText,
   badgeTone = "neutral",
@@ -51,7 +54,7 @@ export function MetricCard({
       <div>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5">
-            <h2 className="text-sm font-medium text-muted-foreground">{title}</h2>
+            <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
             {tooltip ? <InfoTooltip content={tooltip} /> : null}
           </div>
           {badgeText ? (
@@ -61,13 +64,14 @@ export function MetricCard({
           ) : null}
         </div>
 
-        <div className="mt-4 text-3xl font-medium tracking-tight sm:text-4xl">
+        <div className="mt-4">
           <Cipher
             value={value}
             seed={seed}
             revealed={revealed}
+            cipherText={cipherText}
             suffix={suffix}
-            className="[&>span:last-child]:text-sm sm:[&>span:last-child]:text-base text-foreground"
+            size="hero"
           />
         </div>
 

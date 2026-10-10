@@ -10,6 +10,7 @@ import { useWallet } from "@/components/wallet/wallet-context";
 import { recordKeyFor, sealAmount } from "@/lib/crypto/record-seal";
 import { useDemoStore } from "@/lib/mock/store";
 import { amountContext } from "@/lib/sealed-amount";
+import { cipherPreview } from "@/lib/format";
 import { VAULT_ADDRESS, type Payroll, type VaultState } from "@/lib/mock/data";
 
 /** Company status that needs no keys, so the shell can use it. Demo reads the mock store; a real wallet reads its vault PDA. */
@@ -62,9 +63,7 @@ export function useVault() {
     : undefined;
   /** First 5 hex digits, prefixed `0x` so it cannot be mistaken for a number, of the treasury's REAL on-chain available-balance ciphertext; undefined for demo wallets or an unconfigured treasury. */
   const treasuryCipherHex =
-    treasuryExt && treasuryExt.__kind === "ConfidentialTransferAccount"
-      ? `0x${Array.from(treasuryExt.availableBalance as unknown as ArrayLike<number>).slice(0, 3).map((n: number) => n.toString(16).padStart(2, "0")).join("").slice(0, 5)}`
-      : undefined;
+    treasuryExt && treasuryExt.__kind === "ConfidentialTransferAccount" ? cipherPreview(treasuryExt.availableBalance as unknown as ArrayLike<number>) : undefined;
 
   return {
     admin,

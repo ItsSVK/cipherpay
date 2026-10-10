@@ -14,19 +14,30 @@ interface CipherProps {
   suffix?: string;
   /** Real ciphertext (hex) to show while encrypted. Without it the glyphs are a generated stand-in. */
   cipherText?: string;
+  /**
+   * The figure styles from DESIGN.md, so every page draws amounts the same way: `hero` is a card's headline amount,
+   * `row` an amount in a list. Without it the value inherits its surroundings (inline and compact uses).
+   */
+  size?: "hero" | "row";
 }
+
+const SIZE = {
+  hero: { value: "text-3xl sm:text-4xl font-bold tracking-tight text-foreground", suffix: "text-base sm:text-lg font-semibold" },
+  row: { value: "text-sm font-semibold text-foreground", suffix: "text-xs font-semibold" },
+} as const;
 
 /**
  * A confidential value. Encrypted it is a block of hex glyphs the same width as the plaintext;
  * on reveal each glyph scrambles and locks into place, then flashes green once.
  */
-export function Cipher({ value, revealed, seed, delay, className, suffix, cipherText }: CipherProps) {
+export function Cipher({ value, revealed, seed, delay, className, suffix, cipherText, size }: CipherProps) {
   const { text, phase } = useCipherText({ plain: value, seed, revealed, delay, cipherText });
   const hidden = phase === "encrypted" || phase === "encrypting";
   return (
     <span
       className={cn(
         "relative inline-flex items-baseline gap-1.5 font-mono tnum whitespace-pre",
+        size && SIZE[size].value,
         className,
       )}
     >
@@ -44,7 +55,7 @@ export function Cipher({ value, revealed, seed, delay, className, suffix, cipher
       >
         <span aria-hidden>{text}</span>
       </span>
-      {suffix ? <span className="text-muted-foreground text-[0.7em] font-sans">{suffix}</span> : null}
+      {suffix ? <span className={cn("text-muted-foreground font-sans", size ? SIZE[size].suffix : "text-[0.7em]")}>{suffix}</span> : null}
     </span>
   );
 }

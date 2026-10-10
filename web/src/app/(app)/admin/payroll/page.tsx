@@ -448,7 +448,7 @@ function RunPayroll() {
                                 cipherText={sealedPreview(sealedById.get(e.id))}
                                 revealed={amountsShown}
                                 delay={i * 90}
-                                className="text-sm font-semibold text-foreground"
+                                size="row"
                               />
                             )}
                             {executing ? <p className={cn("mt-0.5 text-[11px] font-medium", laneStatus(r).className)}>{laneStatus(r).text}</p> : null}
@@ -521,7 +521,8 @@ function RunPayroll() {
                     cipherText={totalCipher}
                     revealed={amountsShown}
                     suffix="USDC"
-                    className="text-3xl font-bold tracking-tight text-foreground [&>span:last-child]:text-base [&>span:last-child]:font-semibold [&>span:last-child]:text-muted-foreground"
+                    size="hero"
+                    className="sm:text-3xl"
                   />
                 )}
                 <p className="text-xs text-muted-foreground">

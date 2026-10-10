@@ -247,7 +247,8 @@ Tones: `neutral` (draft/idle), `key` (encrypted/executing), `verified`, `pending
 
 ### Confidential value (`Cipher`, `SealedAmount`)
 Every amount renders through `Cipher` with `revealed={keys.ready}` (plus `delay={i * 70-90}` in lists so a table decrypts as a
-wave). A saved amount that cannot be opened renders `SealedAmount`. Never print a confidential amount with plain `formatUsdc`
+wave). Pass `size="hero"` for a card's headline amount and `size="row"` for an amount in a list; these ARE the Hero / Row figure
+styles above, so don't restyle a `Cipher` by hand. A saved amount that cannot be opened renders `SealedAmount`. Never print a confidential amount with plain `formatUsdc`
 unless the viewer typed it (e.g. a form total).
 
 ### Action button (`ProgressButton`)

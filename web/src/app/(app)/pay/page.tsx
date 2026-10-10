@@ -147,6 +147,7 @@ export default function MyPay() {
           value={formatUsdc(emp.available)}
           seed={`emp-available-${emp.available}`}
           revealed={shown}
+          cipherText={emp.availableCipherHex}
           badgeText={shown ? "Decrypted" : keys.ready && emp.balanceStatus === "decrypting" ? "Decrypting…" : "Encrypted"}
           badgeTone={shown ? "verified" : "key"}
           subtitle="Ready for withdrawal to your wallet."
@@ -169,6 +170,7 @@ export default function MyPay() {
           value={formatUsdc(emp.pending)}
           seed={`emp-pending-${emp.pending}`}
           revealed={shown}
+          cipherText={emp.pendingCipherHex}
           badgeText={emp.pending > 0n ? "New Pay" : "Up to date"}
           badgeTone={emp.pending > 0n ? "pending" : "neutral"}
           subtitle="Apply payments to add them to your spendable balance."
@@ -295,10 +297,11 @@ export default function MyPay() {
                         <Cipher
                           value={p.amount === null ? "0.00" : formatUsdc(p.amount)}
                           seed={`pay-${p.id}`}
+                          cipherText={p.cipherHex}
                           revealed={p.received ? p.amount !== null : shown}
                           delay={i * 90}
                           suffix="USDC"
-                          className="font-mono text-base font-semibold tnum"
+                          size="row"
                         />
                         {p.received?.status === "checking" ? (
                           <p className="mt-0.5 text-[10.5px] text-muted-foreground">Checking on-chain…</p>

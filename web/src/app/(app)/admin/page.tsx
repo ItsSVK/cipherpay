@@ -123,7 +123,7 @@ export default function AdminOverview() {
                   revealed={shown}
                   cipherText={v.treasuryCipherHex}
                   suffix="USDC"
-                  className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground font-mono tnum [&>span:last-child]:text-base sm:[&>span:last-child]:text-lg [&>span:last-child]:font-semibold [&>span:last-child]:text-muted-foreground"
+                  size="hero"
                 />
               </div>
 

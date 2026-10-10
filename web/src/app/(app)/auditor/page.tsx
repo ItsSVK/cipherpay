@@ -129,7 +129,7 @@ export default function AuditorPage() {
                     revealed={revealed}
                     delay={i * 100}
                     suffix="USDC"
-                    className="font-mono text-base font-semibold tnum text-foreground"
+                    size="row"
                   />
                   {revealed ? (
                     <p className="enter-fade mt-0.5 font-mono text-[10.5px] text-muted-foreground tnum">

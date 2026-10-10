@@ -25,6 +25,15 @@ export function shortAddress(address: string, head = 4, tail = 4): string {
   return address.length <= head + tail + 1 ? address : `${address.slice(0, head)}…${address.slice(-tail)}`;
 }
 
+/**
+ * How a real ciphertext looks on screen while encrypted: `0x` + its first 5 hex digits. A fixed shape, so it says nothing about the
+ * value's size and cannot be mistaken for a number. Undefined when there are no bytes.
+ */
+export function cipherPreview(bytes: ArrayLike<number> | null | undefined): string | undefined {
+  if (!bytes || bytes.length < 3) return undefined;
+  return `0x${Array.from(bytes).slice(0, 3).map((n) => n.toString(16).padStart(2, "0")).join("").slice(0, 5)}`;
+}
+
 /** Small deterministic string hash (FNV-1a), for stable ciphertext and fingerprints in the UI. */
 export function hashString(input: string): number {
   let h = 0x811c9dc5;
