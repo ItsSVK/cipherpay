@@ -8,12 +8,11 @@ import { useKeys } from "@/components/crypto/key-context";
 import {
   authorizeHelper,
   deriveHelperSigner,
-  helperBalance,
   revokeAndReclaim,
   sweepHelper,
   topUpHelperIfShort,
 } from "@/lib/chain/helper-signer";
-import { OPERATOR_TTL_OPTIONS, readOperator, type OperatorStatus } from "@/lib/chain/operator";
+import { OPERATOR_TTL_OPTIONS, readOperatorAndBalance, type OperatorStatus } from "@/lib/chain/operator";
 import { rpc } from "@/lib/chain/rpc";
 import { walletPromptOpen } from "@/lib/chain/send";
 import type { RunSettings } from "@/lib/payroll/use-live-run";
@@ -79,10 +78,7 @@ export function OperatorProvider({ children }: { children: React.ReactNode }) {
     try {
       helperRef.current ??= await deriveHelperSigner(k);
       const helper = helperRef.current;
-      const [op, bal] = await Promise.all([
-        readOperator(rpc, address(signer.address), helper.address, 1, BigInt(Math.floor(Date.now() / 1000))),
-        helperBalance(rpc, helper),
-      ]);
+      const { status: op, balance: bal } = await readOperatorAndBalance(rpc, address(signer.address), helper.address, 1, BigInt(Math.floor(Date.now() / 1000)));
       setStatus(op);
       setBalance(bal);
     } catch {

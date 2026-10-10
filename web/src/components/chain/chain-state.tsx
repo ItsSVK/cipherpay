@@ -7,7 +7,7 @@ import { useWallet } from "@/components/wallet/wallet-context";
 import { useDemoStore } from "@/lib/mock/store";
 import { rpc } from "@/lib/chain/rpc";
 import { onWalletPromptChange, walletPromptOpen } from "@/lib/chain/send";
-import { readActivation, readVaultState, readWalletState, type VaultChainState, type WalletChainState } from "@/lib/chain/read";
+import { readChainState, type VaultChainState, type WalletChainState } from "@/lib/chain/read";
 
 type ChainStatus = "idle" | "loading" | "ready" | "error";
 
@@ -26,7 +26,7 @@ interface ChainState {
 }
 
 const Ctx = createContext<ChainState | null>(null);
-const POLL_MS = 20_000;
+const POLL_MS = 30_000;
 
 /**
  * Reads the connected real wallet's devnet state (SOL, WUSDC account, vault) and the activation of everyone
@@ -53,7 +53,7 @@ export function ChainProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const [wallet, vault, activation] = await Promise.all([readWalletState(rpc, owner), readVaultState(rpc, owner), readActivation(rpc, wallets as Address[])]);
+        const { wallet, vault, activation } = await readChainState(rpc, owner, wallets as Address[]);
         if (cancelled || mine !== seq.current) return;
         setData({ for: connected, wallet, vault, activation, at: Date.now() });
         setError(null);
@@ -69,7 +69,7 @@ export function ChainProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!connected || isDemo) return;
-    // A wallet popup does not hide the page, so without this the poll (6 RPC calls, and a main-thread decrypt whenever a
+    // A wallet popup does not hide the page, so without this the poll (1-2 RPC calls, and a main-thread decrypt whenever a
     // ciphertext changed) keeps firing exactly while the wallet is trying to open. Stand down, then catch up once it closes.
     let missed = false;
     const id = setInterval(() => {

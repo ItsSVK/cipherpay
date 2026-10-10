@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Address } from "@/components/crypto/fingerprint";
 import { KeyChip } from "@/components/crypto/key-chip";
 import { KeyProvider } from "@/components/crypto/key-context";
+import { SignInGate } from "@/components/data/sign-in-gate";
 import { WalletKeyProvider } from "@/components/crypto/wallet-key-provider";
 import { UnlockDialog } from "@/components/crypto/unlock-dialog";
 import { ChainProvider, useChain } from "@/components/chain/chain-state";
@@ -260,13 +261,22 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const wallet = useWallet();
+  const pathname = usePathname();
+  const router = useRouter();
+  // Logging out (or the wallet dropping its account) shows the connect screen, so the URL must say so too instead of staying on /admin/payroll.
+  const loggedOut = wallet.status === "disconnected" && pathname !== "/app";
+  useEffect(() => {
+    if (loggedOut) router.replace("/app");
+  }, [loggedOut, router]);
   if (wallet.status === "loading") return <div className="min-h-dvh" aria-busy="true" />;
   if (wallet.status !== "connected" || !wallet.address) return <ConnectScreen />;
   return (
     <PayrollDataProvider>
-      <ChainProvider>
-        <ConnectedShell address={wallet.address}>{children}</ConnectedShell>
-      </ChainProvider>
+      <SignInGate key={wallet.address}>
+        <ChainProvider>
+          <ConnectedShell address={wallet.address}>{children}</ConnectedShell>
+        </ChainProvider>
+      </SignInGate>
     </PayrollDataProvider>
   );
 }

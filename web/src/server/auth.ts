@@ -20,6 +20,15 @@ function randomToken(bytes = 32): string {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString("base64url");
 }
 
+/**
+ * The sign-in nonce. Wallets such as Phantom parse the sign-in message as "Sign in with Solana" and refuse to show it ("invalid
+ * formatting") unless the nonce is purely alphanumeric, so it must not be base64url (which has `-` and `_`, hence the failure about
+ * every other time). 16 random bytes as hex = 32 characters, well over the 8 the format asks for.
+ */
+function randomNonce(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 /** A single-use sign-in challenge. Occasionally sweeps expired challenges and sessions so the tables don't grow forever. */
 export async function createNonce(): Promise<{ nonce: string; issuedAt: number; expiresAt: number }> {
   const db = getDb();
@@ -30,7 +39,7 @@ export async function createNonce(): Promise<{ nonce: string; issuedAt: number; 
     await db.delete(authNonces).where(lt(authNonces.expiresAt, now));
     await db.delete(sessions).where(lt(sessions.expiresAt, now));
   }
-  const nonce = randomToken(16);
+  const nonce = randomNonce();
   const expiresAt = now + SIGN_IN_TTL_SECONDS;
   await db.insert(authNonces).values({ nonce, expiresAt });
   return { nonce, issuedAt: now, expiresAt };

@@ -230,6 +230,17 @@ A split payout is a batch with N recipients whose amounts come from a rule.
   (REQ26). Covers payments made through the app; a chain indexer is Phase 2. See
   `../CLAUDE.md` "Auditor key": the baked-in auditor key is a throwaway whose secret must be
   available, or the mint's auditor must be rotated first.
+  **Real path built 2026-10-10:** standalone page `/app/auditor` (`src/app/app/auditor/page.tsx`, deliberately OUTSIDE the `(app)` group: no wallet
+  connect, sidebar or navbar; linked from the connect screen). The old `/auditor` under `(app)` is still the animated demo-wallet mock. It renders `components/app/auditor-live.tsx`
+  (`LiveAuditor`), logic in `lib/chain/auditor-decrypt.ts`. The auditor types the employer's admin wallet and pastes the auditor secret
+  (32 bytes: base64, hex or JSON array; held in a ref only, zeroed on lock/unmount, never in the shell's `KeyProvider`). The key is checked
+  against `readAuditorPubkey` before anything is read; the vault PDA is derived from the employer wallet; `getSignaturesForAddress(vault)` +
+  `getTransaction` (3 at a time, 50 per page, "Read older" pages back) find every `pay_employee` **from the chain, not D1** (so direct calls
+  show too, and no server route exposes run data); the two 64-byte auditor ciphertexts are decoded from the instruction args and opened in the
+  proof worker (`openAmountsWithSecret`, the same op as the recipient's `openReceived`, same range checks); amount = `lo + hi * 2^16`.
+  Tests: `auditor-decrypt.test.ts` (real proofs, 5 amounts incl. both halves non-zero, wrong key -> null, other vault/program/discriminator
+  skipped, secret formats, key vs mint pubkey). **Not run against devnet or in a browser.** Only top-level `pay_employee` instructions are
+  read (inner CPI calls would be missed). Rendering of `/app/auditor` was checked on `next dev` (form shown, no nav/aside/connect gate).
 
 ## Product copy rules (this is in scope, not polish)
 
@@ -520,7 +531,7 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
   (`HELPER_TOPUP_LAMPORTS`, raised because the helper also pays the one-off rent for the `OperatorConfig` account it creates), it is not
   swept after a run, and funding the treasury tops it up in the same transaction. **Needs the devnet program upgraded** (new instruction,
   and the config PDA seed moved to `operator_v3`, so any earlier devnet authorization is ignored).
-- **Automatic vs manual payroll (2026-10-06).** The Run payroll page has an **Automatic payroll** switch (`components/app/operator-panel.tsx`).
+- **Automatic vs manual payroll (2026-10-06).** The Run payroll page has an **Automatic payroll** switch (state in `components/app/operator-context.tsx`, dialog in `operator-modal.tsx`; the older `operator-panel.tsx` was deleted as unused).
   **Turning it ON asks the wallet right then** (a SOL top-up only if the helper is low, then the authorization itself, which since the entry above is a SIGNED MESSAGE, not a transaction), so a slow wallet popup happens before the run, not during it; the switch only flips on after that confirms. While on, a live
   **countdown (m:ss) and "N payments left"** show, and a run is signed entirely by the helper: no popups. The admin picks, before turning it on,
   how long it stays on (**1, 5 or 15 minutes**, default 5; the program allows at most 24 h) and a payment cap (at least the people in the run;

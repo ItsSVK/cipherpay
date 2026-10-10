@@ -84,8 +84,14 @@ export const proveTransfer = (input: TransferProofInput): Promise<TransferProofs
 export const proveWithdraw = (input: WithdrawProofInput): Promise<WithdrawProofs> => offThread({ op: "withdraw", input }, () => composeWithdrawProofs(input));
 
 /** Opens payment amounts encrypted to this wallet (lib/received-amount.ts); null where one doesn't open. One worker round trip for the whole list. */
-export const openReceivedAmounts = (encoded: (string | null)[], keys: DerivedKeys): Promise<(bigint | null)[]> =>
-  offThread({ op: "openReceived", encoded, secretKey: keys.elgamalKeypair.secretKey }, () => openReceivedAmountsLocal(encoded, keys.elgamalKeypair.secretKey));
+export const openReceivedAmounts = (encoded: (string | null)[], keys: DerivedKeys): Promise<(bigint | null)[]> => openAmountsWithSecret(encoded, keys.elgamalKeypair.secretKey);
+
+/**
+ * The same job from a bare ElGamal secret (the auditor's, which is not wallet-derived). The auditor's ciphertexts in pay_employee have the
+ * same 64-byte layout as the recipient's, so they go through the same encoding and range checks.
+ */
+export const openAmountsWithSecret = (encoded: (string | null)[], secretKey: Uint8Array): Promise<(bigint | null)[]> =>
+  offThread({ op: "openReceived", encoded, secretKey }, () => openReceivedAmountsLocal(encoded, secretKey));
 
 export async function decryptOffThread(view: DecryptView, keys: DerivedKeys): Promise<DecryptedBalance> {
   try {

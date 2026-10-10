@@ -124,6 +124,13 @@ export function ConnectScreen() {
             </ul>
           </div>
         </section>
+
+        <p className="enter mt-8 text-[13px] text-muted-foreground" style={{ ["--i" as string]: 3 }}>
+          Auditing a company&apos;s payments? No wallet needed.{" "}
+          <Link href="/app/auditor" className="font-medium text-primary underline-offset-4 hover:underline">
+            Open the audit page
+          </Link>
+        </p>
       </main>
     </div>
   );

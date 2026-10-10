@@ -1,8 +1,8 @@
 // Read-only chain state for the connected wallet. No keys are used here: decryption happens separately
 // (lib/chain/decrypt.ts) and only while the user's keys are unlocked.
-import { address, unwrapOption, type Address } from "@solana/kit";
-import { TOKEN_2022_PROGRAM_ADDRESS, fetchAllMaybeToken, fetchMaybeMint, fetchMaybeToken, findAssociatedTokenPda, type Token } from "@solana-program/token-2022";
-import { fetchMaybeVault, findVaultPda } from "@/generated/vault/src/generated";
+import { address, fetchEncodedAccounts, unwrapOption, type Address, type MaybeEncodedAccount } from "@solana/kit";
+import { TOKEN_2022_PROGRAM_ADDRESS, decodeToken, fetchAllMaybeToken, fetchMaybeMint, fetchMaybeToken, findAssociatedTokenPda, type Token } from "@solana-program/token-2022";
+import { decodeVault, fetchMaybeVault, findVaultPda } from "@/generated/vault/src/generated";
 import { DEVNET_USDC_MINT, DEVNET_WUSDC_MINT } from "./constants";
 import type { AppRpc } from "./rpc";
 
@@ -73,6 +73,60 @@ async function readToken(rpc: AppRpc, addr: Address): Promise<Token | null> {
   } catch {
     return null;
   }
+}
+
+/** A token account out of a batched read: null if it does not exist or does not decode (something else lives at that address). */
+function tokenFrom(encoded: MaybeEncodedAccount): Token | null {
+  if (!encoded.exists) return null;
+  try {
+    return decodeToken(encoded).data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Everything the app polls for a wallet, in ONE getMultipleAccounts call (plus one more for the treasury once a vault has it configured):
+ * SOL (the owner account's lamports), the WUSDC and USDC accounts, the vault, and the activation of every saved address. It used to be
+ * five or six separate calls per poll, each with its own browser preflight. Same results as readWalletState + readVaultState +
+ * readActivation, which stay for one-off reads.
+ */
+export async function readChainState(rpc: AppRpc, owner: Address, employees: Address[]): Promise<{ wallet: WalletChainState; vault: VaultChainState; activation: Record<string, boolean> }> {
+  const [wusdcAta, usdcAta, [vaultAddress], employeeAtas] = await Promise.all([
+    ataFor(owner, WUSDC, TOKEN_2022_PROGRAM_ADDRESS),
+    ataFor(owner, USDC, CLASSIC_TOKEN_PROGRAM),
+    findVaultPda({ admin: owner, mint: WUSDC }),
+    Promise.all(employees.map((e) => ataFor(e, WUSDC, TOKEN_2022_PROGRAM_ADDRESS))),
+  ]);
+  const [ownerAcct, wusdcAcct, usdcAcct, vaultAcct, ...employeeAccts] = await fetchEncodedAccounts(rpc, [owner, wusdcAta, usdcAta, vaultAddress, ...employeeAtas], { commitment: "confirmed" });
+
+  const wusdc = tokenFrom(wusdcAcct);
+  const usdc = tokenFrom(usdcAcct);
+  const wallet: WalletChainState = { owner, sol: ownerAcct.exists ? ownerAcct.lamports : 0n, usdc: usdc?.amount ?? 0n, wusdc: wusdc ? viewOf(wusdcAta, wusdc) : null };
+
+  let vault: VaultChainState;
+  if (!vaultAcct.exists) {
+    vault = { address: vaultAddress, exists: false, paused: false, treasuryConfigured: false, treasuryElgamalPubkey: null, treasury: null };
+  } else {
+    const v = decodeVault(vaultAcct).data;
+    const treasuryToken = v.treasuryConfigured ? await readToken(rpc, v.treasuryTokenAccount) : null;
+    vault = {
+      address: vaultAddress,
+      exists: true,
+      paused: v.paused,
+      treasuryConfigured: v.treasuryConfigured,
+      treasuryElgamalPubkey: v.treasuryConfigured ? v.treasuryElgamalPubkey : null,
+      treasury: treasuryToken ? viewOf(v.treasuryTokenAccount, treasuryToken) : null,
+    };
+  }
+
+  const activation = Object.fromEntries(
+    employees.map((e, i) => {
+      const token = tokenFrom(employeeAccts[i]);
+      return [e, !!token && viewOf(employeeAtas[i], token).confidential];
+    }),
+  );
+  return { wallet, vault, activation };
 }
 
 export async function readWalletState(rpc: AppRpc, owner: Address): Promise<WalletChainState> {
