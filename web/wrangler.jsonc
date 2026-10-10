@@ -28,9 +28,8 @@
     {
       "binding": "DB",
       "database_name": "vault-web",
-      // Placeholder: replace with the id printed by `wrangler d1 create vault-web`.
-      // Local dev (`bun run dev` / `preview`) uses a local SQLite file and ignores it.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Id printed by `wrangler d1 create vault-web`. Local dev (`bun run dev` / `preview`) uses a local SQLite file and ignores it.
+      "database_id": "558252a3-1853-40f3-b306-1ee6ae2bda4b",
       "migrations_dir": "drizzle"
     }
   ]
