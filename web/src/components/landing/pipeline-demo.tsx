@@ -4,7 +4,7 @@ import { PlayIcon, RotateCcwIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HexTicker } from "@/components/crypto/hex-ticker";
 import { PipelineTrack } from "@/components/crypto/pipeline-track";
-import { PIPELINE_STAGES, TRANSFER_STAGE } from "@/lib/mock/data";
+import { PIPELINE_STAGES, TRANSFER_STAGE } from "@/lib/payroll/types";
 import { useRunSimulation } from "@/lib/payroll/use-run-simulation";
 
 const IDS = ["sample"];

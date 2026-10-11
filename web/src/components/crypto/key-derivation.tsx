@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { CheckIcon, FileTextIcon, FingerprintIcon, KeyRoundIcon, LockKeyholeIcon, XIcon } from "lucide-react";
-import { type KeyMode, type KeyStatus } from "./key-context";
+import { type KeyStatus } from "./key-context";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { cn } from "@/lib/utils";
 
@@ -30,10 +30,6 @@ const LINK_AES = `M${P.sig.x} ${P.sig.y} C ${P.sig.x + 70} ${P.sig.y}, ${P.aes.x
 
 type NodeState = "idle" | "active" | "waiting" | "done" | "error";
 
-const LABELS: Record<KeyMode, { input: [string, string]; source: string; idle: string }> = {
-  signature: { input: ["Message", "solana-conf-bal/v1"], source: "Wallet signature", idle: "Sign the message to derive your keys." },
-  import: { input: ["Auditor secret", "pasted, not stored"], source: "Secret key", idle: "Paste the auditor secret to rebuild its key." },
-};
 
 const short = (k: string) => (k.length > 12 ? `${k.slice(0, 5)}…${k.slice(-5)}` : k);
 
@@ -93,18 +89,15 @@ export function KeyDerivation({
   status,
   stage,
   seed,
-  mode = "signature",
   error = null,
 }: {
   status: KeyStatus;
   stage: number;
-  /** The real ElGamal public key once derived; empty before that (and always for demo wallets). */
+  /** The real ElGamal public key once derived; empty before that. */
   seed: string;
-  mode?: KeyMode;
   error?: string | null;
 }) {
   const reduced = useReducedMotion();
-  const labels = LABELS[mode];
   const ready = status === "ready";
   const deriving = status === "deriving";
   const failed = Boolean(error);
@@ -121,10 +114,8 @@ export function KeyDerivation({
       : signed
         ? "Both keys come from that one signature, computed here in your browser."
         : waiting
-          ? mode === "signature"
-            ? "Approve the message in your wallet. Signing is free and sends nothing on-chain."
-            : "Rebuilding the key from the secret…"
-          : labels.idle;
+          ? "Approve the message in your wallet. Signing is free and sends nothing on-chain."
+          : "Sign the message to derive your keys.";
 
   return (
     <div className="w-full min-w-0 space-y-3" aria-label="Key derivation">
@@ -145,15 +136,15 @@ export function KeyDerivation({
             at={P.msg}
             state={deriving || ready ? "active" : "idle"}
             icon={<FileTextIcon className="size-4" />}
-            title={labels.input[0]}
-            sub={<span className={mode === "signature" ? "font-mono" : undefined}>{labels.input[1]}</span>}
+            title="Message"
+            sub={<span className="font-mono">solana-conf-bal/v1</span>}
           />
           <Node
             at={P.sig}
             state={failed ? "error" : signed ? "done" : waiting ? "waiting" : "idle"}
             icon={signed ? <CheckIcon className="size-4" strokeWidth={3} /> : <FingerprintIcon className="size-4" />}
-            title={labels.source}
-            sub={failed ? "declined" : signed ? "never leaves this tab" : waiting ? (mode === "signature" ? "approve in wallet" : "reading…") : "not yet signed"}
+            title="Wallet signature"
+            sub={failed ? "declined" : signed ? "never leaves this tab" : waiting ? "approve in wallet" : "not yet signed"}
           />
           <Node
             at={P.elg}

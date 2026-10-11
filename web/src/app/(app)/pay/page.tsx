@@ -1,7 +1,6 @@
 "use client";
 
 import { EyeIcon, ExternalLinkIcon, ShieldIcon, SparklesIcon, WalletIcon } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
@@ -9,7 +8,6 @@ import { StepList, type Step } from "@/components/crypto/step-list";
 import { useActivation } from "@/components/chain/use-activation";
 import { useApplyPending } from "@/components/chain/use-receive";
 import { useEmployee } from "@/components/app/employee-context";
-import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { PageLoading } from "@/components/app/page-loading";
 import { SolNotice } from "@/components/app/sol-notice";
@@ -19,7 +17,6 @@ import { MetricCard } from "@/components/app/metric-card";
 import { DisclosureCard } from "@/components/app/disclosure-card";
 import { EmptyState } from "@/components/app/empty-state";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
-import { useStepper } from "@/hooks/use-stepper";
 import { formatUsdc, shortAddress } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -29,31 +26,20 @@ const ACTIVATE_STEPS: Step[] = [
   { label: "Create and register your account", detail: "Sets up wrapped-USDC confidential extension and registers your public encryption key." },
 ];
 
-const APPLY_STEPS: Step[] = [{ label: "Apply pending balance", detail: "Moves new payments into your spendable balance.", visibility: "encrypted" }];
-const LIVE_APPLY_STEPS: Step[] = [
+const APPLY_STEPS: Step[] = [
   { label: "Prepare in your browser", detail: "Derives your new encrypted balance locally. No data leaves this tab.", visibility: "encrypted" },
   { label: "Approve in your wallet", detail: "One transaction approval for the update." },
   { label: "Apply pending balance", detail: "Moves new payments into spendable balance on-chain.", visibility: "encrypted" },
 ];
-const LIVE_APPLY_STEP: Record<string, number> = { idle: 0, preparing: 0, signing: 1, confirming: 2, done: 3, error: 0 };
+const APPLY_STEP: Record<string, number> = { idle: 0, preparing: 0, signing: 1, confirming: 2, done: 3, error: 0 };
 
 export default function MyPay() {
   const keys = useKeys();
   const emp = useEmployee();
-  const guard = useLiveGuard();
   const shown = keys.ready && emp.balanceStatus === "ready";
-  const activation = useStepper(ACTIVATE_STEPS.length, 950, () => {
-    emp.activate();
-    toast.success("Account activated", { description: "You can now receive confidential payments." });
-  });
   const live = useActivation();
-  const act = emp.isLive ? live : activation;
-  const apply = useStepper(1, 1100, () => {
-    emp.applyPending();
-    toast.success("Pending balance applied");
-  });
   const liveApply = useApplyPending();
-  const applying = emp.isLive ? liveApply.running : apply.running;
+  const applying = liveApply.running;
 
   if (emp.loading) return <PageLoading />;
 
@@ -76,38 +62,34 @@ export default function MyPay() {
           <SolNotice />
 
           <div className="mt-6">
-            <StepList steps={ACTIVATE_STEPS} completed={act.completed} running={act.running} />
+            <StepList steps={ACTIVATE_STEPS} completed={live.completed} running={live.running} />
           </div>
 
-          {emp.isLive && live.error ? (
+          {live.error ? (
             <p role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-failed-soft p-3 text-xs text-destructive">
               {live.error}
             </p>
           ) : null}
 
-          {emp.isLive && live.phase === "done" ? (
+          {live.phase === "done" ? (
             <p role="status" className="mt-4 rounded-xl bg-verified-soft p-3 text-xs text-verified">
               Confirmed on devnet. Reading your new account…
             </p>
           ) : null}
 
-          {emp.isLive && !live.canSign ? (
+          {!live.canSign ? (
             <p className="mt-4 text-xs text-muted-foreground">{live.cannotSignReason}</p>
           ) : null}
 
           <Button
             className="mt-6 h-11 w-full font-medium"
-            disabled={act.running || !emp.hasSol || live.phase === "done" || (emp.isLive && !live.canSign)}
+            disabled={live.running || !emp.hasSol || live.phase === "done" || !live.canSign}
             onClick={() => {
               if (!keys.requireKeys()) return;
-              if (emp.isLive) {
-                void live.run();
-                return;
-              }
-              activation.run();
+              void live.run();
             }}
           >
-            {act.running ? "Activating account…" : live.error && emp.isLive ? "Retry activation" : keys.ready ? "Activate account" : "Unlock keys to activate"}
+            {live.running ? "Activating account…" : live.error ? "Retry activation" : keys.ready ? "Activate account" : "Unlock keys to activate"}
           </Button>
 
           <p className="mt-3 text-center text-[11.5px] text-muted-foreground">
@@ -184,34 +166,24 @@ export default function MyPay() {
                 <Button
                   size="sm"
                   className="h-8 px-3 text-xs"
-                  disabled={applying || !emp.hasSol || (emp.isLive && !liveApply.canSign)}
+                  disabled={applying || !emp.hasSol || !liveApply.canSign}
                   onClick={() => {
                     if (!keys.requireKeys()) return;
-                    if (emp.isLive) {
-                      void liveApply.run();
-                      return;
-                    }
-                    if (!guard()) return;
-                    apply.run();
+                    void liveApply.run();
                   }}
                 >
-                  {applying ? "Applying…" : emp.isLive && liveApply.error ? "Retry" : "Apply Pay"}
+                  {applying ? "Applying…" : liveApply.error ? "Retry" : "Apply Pay"}
                 </Button>
               ) : null}
             </div>
           }
         >
-          {emp.pending > 0n && !emp.isLive && apply.running ? (
+          {emp.pending > 0n && (liveApply.running || liveApply.phase === "done") ? (
             <div className="mt-3">
-              <StepList steps={APPLY_STEPS} completed={apply.completed} running={apply.running} />
+              <StepList steps={APPLY_STEPS} completed={APPLY_STEP[liveApply.phase]} running={liveApply.running} />
             </div>
           ) : null}
-          {emp.pending > 0n && emp.isLive && (liveApply.running || liveApply.phase === "done") ? (
-            <div className="mt-3">
-              <StepList steps={LIVE_APPLY_STEPS} completed={LIVE_APPLY_STEP[liveApply.phase]} running={liveApply.running} />
-            </div>
-          ) : null}
-          {emp.pending > 0n && emp.isLive && liveApply.error ? (
+          {emp.pending > 0n && liveApply.error ? (
             <p role="alert" className="mt-2 rounded-lg border border-destructive/30 bg-failed-soft p-2 text-xs text-destructive">
               {liveApply.error}
             </p>
@@ -232,7 +204,7 @@ export default function MyPay() {
           ) : null}
         </div>
 
-        {emp.isLive && emp.paymentsStatus === "needs-auth" ? (
+        {emp.paymentsStatus === "needs-auth" ? (
           <div className="plate flex flex-wrap items-center justify-between gap-4 p-5">
             <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
               Your payment history is linked to employer payroll records. Sign in with a gasless signature to load your payments.
@@ -241,9 +213,9 @@ export default function MyPay() {
               {emp.paymentsSigningIn ? "Signing…" : "Sign in to view history"}
             </Button>
           </div>
-        ) : emp.isLive && emp.paymentsStatus === "loading" ? (
+        ) : emp.paymentsStatus === "loading" ? (
           <div className="plate p-8 text-center text-xs text-muted-foreground">Loading payment records…</div>
-        ) : emp.isLive && emp.paymentsStatus === "error" ? (
+        ) : emp.paymentsStatus === "error" ? (
           <div role="alert" className="plate border-destructive/30 bg-failed-soft p-5 text-xs text-destructive">
             {emp.paymentsError}
           </div>

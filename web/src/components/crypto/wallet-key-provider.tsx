@@ -26,7 +26,7 @@ export function WalletKeyProvider({ account, children }: { account: UiWalletAcco
     return keys;
   }, [account.address, signMessage]);
   return (
-    <KeyProvider mode="signature" deriver={deriver}>
+    <KeyProvider deriver={deriver}>
       <TxSignerProvider account={account} signMessage={signMessage}>{children}</TxSignerProvider>
     </KeyProvider>
   );

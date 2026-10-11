@@ -6,7 +6,6 @@ import { LockIcon, PlayIcon, PlusIcon, RefreshCwIcon, SendIcon, UsersIcon } from
 import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Switch } from "@/components/ui/switch";
 import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { Cipher } from "@/components/crypto/cipher";
@@ -37,16 +36,13 @@ import {
 import { useOperator } from "@/components/app/operator-context";
 import { AddPayroll, DeletePayroll, PayrollRail } from "@/components/app/payroll-picker";
 import { PayrollGate } from "@/components/data/payroll-gate";
-import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
-import { PIPELINE_STAGES, TRANSFER_STAGE, type Employee } from "@/lib/mock/data";
-import { shortToday } from "@/lib/mock/store";
+import { PIPELINE_STAGES, shortToday, type Employee } from "@/lib/payroll/types";
 import { formatUsdc, shortAddress } from "@/lib/format";
 import { useAccountStatus } from "@/components/app/employee-context";
 import { useLiveRun } from "@/lib/payroll/use-live-run";
-import { useRunSimulation } from "@/lib/payroll/use-run-simulation";
 import { checkSigning, suggestSigning, type SigningState } from "@/lib/payroll/signing-check";
 import { EmptyState } from "@/components/app/empty-state";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
@@ -69,7 +65,6 @@ export default function RunPayrollPage() {
 function RunPayroll() {
   const keys = useKeys();
   const v = useVault();
-  const guard = useLiveGuard();
   const [chosenId, setChosenId] = useState<string | null>(null);
   const payroll = v.vault.payrolls.find((p) => p.id === chosenId) ?? v.vault.payrolls[0] ?? null;
   const employees = useMemo<Employee[]>(() => (payroll?.entries ?? []).map((e) => ({ id: e.id, name: e.name, role: "", wallet: e.wallet, salary: e.amount })), [payroll]);
@@ -77,7 +72,6 @@ function RunPayroll() {
   const [phaseState, setPhase] = useState<RunPhase>("review");
   const preflight = usePreflight();
   const { checks, allPass } = preflight;
-  const [failDemo, setFailDemo] = useState(false);
   const { runSettings, live: autoLive, setModalOpen, secondsLeft: autoSecondsLeft, status: autoStatus, settings: autoSettings, setSettings: setAutoSettings } = useOperator();
   // How the run would be signed right now. Read through a ref by the checks, which run from timers and callbacks.
   const signingNow: SigningState = autoLive && autoStatus ? { mode: "automatic", secondsLeft: autoSecondsLeft, paymentsLeft: autoStatus.paymentsLeft } : { mode: "manual" };
@@ -85,7 +79,6 @@ function RunPayroll() {
   useEffect(() => {
     signingRef.current = signingNow;
   });
-  const credited = useRef(new Set<string>());
   const recorded = useRef(false);
 
   const included = useMemo(() => employees.filter((e) => !excluded.has(e.id)), [employees, excluded]);
@@ -94,26 +87,13 @@ function RunPayroll() {
   const sealedById = useMemo(() => new Map((payroll?.entries ?? []).map((e) => [e.id, e.amountCt])), [payroll]);
   const totalCipher = useMemo(() => sealedTotalPreview(included.map((e) => sealedById.get(e.id))), [included, sealedById]);
   const account = useAccountStatus();
-  const ids = useMemo(() => included.map((e) => e.id), [included]);
   const liveItems = useMemo(() => included.map((e) => ({ id: e.id, name: e.name, wallet: e.wallet, amount: e.salary })), [included]);
-  const mockSim = useRunSimulation(ids, PIPELINE_STAGES.length, TRANSFER_STAGE);
-  const liveSim = useLiveRun(liveItems, PIPELINE_STAGES.length, runSettings);
-  const sim = v.isLive ? liveSim : mockSim;
+  const sim = useLiveRun(liveItems, PIPELINE_STAGES.length, runSettings);
   const phase: RunPhase = phaseState === "executing" && sim.done ? "done" : phaseState;
   const halted = phase === "executing" && !sim.running && sim.failedCount > 0;
 
   const { status, tone: statusTone, label: statusLabel } = runStatus(phase, halted, allPass, preflight.failed);
   const flow = runFlow(status);
-
-  useEffect(() => {
-    for (const r of sim.rows) {
-      if (r.status !== "done" || !r.signature || credited.current.has(r.id)) continue;
-      credited.current.add(r.id);
-      const e = employees.find((x) => x.id === r.id);
-      if (e && !v.isLive) v.pay(e.wallet, e.salary, r.signature, `${v.vault.name} payroll`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sim.rows]);
 
   useEffect(() => {
     if (phase !== "done" || recorded.current) return;
@@ -161,20 +141,16 @@ function RunPayroll() {
         ? { id: "act", label: "Every recipient has an activated confidential account", ok: true, detail: `${list.length} of ${list.length} recipients active` }
         : { id: "act", label: "Every recipient has an activated confidential account", ok: false, detail: `${missing.map((m) => m.name).join(", ")} ${missing.length === 1 ? "has" : "have"} not activated an account`, fix: { kind: "skip", ids: missing.map((m) => m.id), label: "Skip inactive recipients" } },
       { id: "dup", label: "No duplicate wallets or zero amounts", ok: !dup && !zero, detail: dup ? "Duplicate wallet detected in batch" : zero ? "One or more amounts are zero" : "All destination addresses unique with positive amounts" },
-      ...(v.isLive
-        ? [
-            { id: "sol", label: "Sufficient SOL for rent & gas fees", ok: account.sol >= MIN_SOL_FOR_RUN, detail: account.sol >= MIN_SOL_FOR_RUN ? `${(Number(account.sol) / 1e9).toFixed(3)} SOL available in admin wallet` : `Each payment requires temporary proof account rent. Available: ${(Number(account.sol) / 1e9).toFixed(3)} SOL.` },
-            // Automatic payroll stops part way if its payment count or time runs out, so check both against this run.
-            ...checkSigning(signingRef.current, list.length).map((c) => ({ ...c, fix: c.ok ? undefined : ({ kind: "operator", label: "Adjust automatic payroll" } as Fix) })),
-          ]
-        : []),
+      { id: "sol", label: "Sufficient SOL for rent & gas fees", ok: account.sol >= MIN_SOL_FOR_RUN, detail: account.sol >= MIN_SOL_FOR_RUN ? `${(Number(account.sol) / 1e9).toFixed(3)} SOL available in admin wallet` : `Each payment requires temporary proof account rent. Available: ${(Number(account.sol) / 1e9).toFixed(3)} SOL.` },
+      // Automatic payroll stops part way if its payment count or time runs out, so check both against this run.
+      ...checkSigning(signingRef.current, list.length).map((c) => ({ ...c, fix: c.ok ? undefined : ({ kind: "operator", label: "Adjust automatic payroll" } as Fix) })),
       { id: "pause", label: "Payroll vault is active", ok: !paused, detail: paused ? "Payroll is paused; pay_employee instruction would revert" : "Vault active and accepting payout batches", fix: paused ? { kind: "resume" } : undefined },
     ];
   };
 
   const runSimulation = useCallback((list: Employee[], paused = v.vault.paused) => {
     if (!keys.requireKeys()) return;
-    if (v.isLive && v.treasuryStatus !== "ready") {
+    if (v.treasuryStatus !== "ready") {
       toast(v.treasuryStatus === "error" ? "Couldn't read treasury balance" : "Decrypting treasury balance", { description: v.treasuryError ?? "Please try again in a moment." });
       return;
     }
@@ -196,7 +172,7 @@ function RunPayroll() {
   useEffect(() => {
     if (lastAuthKey.current === authKey) return;
     lastAuthKey.current = authKey;
-    if (!v.isLive || phaseState !== "simulated") return;
+    if (phaseState !== "simulated") return;
     const t = setTimeout(() => runSimulation(included), 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,7 +192,6 @@ function RunPayroll() {
       runSimulation(employees.filter((e) => !ids.has(e.id)));
     } else {
       void (async () => {
-        if (!v.isLive && !guard()) return;
         if (!(await v.setPaused(false))) return;
         toast("Payroll resumed", { description: "Payouts can run again." });
         runSimulation(included, false);
@@ -225,30 +200,21 @@ function RunPayroll() {
   };
 
   const approveAndRun = () => {
-    if (v.isLive) {
-      if (!keys.requireKeys()) return;
-      // Time has passed since the checks ran (and the authorization may have changed): check signing again right before sending.
-      const stale = checkSigning(signingRef.current, included.length).find((c) => !c.ok);
-      if (stale) {
-        toast.error("This run would stop part way", { description: stale.detail });
-        runSimulation(included);
-        return;
-      }
-      if (!liveSim.canSign) {
-        toast.error("This wallet can't sign devnet transactions", { description: "Try a different wallet." });
-        return;
-      }
-      setPhase("executing");
-      credited.current.clear();
-      recorded.current = false;
-      liveSim.start();
+    if (!keys.requireKeys()) return;
+    // Time has passed since the checks ran (and the authorization may have changed): check signing again right before sending.
+    const stale = checkSigning(signingRef.current, included.length).find((c) => !c.ok);
+    if (stale) {
+      toast.error("This run would stop part way", { description: stale.detail });
+      runSimulation(included);
+      return;
+    }
+    if (!sim.canSign) {
+      toast.error("This wallet can't sign devnet transactions", { description: "Try a different wallet." });
       return;
     }
     setPhase("executing");
-    credited.current.clear();
     recorded.current = false;
-    const target = included[Math.min(1, included.length - 1)];
-    mockSim.start(failDemo && target ? { [target.id]: TRANSFER_STAGE } : {});
+    sim.start();
   };
 
   const reset = () => {
@@ -477,15 +443,6 @@ function RunPayroll() {
               })}
             </ul>
 
-            {phase === "review" && !v.isLive ? (
-              <div className="flex items-center justify-between gap-4 bg-muted/20 px-5 py-3 sm:px-6">
-                <div>
-                  <p className="text-xs font-medium text-foreground">Simulate a failure</p>
-                  <p className="text-[11px] text-muted-foreground">Demo only: force one transfer to fail to try retry and resume.</p>
-                </div>
-                <Switch checked={failDemo} onCheckedChange={setFailDemo} aria-label="Force one demo transfer to fail" />
-              </div>
-            ) : null}
               </div>
             </div>
           </section>
@@ -526,7 +483,7 @@ function RunPayroll() {
                   />
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {included.length} recipient{included.length === 1 ? "" : "s"} · about {included.length * (v.isLive ? 6 : 7)} transactions
+                  {included.length} recipient{included.length === 1 ? "" : "s"} · about {included.length * 6} transactions
                   <InfoTooltip content="Per recipient: three temporary proof accounts are created and verified, the encrypted transfer is sent, then the proof accounts are closed and their rent comes back." />
                 </p>
                 <Reveal open={executing}>
@@ -542,7 +499,7 @@ function RunPayroll() {
                 </Reveal>
               </div>
 
-              {v.isLive ? <SigningCard payments={included.length} locked={executing && !halted && phase !== "done"} /> : null}
+              <SigningCard payments={included.length} locked={executing && !halted && phase !== "done"} />
 
               <div>
               <ProgressButton

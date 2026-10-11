@@ -195,6 +195,12 @@
   85% { opacity: 1; }
   100% { left: 100%; opacity: 0; }
 }
+@keyframes flow-packet-y {
+  0% { top: 0%; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
 @keyframes orb-ripple {
   0% { transform: scale(0.75); opacity: 0.9; }
   100% { transform: scale(1.35); opacity: 0; }

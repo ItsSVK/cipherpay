@@ -264,6 +264,14 @@ Any multi-step process (a payment, a signature, key derivation) is a row of roun
   (`flow-packet`). Under the flow: one plain sentence of what is happening now.
 - Show only real states and real values. **No random hex, no fake progress, no fingerprint colour blocks.**
 
+### Step list (`StepList`, `src/components/crypto/step-list.tsx`)
+The vertical `Flow`, for a process explained step by step (withdraw, activation, company setup). Each row: a round icon node
+(numbered when a step has no icon), label with its `Encrypted` (`key`) / `Public` (`pending`) badge on the same line, and one sentence
+of detail. Same node states as `Flow` (`waiting` = the wallet has been asked), dashed rails that draw green under done steps and carry a
+packet (`flow-packet-y`) into the working one. One key-wash highlight **slides** (transform, 500ms) to the working row and turns
+`bg-failed-soft` on the step a run stopped on (`failedAt`). Under the working step, `now` opens in place with one plain sentence of the
+real engine stage ("Waiting for your wallet to approve the withdrawal"). No hex churn.
+
 ### Wallet approval (`SignaturePrompt`)
 Appears in place when the engine reports a wallet request. Title "Approve in your wallet · {name}", the engine's own explanation, a
 `Flow` (built in this tab → your wallet → devnet), real seconds left, and a hairline bar draining to the real deadline (amber under
@@ -357,7 +365,7 @@ with a block glyph and two staggered `orb-ripple` rings, the label (`text-sm fon
 
 Easing `--ease-out` (cubic-bezier(.16,1,.3,1)); 150ms feedback, 260ms state change, 500-700ms layout and draws. Keyframes in
 `globals.css`: `enter` (rise + unblur, 55ms stagger via `--i`), `fade`, `pop`, `resolve-flash`, `lock-pulse`, `dot-pulse`,
-`flow-packet`, `orb-ripple`, `sweep`.
+`flow-packet`, `flow-packet-y`, `orb-ripple`, `sweep`.
 - Open/close in place with `Reveal` (grid rows 0fr→1fr) or a grid-column transition; never swap whole sections.
 - Exits faster than entrances. No bounce/elastic.
 - Everything is covered by the global `prefers-reduced-motion` rule; `HexTicker` and `Flow` packets also stop themselves. State must
@@ -381,6 +389,6 @@ Easing `--ease-out` (cubic-bezier(.16,1,.3,1)); 150ms feedback, 260ms state chan
 
 ## Open notes
 - "Cipherpay" and its mark (`components/app/brand.tsx`) are placeholders until the product name is decided.
-- Previous language still in use, to migrate to this system when those screens are next touched: `HexTicker` in `StepList`
-  (withdraw steps), and a `Fingerprint` colour block on the auditor page. New work uses `Flow` and plain addresses.
+- Previous language still in use, to migrate to this system when those screens are next touched: a `Fingerprint` colour block
+  on the auditor page. New work uses `Flow` and plain addresses.
   (`PipelineTrack` is now only on the landing page demo.)

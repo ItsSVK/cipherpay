@@ -5,13 +5,18 @@ import { Address } from "@/components/crypto/fingerprint";
 import { Cipher } from "@/components/crypto/cipher";
 import { Segmented } from "@/components/app/segmented";
 import { LockIcon } from "@/components/crypto/lock-icon";
-import { EMPLOYEES } from "@/lib/mock/data";
 import { formatUsdc } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type Lens = "public" | "employee" | "auditor";
 
-const ROWS = EMPLOYEES.slice(0, 4);
+/** Illustration only: made-up payees for the landing page. Amounts are base units (6 decimals). */
+const ROWS = [
+  { id: "e1", name: "Sam Okafor", wallet: "3kT9bWmQe7YxHn2VcLpR5aZsD8uFj4gNoK6tXyP1vBqE", salary: 10_000_000_000n },
+  { id: "e2", name: "Priya Nair", wallet: "9mPz4cXvL2dJqR8nWbT6yHsK3eA7uFo1gNtY5xVhQkBw", salary: 6_800_000_000n },
+  { id: "e3", name: "Mateo Ruiz", wallet: "5hGq8wNzT3vXcP2rLmY9bKdA6sJeU4oFt7nHxVyQ1kBa", salary: 7_200_000_000n },
+  { id: "e4", name: "Aiko Tanaka", wallet: "7vLn3sDzP9mQcX4wTbR2yHkA8eJgU6oFt5NxVhY1qKaB", salary: 5_400_000_000n },
+];
 const COPY: Record<Lens, { title: string; body: string }> = {
   public: { title: "Anyone on a block explorer", body: "Sees that the vault paid four wallets. Every amount is ciphertext." },
   employee: { title: "Sam, with Sam's key", body: "Decrypts only the payment addressed to Sam. The other rows stay sealed." },

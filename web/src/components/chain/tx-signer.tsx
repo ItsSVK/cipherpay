@@ -8,7 +8,7 @@ import { SOLANA_CHAIN } from "@/lib/chain/constants";
 import type { WalletSignMessage } from "@/lib/crypto/keys";
 
 interface TxSigner {
-  /** Signs transactions through the connected wallet, or null (demo wallets, or a wallet that can't sign on devnet). */
+  /** Signs transactions through the connected wallet, or null (no wallet, or a wallet that can't sign on devnet). */
   signer: TransactionSigner | null;
   /** Signs a plain message through the connected wallet. Used for the operator authorization, which must not be a transaction. */
   signMessage: WalletSignMessage | null;
@@ -16,7 +16,7 @@ interface TxSigner {
   reason: string | null;
 }
 
-const Ctx = createContext<TxSigner>({ signer: null, signMessage: null, reason: "Demo wallets can't send real transactions." });
+const Ctx = createContext<TxSigner>({ signer: null, signMessage: null, reason: "Connect a wallet to send transactions." });
 
 function WithSigner({ account, signMessage, children }: { account: UiWalletAccount; signMessage: WalletSignMessage; children: React.ReactNode }) {
   const signer = useWalletAccountTransactionSigner(account, SOLANA_CHAIN);

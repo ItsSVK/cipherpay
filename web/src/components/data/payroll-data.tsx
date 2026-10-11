@@ -3,12 +3,10 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSignMessage } from "@solana/react";
 import type { UiWalletAccount } from "@wallet-standard/react";
-import { useWallet } from "@/components/wallet/wallet-context";
-import type { Employee } from "@/lib/mock/data";
+import type { Employee } from "@/lib/payroll/types";
 
 /**
- * The company's saved addresses and run history. Real wallets read and write them through the API (D1); demo wallets keep using the
- * in-memory mock store, so this reports "demo" and the pages read the store instead.
+ * The company's saved addresses and run history, read and written through the API (D1).
  *
  * Amounts arrive SEALED (encrypted by the admin's browser, see lib/crypto/record-seal.ts). This provider sits outside the key
  * provider and never opens them; `useOpenRecords` (inside it) does, while the keys are unlocked.
@@ -16,7 +14,7 @@ import type { Employee } from "@/lib/mock/data";
  * "needs-auth" means this wallet has not signed in yet. One free wallet signature starts a session, which is what proves to the
  * server that the caller owns the wallet before it hands over (or accepts) your saved addresses.
  */
-export type PayrollDataStatus = "demo" | "needs-auth" | "loading" | "ready" | "error";
+export type PayrollDataStatus = "needs-auth" | "loading" | "ready" | "error";
 
 /** A saved address: who the employer pays, no amount (amounts are entered per run). */
 export interface NewAddress {
@@ -121,29 +119,9 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 const base64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 
-const DEMO: PayrollData = {
-  status: "demo",
-  employees: [],
-  payrolls: [],
-  runs: [],
-  payments: [],
-  error: null,
-  signingIn: false,
-  signIn: async () => {},
-  refresh: async () => {},
-  addAddress: async () => {},
-  removeAddress: async () => {},
-  addPayroll: async () => {
-    throw new Error("Demo wallets use the in-memory list.");
-  },
-  removePayroll: async () => {},
-  recordRun: async () => {},
-  sealLegacy: async () => {},
-};
-
 type Loaded = { for: string; status: "needs-auth" | "ready" | "error"; employees: Employee[]; payrolls: SealedPayroll[]; runs: SealedRun[]; payments: ReceivedPayment[]; error: string | null };
 
-function LiveProvider({ account, children }: { account: UiWalletAccount; children: React.ReactNode }) {
+function WalletPayrollData({ account, children }: { account: UiWalletAccount; children: React.ReactNode }) {
   const address = account.address;
   const signMessage = useSignMessage(account);
   const [state, setState] = useState<Loaded | null>(null);
@@ -275,15 +253,12 @@ function LiveProvider({ account, children }: { account: UiWalletAccount; childre
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function PayrollDataProvider({ children }: { children: React.ReactNode }) {
-  const { account } = useWallet();
+export function PayrollDataProvider({ account, children }: { account: UiWalletAccount; children: React.ReactNode }) {
   // Keyed by address so switching wallets drops the previous wallet's data immediately.
-  return account ? (
-    <LiveProvider key={account.address} account={account}>
+  return (
+    <WalletPayrollData key={account.address} account={account}>
       {children}
-    </LiveProvider>
-  ) : (
-    <Ctx.Provider value={DEMO}>{children}</Ctx.Provider>
+    </WalletPayrollData>
   );
 }
 

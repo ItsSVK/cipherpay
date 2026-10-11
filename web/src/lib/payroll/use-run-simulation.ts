@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TrackStatus } from "@/components/crypto/pipeline-track";
-import { fakeSig } from "@/lib/mock/data";
+import { hashString, seededRandom } from "@/lib/format";
 
 export interface RecipientRun {
   id: string;
@@ -29,14 +29,22 @@ const TICK_MS = 520;
 
 export const FAIL_MESSAGE = "The network timed out before this transfer confirmed. The app re-checked on-chain state: nothing was sent.";
 
+const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+/** A stable, base58-looking 88 character stand-in for a transaction signature. */
+function fakeSig(seed: string): string {
+  const rand = seededRandom(hashString(seed));
+  return Array.from({ length: 88 }, () => BASE58[Math.floor(rand() * BASE58.length)]).join("");
+}
+
 /**
- * MOCK payout engine for the UI pass. It mirrors the real pipeline's rules:
+ * Animated stand-in for the payout engine, used only by the landing page's pipeline illustration.
+ * It mirrors the real pipeline's rules:
  * - proof and context stages run in parallel up to a concurrency limit;
  * - the transfer stage is serialized, because each equality proof is built against the treasury's
  *   current balance ciphertext, so transfer N must land before transfer N+1 (decision D3);
  * - per-recipient state is tracked, and a failed recipient can be retried from where it stopped
  *   without re-sending anyone who already confirmed.
- * The real one lives in lib/payroll and persists to D1 so interrupted runs resume without double-paying.
+ * The real engine is `useLiveRun` (use-live-run.ts).
  */
 export function useRunSimulation(ids: string[], stageCount: number, transferStage: number) {
   const idsKey = ids.join("|");

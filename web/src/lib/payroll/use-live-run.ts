@@ -30,7 +30,6 @@ export type RunSettings = { mode: "automatic"; terms: OperatorTerms } | { mode: 
  * exactly what the protocol needs, since each equality proof is built against the treasury's current balance ciphertext
  * and so payment N must land before payment N+1 is proved. In automatic mode the wallet is not asked at all (the operator
  * authorization is a message the admin signed beforehand, via the switch); every transaction of every payment is signed by the helper.
- * Same return shape as the demo engine (`useRunSimulation`), so the payroll page can use either.
  */
 export function useLiveRun(items: LiveItem[], stageCount: number, settings: RunSettings) {
   const keys = useKeys();

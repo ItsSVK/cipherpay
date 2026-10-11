@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useKeys } from "@/components/crypto/key-context";
 import { openAmount, recordKeyFor, sealAmount } from "@/lib/crypto/record-seal";
-import type { Payroll, Run } from "@/lib/mock/data";
+import type { Payroll, Run } from "@/lib/payroll/types";
 import { amountContext } from "@/lib/sealed-amount";
 import { usePayrollData, type LegacySeal, type SealedPayroll, type SealedRun } from "./payroll-data";
 

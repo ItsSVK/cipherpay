@@ -16,7 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useVault } from "@/components/app/vault-context";
-import type { Payroll } from "@/lib/mock/data";
+import type { Payroll } from "@/lib/payroll/types";
 import { formatUsdc, parseUsdc, shortAddress } from "@/lib/format";
 import { sealedTotalPreview } from "@/lib/sealed-amount";
 import { cn } from "@/lib/utils";
@@ -54,7 +54,7 @@ export function AddPayroll({ onCreated, trigger, children }: { onCreated: (p: Pa
   const pickError = picked.length ? "" : "Pick at least one person.";
   const valid = !nameError && !pickError && picked.every((id) => !amountError(id));
   const total = picked.reduce((n, id) => n + (values.get(id) ?? 0n), 0n);
-  const needsKeys = v.isLive && !keys.ready;
+  const needsKeys = !keys.ready;
 
   const q = query.trim().toLowerCase();
   const shown = q ? saved.filter((a) => a.name.toLowerCase().includes(q) || a.wallet.toLowerCase().includes(q)) : saved;

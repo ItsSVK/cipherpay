@@ -1,25 +1,18 @@
 "use client";
 
-import { useState } from "react";
 import { KeyIcon, ShieldCheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { KeyDerivation } from "./key-derivation";
 import { useKeys } from "./key-context";
 import { LockIcon } from "./lock-icon";
 import { cn } from "@/lib/utils";
 
-const DEMO_SECRET = "devnet-demo-auditor-secret (burned)";
-
 export function UnlockDialog() {
-  const { dialogOpen, setDialogOpen, status, stage, unlock, mode, real, error, elgamalPubkey } = useKeys();
-  const [secret, setSecret] = useState("");
+  const { dialogOpen, setDialogOpen, status, stage, unlock, error, elgamalPubkey } = useKeys();
   const busy = status === "deriving";
   const ready = status === "ready";
-  const importing = mode === "import";
-  const canStart = status === "locked" && (!importing || secret.trim().length > 0);
+  const canStart = status === "locked";
 
   return (
     <Dialog open={dialogOpen} onOpenChange={(open) => !busy && setDialogOpen(open)}>
@@ -48,7 +41,7 @@ export function UnlockDialog() {
 
             <div>
               <DialogTitle className="text-base font-semibold tracking-tight text-foreground">
-                {importing ? "Import Mint Auditor Key" : "Authorize Encryption Keys"}
+                Authorize Encryption Keys
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {ready
@@ -61,44 +54,16 @@ export function UnlockDialog() {
           </div>
 
           <DialogDescription className="text-xs leading-relaxed text-muted-foreground text-left">
-            {importing
-              ? "The auditor key is a standalone secret set on the mint for regulatory compliance. It cannot be derived from a personal wallet signature."
-              : "Your wallet signs one fixed challenge message. Encryption keys are derived client-side from that signature and held in ephemeral memory for this session only."}
+            Your wallet signs one fixed challenge message. Encryption keys are derived client-side from that signature and held in ephemeral memory for this session only.
           </DialogDescription>
         </DialogHeader>
 
-        {importing && status === "locked" ? (
-          <div className="grid gap-2 rounded-xl border border-border/70 bg-muted/20 p-3.5 text-xs">
-            <Label htmlFor="auditor-secret" className="text-xs font-medium">Auditor secret key</Label>
-            <Input
-              id="auditor-secret"
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              placeholder="Paste the secret key"
-              className="h-9 font-mono text-xs"
-            />
-            <button
-              type="button"
-              onClick={() => setSecret(DEMO_SECRET)}
-              className="w-fit text-[11px] text-primary underline-offset-4 hover:underline font-medium"
-            >
-              Fill devnet demo key
-            </button>
-          </div>
-        ) : null}
-
         {/* Real-Time Live Crypting Engine & Pipeline with Single Status Card */}
-        <KeyDerivation status={status} stage={stage} seed={elgamalPubkey ?? ""} mode={mode} error={error} />
+        <KeyDerivation status={status} stage={stage} seed={elgamalPubkey ?? ""} error={error} />
 
         <div className="space-y-2 pt-1">
           <Button
-            onClick={() => {
-              unlock();
-              setSecret("");
-            }}
+            onClick={unlock}
             disabled={!canStart}
             size="lg"
             className={cn(
@@ -117,11 +82,7 @@ export function UnlockDialog() {
             ) : busy ? (
               <>
                 <span className="size-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                {importing ? "Validating key…" : stage === 0 ? "Waiting for your wallet…" : "Deriving keys…"}
-              </>
-            ) : importing ? (
-              <>
-                <KeyIcon className="size-4" /> Import and verify key
+                {stage === 0 ? "Waiting for your wallet…" : "Deriving keys…"}
               </>
             ) : error ? (
               "Try again"
@@ -132,15 +93,9 @@ export function UnlockDialog() {
             )}
           </Button>
 
-          {real ? (
-            <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-              Your wallet will prompt for signature challenge <span className="font-mono text-foreground">solana-conf-bal/v1</span>.
-            </p>
-          ) : (
-            <p className="text-center text-[11px] text-muted-foreground">
-              Demo session: fast client-side derivation & mock zero-knowledge proofs.
-            </p>
-          )}
+          <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+            Your wallet will prompt for signature challenge <span className="font-mono text-foreground">solana-conf-bal/v1</span>.
+          </p>
         </div>
       </DialogContent>
     </Dialog>

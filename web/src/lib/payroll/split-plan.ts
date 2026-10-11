@@ -13,13 +13,12 @@ export interface SplitTarget {
  * One message per destination that can't be paid as entered, or null when it is fine: not an address, or the same wallet as another
  * destination (paying the same account twice would double up its balance and hide the split from anyone reading it).
  */
-export function checkSplitWallets(targets: SplitTarget[], opts: { requireValid?: boolean } = {}): Record<string, string | null> {
-  const requireValid = opts.requireValid ?? true;
+export function checkSplitWallets(targets: SplitTarget[]): Record<string, string | null> {
   const out: Record<string, string | null> = {};
   for (const t of targets) {
     const wallet = t.wallet.trim();
     const clash = targets.find((o) => o.id !== t.id && o.wallet.trim() === wallet);
-    out[t.id] = !wallet ? "Enter a wallet address." : requireValid && !isAddress(wallet) ? "That is not a valid Solana address." : clash ? `Already used for ${clash.name}.` : null;
+    out[t.id] = !wallet ? "Enter a wallet address." : !isAddress(wallet) ? "That is not a valid Solana address." : clash ? `Already used for ${clash.name}.` : null;
   }
   return out;
 }
@@ -70,12 +69,9 @@ export interface SplitCheck {
   ok: boolean;
 }
 
-/**
- * Checks a split rule as the admin typed it. `validateAddresses` is on for real wallets; the demo uses made-up wallet strings that aren't real
- * addresses, so it only requires them to be filled in and distinct.
- */
-export function checkSplit(rows: SplitRow[], primaryKey: string, opts: { validateAddresses: boolean }): SplitCheck {
-  const wallets = checkSplitWallets(rows.map((r) => ({ id: r.key, name: r.name.trim() || "another row", wallet: r.wallet })), { requireValid: opts.validateAddresses });
+/** Checks a split rule as the admin typed it. */
+export function checkSplit(rows: SplitRow[], primaryKey: string): SplitCheck {
+  const wallets = checkSplitWallets(rows.map((r) => ({ id: r.key, name: r.name.trim() || "another row", wallet: r.wallet })));
   const errors: Record<string, SplitRowErrors> = {};
   const bps: Record<string, number> = {};
   let sumBps = 0;

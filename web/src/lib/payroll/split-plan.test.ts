@@ -63,25 +63,25 @@ const row = (key: string, name: string, wallet: string, pct: string): SplitRow =
 describe("checkSplit", () => {
   const rows = [row("a", "Sam", A, "70"), row("b", "Tax", B, "25.5"), row("c", "Fee", C, "4.5")];
   test("a complete rule that adds to 100% is ok", () => {
-    const c = checkSplit(rows, "a", { validateAddresses: true });
+    const c = checkSplit(rows, "a");
     expect(c.ok).toBe(true);
     expect(c.sumBps).toBe(10_000);
     expect(c.bps).toEqual({ a: 7000, b: 2550, c: 450 });
   });
   test("works for any number of destinations, from one to the cap", () => {
-    expect(checkSplit([row("a", "Only", A, "100")], "a", { validateAddresses: true }).ok).toBe(true);
-    expect(checkSplit([row("a", "A", A, "50"), row("b", "B", B, "50")], "a", { validateAddresses: true }).ok).toBe(true);
+    expect(checkSplit([row("a", "Only", A, "100")], "a").ok).toBe(true);
+    expect(checkSplit([row("a", "A", A, "50"), row("b", "B", B, "50")], "a").ok).toBe(true);
     const many = Array.from({ length: MAX_SPLIT_ROWS + 1 }, (_, i) => row(`k${i}`, `N${i}`, `1111111111111111111111111111111${(i % 8) + 2}`, "0"));
-    expect(checkSplit(many, "k0", { validateAddresses: false }).ok).toBe(false);
+    expect(checkSplit(many, "k0").ok).toBe(false);
   });
   test("reports how much is left, or how far over, when the total is not 100%", () => {
-    const under = checkSplit([row("a", "A", A, "60"), row("b", "B", B, "30")], "a", { validateAddresses: true });
+    const under = checkSplit([row("a", "A", A, "60"), row("b", "B", B, "30")], "a");
     expect([under.sumValid, under.remainingBps, under.ok]).toEqual([false, 1000, false]);
-    const over = checkSplit([row("a", "A", A, "60"), row("b", "B", B, "50")], "a", { validateAddresses: true });
+    const over = checkSplit([row("a", "A", A, "60"), row("b", "B", B, "50")], "a");
     expect([over.sumValid, over.remainingBps, over.ok]).toEqual([false, -1000, false]);
   });
   test("names, wallets and percentages are each flagged on the row that has the problem", () => {
-    const c = checkSplit([row("a", " ", A, "50"), row("b", "B", "nope", "x"), row("c", "C", A, "50")], "a", { validateAddresses: true });
+    const c = checkSplit([row("a", " ", A, "50"), row("b", "B", "nope", "x"), row("c", "C", A, "50")], "a");
     expect(c.errors.a.name).toBeDefined();
     expect(c.errors.a.wallet).toMatch(/Already used/);
     expect(c.errors.b.wallet).toMatch(/not a valid/);
@@ -89,16 +89,12 @@ describe("checkSplit", () => {
     expect(c.ok).toBe(false);
   });
   test("the primary recipient cannot sit at 0%", () => {
-    const c = checkSplit([row("a", "A", A, "0"), row("b", "B", B, "100")], "a", { validateAddresses: true });
+    const c = checkSplit([row("a", "A", A, "0"), row("b", "B", B, "100")], "a");
     expect(c.errors.a.pct).toMatch(/more than 0/);
     expect(c.ok).toBe(false);
   });
-  test("demo mode only needs wallets filled in and distinct, not real addresses", () => {
-    expect(checkSplit([row("a", "A", "DemoWallet0", "50"), row("b", "B", "DemoWallet1", "50")], "a", { validateAddresses: false }).ok).toBe(true);
-    expect(checkSplit([row("a", "A", "", "50"), row("b", "B", "x", "50")], "a", { validateAddresses: false }).ok).toBe(false);
-  });
   test("the rule turns into destinations that split exactly, with the remainder going to the primary", () => {
-    const c = checkSplit(rows, "a", { validateAddresses: true });
+    const c = checkSplit(rows, "a");
     const parts = splitAmount(1_000_001n, toDestinations(rows, c.bps, "a"));
     expect(parts.reduce((n, p) => n + p.amount, 0n)).toBe(1_000_001n);
     expect(parts.find((p) => p.id === "b")!.amount).toBe(255_000n); // floor(1_000_001 * 25.5%)

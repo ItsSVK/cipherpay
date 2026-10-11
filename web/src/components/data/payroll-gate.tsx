@@ -5,10 +5,10 @@ import { PageHeader } from "@/components/app/page-header";
 import { PageLoading } from "@/components/app/page-loading";
 import { usePayrollData } from "./payroll-data";
 
-/** Wraps pages that need the payroll list: shows sign-in or loading until the data is there. Demo wallets pass straight through. */
+/** Wraps pages that need the payroll list: shows sign-in or loading until the data is there. */
 export function PayrollGate({ title, children }: { title: string; children: React.ReactNode }) {
   const d = usePayrollData();
-  if (d.status === "demo" || d.status === "ready") return <>{children}</>;
+  if (d.status === "ready") return <>{children}</>;
   if (d.status === "loading") return <PageLoading label="Loading your payroll list…" />;
   return (
     <>

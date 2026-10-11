@@ -53,19 +53,35 @@ export function useApplyPending() {
 
 type WithdrawPhase = "idle" | "running" | "done" | "error";
 
+interface WithdrawState {
+  phase: WithdrawPhase;
+  stage: WithdrawStage | null;
+  applied: boolean;
+  /** True while the wallet has been asked to approve and has not answered yet. */
+  waiting: boolean;
+  /** The stage the run was in when it failed, so the UI can mark that step. */
+  failedStage: WithdrawStage | null;
+  error: string | null;
+  maybeSent: boolean;
+  signature: string | null;
+  warning: string | null;
+}
+
+const IDLE_WITHDRAW: WithdrawState = { phase: "idle", stage: null, applied: false, waiting: false, failedStage: null, error: null, maybeSent: false, signature: null, warning: null };
+
 /** Cashes out part of the confidential balance: apply pending, prove, withdraw and (optionally) unwrap. See lib/chain/withdraw-run.ts. */
 export function useWithdraw() {
   const keys = useKeys();
   const { signer, reason } = useTxSigner();
   const chain = useChain();
-  const [state, setState] = useState<{ phase: WithdrawPhase; stage: WithdrawStage | null; applied: boolean; error: string | null; maybeSent: boolean; signature: string | null; warning: string | null }>({ phase: "idle", stage: null, applied: false, error: null, maybeSent: false, signature: null, warning: null });
+  const [state, setState] = useState<WithdrawState>(IDLE_WITHDRAW);
 
   const run = useCallback(
     async (amount: bigint, unwrap: boolean) => {
       const k = keys.getKeys();
       if (!k) return keys.requireKeys();
-      if (!signer) return setState({ phase: "error", stage: null, applied: false, error: reason ?? "No signer available.", maybeSent: false, signature: null, warning: null });
-      setState({ phase: "running", stage: "prove", applied: false, error: null, maybeSent: false, signature: null, warning: null });
+      if (!signer) return setState({ ...IDLE_WITHDRAW, phase: "error", error: reason ?? "No signer available." });
+      setState({ ...IDLE_WITHDRAW, phase: "running", stage: "prove" });
       try {
         const helper = await deriveHelperSigner(k);
         const result = await withdrawOnce({
@@ -76,18 +92,21 @@ export function useWithdraw() {
           amount,
           unwrap,
           onStage: (stage) => setState((s) => ({ ...s, stage, applied: s.applied || stage === "apply" })),
+          onPrompt: () => setState((s) => ({ ...s, waiting: true })),
+          onSigned: () => setState((s) => ({ ...s, waiting: false })),
         });
-        setState((s) => ({ ...s, phase: "done", stage: null, signature: result.signature, warning: result.closeWarning ?? null }));
+        setState((s) => ({ ...s, phase: "done", stage: null, waiting: false, signature: result.signature, warning: result.closeWarning ?? null }));
         refreshSoon(chain.refresh);
       } catch (e) {
         const maybeSent = e instanceof WithdrawError && e.maybeSent;
-        setState((s) => ({ ...s, phase: "error", stage: null, error: e instanceof Error ? e.message : "The withdrawal failed.", maybeSent }));
+        const failedStage = e instanceof WithdrawError ? e.stage : null;
+        setState((s) => ({ ...s, phase: "error", stage: null, waiting: false, failedStage, error: e instanceof Error ? e.message : "The withdrawal failed.", maybeSent }));
         refreshSoon(chain.refresh); // an apply that landed before the failure still changed the balances
       }
     },
     [keys, signer, reason, chain],
   );
 
-  const reset = useCallback(() => setState({ phase: "idle", stage: null, applied: false, error: null, maybeSent: false, signature: null, warning: null }), []);
+  const reset = useCallback(() => setState(IDLE_WITHDRAW), []);
   return { ...state, running: state.phase === "running", canSign: !!signer, cannotSignReason: reason, run, reset };
 }

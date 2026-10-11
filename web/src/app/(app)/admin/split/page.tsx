@@ -7,13 +7,11 @@ import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Address } from "@/components/crypto/fingerprint";
 import { useKeys } from "@/components/crypto/key-context";
 import { Flow } from "@/components/crypto/flow";
 import { PayrollGate } from "@/components/data/payroll-gate";
 import { useOperator } from "@/components/app/operator-context";
-import { useLiveGuard } from "@/components/app/live-guard";
 import { PageHeader } from "@/components/app/page-header";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
@@ -42,13 +40,11 @@ import {
   type Fix,
   type RunPhase,
 } from "@/components/app/run-payroll-parts";
-import { PIPELINE_STAGES, TRANSFER_STAGE } from "@/lib/mock/data";
-import { shortToday } from "@/lib/mock/store";
+import { PIPELINE_STAGES, shortToday } from "@/lib/payroll/types";
 import { formatUsdc, parseUsdc, shortAddress } from "@/lib/format";
 import { BPS_TOTAL, splitAmount } from "@/lib/payroll/split";
 import { checkSplit, MAX_SPLIT_ROWS, splitRunItems, toDestinations, type SplitRow } from "@/lib/payroll/split-plan";
 import { useLiveRun } from "@/lib/payroll/use-live-run";
-import { useRunSimulation } from "@/lib/payroll/use-run-simulation";
 import { checkSigning, suggestSigning, type SigningState } from "@/lib/payroll/signing-check";
 import { DisclosureCard } from "@/components/app/disclosure-card";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
@@ -75,7 +71,6 @@ export default function SplitPage() {
 
 function SplitBody() {
   const keys = useKeys();
-  const guard = useLiveGuard();
   const v = useVault();
   const account = useAccountStatus();
   const saved = v.vault.employees;
@@ -90,10 +85,8 @@ function SplitBody() {
   const touch = (key: string) => setTouched((t) => (t.has(key) ? t : new Set(t).add(key)));
   const [invoice, setInvoice] = useState("10,000");
   const [phaseState, setPhase] = useState<RunPhase>("review");
-  const [failDemo, setFailDemo] = useState(false);
   const preflight = usePreflight();
   const { checks, allPass } = preflight;
-  const credited = useRef(new Set<string>());
   const recorded = useRef(false);
 
   const { runSettings, live: autoLive, setModalOpen, secondsLeft: autoSecondsLeft, status: autoStatus, settings: autoSettings, setSettings: setAutoSettings } = useOperator();
@@ -110,7 +103,7 @@ function SplitBody() {
     [picked, saved, pcts],
   );
   const primaryKey = rows.some((r) => r.key === primaryId) ? primaryId : (rows[0]?.key ?? "");
-  const check = useMemo(() => checkSplit(rows, primaryKey, { validateAddresses: v.isLive }), [rows, primaryKey, v.isLive]);
+  const check = useMemo(() => checkSplit(rows, primaryKey), [rows, primaryKey]);
   const total = parseUsdc(invoice);
   const parts = useMemo(() => {
     if (total === null || total <= 0n || !check.ok) return null;
@@ -151,27 +144,13 @@ function SplitBody() {
   // Only destinations with something to pay become payments; a 0% destination is left out of the run.
   const paying = useMemo(() => rows.filter((r) => (check.bps[r.key] ?? 0) > 0), [rows, check.bps]);
   const targets = useMemo(() => rows.map((r) => ({ id: r.key, name: r.name, wallet: r.wallet })), [rows]);
-  const demoIds = useMemo(() => paying.map((r) => r.key), [paying]);
-  const mockSim = useRunSimulation(demoIds, PIPELINE_STAGES.length, TRANSFER_STAGE);
-  const liveItems = useMemo(() => (parts && v.isLive ? splitRunItems(parts, targets) : []), [parts, v.isLive, targets]);
-  const liveSim = useLiveRun(liveItems, PIPELINE_STAGES.length, runSettings);
-  const sim = v.isLive ? liveSim : mockSim;
+  const liveItems = useMemo(() => (parts ? splitRunItems(parts, targets) : []), [parts, targets]);
+  const sim = useLiveRun(liveItems, PIPELINE_STAGES.length, runSettings);
   const phase: RunPhase = phaseState === "executing" && sim.done ? "done" : phaseState;
   const halted = phase === "executing" && !sim.running && sim.failedCount > 0;
   const { status, tone: statusTone, label: statusLabel } = runStatus(phase, halted, allPass, preflight.failed);
   const flow = runFlow(status);
   const executing = phase === "executing" || phase === "done";
-
-  useEffect(() => {
-    for (const r of sim.rows) {
-      if (r.status !== "done" || !r.signature || credited.current.has(r.id)) continue;
-      credited.current.add(r.id);
-      const part = parts?.find((p) => p.id === r.id);
-      const row = rowOf(r.id);
-      if (part && row && !v.isLive) v.pay(row.wallet, part.amount, r.signature, `${v.vault.name} split payout`);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sim.rows]);
 
   useEffect(() => {
     if (phase !== "done" || recorded.current || !parts) return;
@@ -223,13 +202,9 @@ function SplitBody() {
         ok: missing.length === 0,
         detail: missing.length === 0 ? `${paying.length} of ${paying.length} destinations active` : `${missing.map((m) => m.name).join(", ")} ${missing.length === 1 ? "has" : "have"} not activated an account. Leaving one out would change the split.`,
       },
-      ...(v.isLive
-        ? [
-            { id: "sol", label: "Sufficient SOL for rent & gas fees", ok: account.sol >= MIN_SOL_FOR_RUN, detail: account.sol >= MIN_SOL_FOR_RUN ? `${(Number(account.sol) / 1e9).toFixed(3)} SOL available in admin wallet` : `Each payment requires temporary proof account rent. Available: ${(Number(account.sol) / 1e9).toFixed(3)} SOL.` },
-            // Automatic payroll stops part way if its payment count or time runs out, so check both against this run.
-            ...checkSigning(signingRef.current, paying.length).map((c) => ({ ...c, fix: c.ok ? undefined : ({ kind: "operator", label: "Adjust automatic payroll" } as Fix) })),
-          ]
-        : []),
+      { id: "sol", label: "Sufficient SOL for rent & gas fees", ok: account.sol >= MIN_SOL_FOR_RUN, detail: account.sol >= MIN_SOL_FOR_RUN ? `${(Number(account.sol) / 1e9).toFixed(3)} SOL available in admin wallet` : `Each payment requires temporary proof account rent. Available: ${(Number(account.sol) / 1e9).toFixed(3)} SOL.` },
+      // Automatic payroll stops part way if its payment count or time runs out, so check both against this run.
+      ...checkSigning(signingRef.current, paying.length).map((c) => ({ ...c, fix: c.ok ? undefined : ({ kind: "operator", label: "Adjust automatic payroll" } as Fix) })),
       { id: "pause", label: "Payroll vault is active", ok: !paused, detail: paused ? "Payroll is paused; pay_employee instruction would revert" : "Vault active and accepting payouts", fix: paused ? { kind: "resume" } : undefined },
     ];
   };
@@ -241,7 +216,7 @@ function SplitBody() {
       return;
     }
     if (!keys.requireKeys()) return;
-    if (v.isLive && v.treasuryStatus !== "ready") {
+    if (v.treasuryStatus !== "ready") {
       toast(v.treasuryStatus === "error" ? "Couldn't read treasury balance" : "Decrypting treasury balance", { description: v.treasuryError ?? "Please try again in a moment." });
       return;
     }
@@ -255,7 +230,7 @@ function SplitBody() {
   useEffect(() => {
     if (lastAuthKey.current === authKey) return;
     lastAuthKey.current = authKey;
-    if (!v.isLive || phaseState !== "simulated") return;
+    if (phaseState !== "simulated") return;
     const t = setTimeout(() => runSimulation(), 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,7 +246,6 @@ function SplitBody() {
     }
     if (fix.kind === "resume") {
       void (async () => {
-        if (!v.isLive && !guard()) return;
         if (!(await v.setPaused(false))) return;
         toast("Payroll resumed", { description: "Payouts can run again." });
         runSimulation(false);
@@ -280,28 +254,21 @@ function SplitBody() {
   };
 
   const approveAndRun = () => {
-    credited.current.clear();
     recorded.current = false;
-    if (v.isLive) {
-      if (!keys.requireKeys()) return;
-      // Time has passed since the checks ran (and the authorization may have changed): check signing again right before sending.
-      const stale = checkSigning(signingRef.current, paying.length).find((c) => !c.ok);
-      if (stale) {
-        toast.error("This split would stop part way", { description: stale.detail });
-        runSimulation();
-        return;
-      }
-      if (!liveSim.canSign) {
-        toast.error("This wallet can't sign devnet transactions", { description: "Try a different wallet." });
-        return;
-      }
-      setPhase("executing");
-      liveSim.start();
+    if (!keys.requireKeys()) return;
+    // Time has passed since the checks ran (and the authorization may have changed): check signing again right before sending.
+    const stale = checkSigning(signingRef.current, paying.length).find((c) => !c.ok);
+    if (stale) {
+      toast.error("This split would stop part way", { description: stale.detail });
+      runSimulation();
+      return;
+    }
+    if (!sim.canSign) {
+      toast.error("This wallet can't sign devnet transactions", { description: "Try a different wallet." });
       return;
     }
     setPhase("executing");
-    const target = paying[Math.min(1, paying.length - 1)];
-    mockSim.start(failDemo && target ? { [target.key]: TRANSFER_STAGE } : {});
+    sim.start();
   };
 
   /** Back to editing the rule, as it was. */
@@ -600,15 +567,6 @@ function SplitBody() {
                     Manage addresses
                   </Link>
                 </div>
-                {!v.isLive ? (
-                  <div className="flex items-center justify-between gap-4 border-t border-border/60 bg-muted/20 px-5 py-3 sm:px-6">
-                    <div>
-                      <p className="text-xs font-medium text-foreground">Simulate a failure</p>
-                      <p className="text-[11px] text-muted-foreground">Demo only: force one transfer to fail to try retry and resume.</p>
-                    </div>
-                    <Switch checked={failDemo} onCheckedChange={setFailDemo} aria-label="Force one demo transfer to fail" />
-                  </div>
-                ) : null}
               </Reveal>
             </div>
           </section>
@@ -641,7 +599,7 @@ function SplitBody() {
                   <span className="ml-1.5 font-sans text-base font-semibold text-muted-foreground">USDC</span>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {paying.length} payment{paying.length === 1 ? "" : "s"} · about {paying.length * (v.isLive ? 6 : 7)} transactions
+                  {paying.length} payment{paying.length === 1 ? "" : "s"} · about {paying.length * 6} transactions
                   <InfoTooltip content="Per destination: three temporary proof accounts are created and verified, the encrypted transfer is sent, then the proof accounts are closed and their rent comes back." />
                 </p>
                 <Reveal open={executing}>
@@ -657,7 +615,7 @@ function SplitBody() {
                 </Reveal>
               </div>
 
-              {v.isLive ? <SigningCard payments={paying.length} locked={executing && !halted && phase !== "done"} /> : null}
+              <SigningCard payments={paying.length} locked={executing && !halted && phase !== "done"} />
 
               <div>
                 <ProgressButton

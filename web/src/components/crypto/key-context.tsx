@@ -5,41 +5,13 @@ import { describeDerivationError, wipeKeys, type DerivedKeys } from "@/lib/crypt
 
 export type KeyStatus = "locked" | "deriving" | "ready";
 
-/**
- * How keys are obtained. Members derive them from a wallet signature. The auditor key is NOT
- * wallet-derived (it is a standalone secret set on the mint), so the auditor imports it instead.
- */
-export type KeyMode = "signature" | "import";
+/** After the signature the two keys are already derived; these beats just let the dialog show each one landing. */
+const BEAT_MS = 380;
 
-export const KEY_COPY: Record<KeyMode, { stages: readonly [string, string, string]; descriptions: readonly [string, string, string] }> = {
-  signature: {
-    stages: ["Wallet signature", "ElGamal key", "AES key"],
-    descriptions: [
-      "Your wallet signs one fixed message. It costs nothing and nothing is sent anywhere.",
-      "Derived from that signature, inside this tab. This is the key that decrypts your amounts.",
-      "Also derived from the same signature. It reads your own balance so the app can build your next transfer.",
-    ],
-  },
-  import: {
-    stages: ["Auditor secret", "ElGamal key", "Ready to decrypt"],
-    descriptions: [
-      "Read from what you pasted. It is not stored and is not sent anywhere.",
-      "Rebuilt from the secret and checked against the mint's registered auditor key.",
-      "Payment events can now be decrypted in this tab.",
-    ],
-  },
-};
-const STAGE_MS = [900, 1000, 750];
-/** After a real signature the two keys are already derived; these beats just let the dialog show each one landing. */
-const REAL_BEAT_MS = 380;
-
-/** Derives real keys from the connected wallet. Provided only for real (non-demo) wallets. */
+/** Derives keys from the connected wallet's signature. */
 export type KeyDeriver = () => Promise<DerivedKeys>;
 
 interface KeyState {
-  mode: KeyMode;
-  /** True when keys come from a real wallet signature, false for the demo animation. */
-  real: boolean;
   status: KeyStatus;
   /** Index of the stage currently running (0-2), or 3 when finished. */
   stage: number;
@@ -47,7 +19,7 @@ interface KeyState {
   error: string | null;
   dialogOpen: boolean;
   setDialogOpen: (open: boolean) => void;
-  /** Starts derivation: asks the wallet to sign (real) or plays the demo animation. */
+  /** Starts derivation: asks the wallet to sign. */
   unlock: () => void;
   /** Clears keys from memory. Also happens on wallet disconnect or account change (the provider remounts). */
   lock: () => void;
@@ -64,7 +36,7 @@ interface KeyState {
 
 const KeyContext = createContext<KeyState | null>(null);
 
-export function KeyProvider({ children, mode = "signature", deriver }: { children: React.ReactNode; mode?: KeyMode; deriver?: KeyDeriver }) {
+export function KeyProvider({ children, deriver }: { children: React.ReactNode; deriver: KeyDeriver }) {
   const [status, setStatus] = useState<KeyStatus>("locked");
   const [stage, setStage] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -106,42 +78,26 @@ export function KeyProvider({ children, mode = "signature", deriver }: { childre
     setStatus("deriving");
     setStage(0);
 
-    const derive = deriverRef.current;
-    if (derive) {
-      const mine = ++attempt.current;
-      derive().then(
-        (keys) => {
-          if (mine !== attempt.current) {
-            wipeKeys(keys);
-            return;
-          }
-          keysRef.current = keys;
-          setElgamalPubkey(keys.elgamalKeypair.elgamalPubkey);
-          setStage(1);
-          timers.current.push(setTimeout(() => setStage(2), REAL_BEAT_MS));
-          timers.current.push(setTimeout(() => { setStage(3); finish(); }, REAL_BEAT_MS * 2));
-        },
-        (e) => {
-          if (mine !== attempt.current) return;
-          setError(describeDerivationError(e));
-          setStatus("locked");
-          setStage(0);
-        },
-      );
-      return;
-    }
-
-    // Demo wallets: no signature exists, so play the animation only.
-    let at = 0;
-    STAGE_MS.forEach((ms, i) => {
-      at += ms;
-      timers.current.push(
-        setTimeout(() => {
-          setStage(i + 1);
-          if (i === STAGE_MS.length - 1) finish();
-        }, at),
-      );
-    });
+    const mine = ++attempt.current;
+    deriverRef.current().then(
+      (keys) => {
+        if (mine !== attempt.current) {
+          wipeKeys(keys);
+          return;
+        }
+        keysRef.current = keys;
+        setElgamalPubkey(keys.elgamalKeypair.elgamalPubkey);
+        setStage(1);
+        timers.current.push(setTimeout(() => setStage(2), BEAT_MS));
+        timers.current.push(setTimeout(() => { setStage(3); finish(); }, BEAT_MS * 2));
+      },
+      (e) => {
+        if (mine !== attempt.current) return;
+        setError(describeDerivationError(e));
+        setStatus("locked");
+        setStage(0);
+      },
+    );
   }, [status, finish]);
 
   const lock = useCallback(() => {
@@ -160,8 +116,6 @@ export function KeyProvider({ children, mode = "signature", deriver }: { childre
 
   const value = useMemo<KeyState>(
     () => ({
-      mode,
-      real: !!deriver,
       status,
       stage,
       error,
@@ -179,7 +133,7 @@ export function KeyProvider({ children, mode = "signature", deriver }: { childre
         return false;
       },
     }),
-    [mode, deriver, status, stage, error, dialogOpen, elgamalPubkey, getKeys, epoch, unlock, lock],
+    [status, stage, error, dialogOpen, elgamalPubkey, getKeys, epoch, unlock, lock],
   );
 
   return <KeyContext.Provider value={value}>{children}</KeyContext.Provider>;

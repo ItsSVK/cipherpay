@@ -5,7 +5,6 @@ import { PauseIcon, PlayIcon } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ProgressButton } from "@/components/app/progress-button";
-import { useLiveGuard } from "@/components/app/live-guard";
 import { useVault } from "@/components/app/vault-context";
 import { onWalletPromptChange } from "@/lib/chain/send";
 import { cn } from "@/lib/utils";
@@ -32,7 +31,6 @@ const DONE_HOLD_MS = 1600;
  */
 export function DispatchControl() {
   const v = useVault();
-  const guard = useLiveGuard();
   const paused = v.vault.paused;
 
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -75,7 +73,6 @@ export function DispatchControl() {
   }, [v.pauseError]);
 
   const apply = async () => {
-    if (!v.isLive && !guard()) return;
     setPhase("preparing");
     runningRef.current = true;
     const ok = await v.setPaused(target);

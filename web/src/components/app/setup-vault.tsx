@@ -1,14 +1,12 @@
 "use client";
 
 import { ShieldCheckIcon } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useCompanySetup } from "@/components/chain/use-company-setup";
 import { useKeys } from "@/components/crypto/key-context";
 import { StepList, type Step } from "@/components/crypto/step-list";
 import { useEmployee } from "@/components/app/employee-context";
 import { SolNotice } from "@/components/app/sol-notice";
-import { useStepper } from "@/hooks/use-stepper";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { PageHeader } from "./page-header";
 import { useVault } from "./vault-context";
@@ -24,13 +22,7 @@ export function SetupVault() {
   const v = useVault();
   const emp = useEmployee();
   const live = useCompanySetup();
-  const mock = useStepper(STEPS.length, 950, () => {
-    v.initialize();
-    v.configureTreasury();
-    toast.success("Vault ready", { description: "Next, fund the treasury to enable payroll runs." });
-  });
-  const act = v.isLive ? live : mock;
-  const repairing = v.isLive && v.vault.created && !v.vault.treasuryConfigured;
+  const repairing = v.vault.created && !v.vault.treasuryConfigured;
 
   return (
     <div className="space-y-6">
@@ -56,38 +48,34 @@ export function SetupVault() {
         ) : null}
 
         <div className="mt-6 rounded-xl border bg-muted/20 p-4">
-          <StepList steps={STEPS} completed={act.completed} running={act.running} />
+          <StepList steps={STEPS} completed={live.completed} running={live.running} />
         </div>
 
-        {v.isLive && live.error ? (
+        {live.error ? (
           <p role="alert" className="mt-4 rounded-xl border border-destructive/30 bg-failed-soft p-3 text-xs text-destructive">
             {live.error}
           </p>
         ) : null}
 
-        {v.isLive && live.phase === "done" ? (
+        {live.phase === "done" ? (
           <p role="status" className="mt-4 rounded-xl bg-verified-soft p-3 text-xs text-verified">
             Vault confirmed on devnet. Synchronizing configuration…
           </p>
         ) : null}
 
-        {v.isLive && !live.canSign ? (
+        {!live.canSign ? (
           <p className="mt-4 text-xs text-muted-foreground">{live.cannotSignReason}</p>
         ) : null}
 
         <Button
           className="mt-6 h-11 w-full text-sm font-medium"
-          disabled={act.running || !emp.hasSol || (v.isLive && (live.phase === "done" || !live.canSign)) || (!v.isLive && mock.done)}
+          disabled={live.running || !emp.hasSol || live.phase === "done" || !live.canSign}
           onClick={() => {
             if (!keys.requireKeys()) return;
-            if (v.isLive) {
-              void live.run();
-              return;
-            }
-            mock.run();
+            void live.run();
           }}
         >
-          {act.running ? "Deploying Vault…" : v.isLive && live.error ? "Retry Setup" : keys.ready ? (repairing ? "Complete Setup" : "Deploy Vault") : "Unlock Keys to Continue"}
+          {live.running ? "Deploying Vault…" : live.error ? "Retry Setup" : keys.ready ? (repairing ? "Complete Setup" : "Deploy Vault") : "Unlock Keys to Continue"}
         </Button>
 
         <p className="mt-3 text-center text-[11.5px] text-muted-foreground">

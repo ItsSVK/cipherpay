@@ -231,7 +231,7 @@ A split payout is a batch with N recipients whose amounts come from a rule.
   `../CLAUDE.md` "Auditor key": the baked-in auditor key is a throwaway whose secret must be
   available, or the mint's auditor must be rotated first.
   **Real path built 2026-10-10:** standalone page `/app/auditor` (`src/app/app/auditor/page.tsx`, deliberately OUTSIDE the `(app)` group: no wallet
-  connect, sidebar or navbar; linked from the connect screen). The old `/auditor` under `(app)` is still the animated demo-wallet mock. It renders `components/app/auditor-live.tsx`
+  connect, sidebar or navbar; linked from the connect screen). The old demo-wallet mock at `/auditor` was deleted with demo mode (2026-10-10). It renders `components/app/auditor-live.tsx`
   (`LiveAuditor`), logic in `lib/chain/auditor-decrypt.ts`. The auditor types the employer's admin wallet and pastes the auditor secret
   (32 bytes: base64, hex or JSON array; held in a ref only, zeroed on lock/unmount, never in the shell's `KeyProvider`). The key is checked
   against `readAuditorPubkey` before anything is read; the vault PDA is derived from the employer wallet; `getSignaturesForAddress(vault)` +
@@ -273,7 +273,7 @@ never hardcode them in components. Devnet only; no mainnet code paths.
 ## Off-chain data
 
 Employee list, payout rules and payroll-run history are **off-chain** (decision 5 in `../PRODUCT.md`) and, for real wallets, live in
-**Cloudflare D1 via Drizzle** (decided D6, wired 2026-10-05). Demo wallets keep using the in-memory mock store.
+**Cloudflare D1 via Drizzle** (decided D6, wired 2026-10-05).
 
 - **Schema** (`src/server/db/schema.ts`, migration in `drizzle/`): `addresses` (renamed from `employees` 2026-10-07, migration `0002`: columns `id, employer, name, wallet, created_at`; `role` and `amount` were dropped, amounts are now chosen per run), `payrolls` + `payroll_entries` (added 2026-10-07, migration `0003`: a named list of (saved address, amount per run); the same address can be in many payrolls at different amounts; an address that is in a payroll cannot be deleted, the API answers 409 naming the payroll), `payroll_runs` (now has a nullable `payroll_id`, set null if the payroll is deleted so history stays), `payroll_run_items`, plus `auth_nonces` and
   `sessions`. Everything is keyed by `employer` = the admin wallet. **Amounts are sealed** (next bullet). No keys, ever.
@@ -319,7 +319,7 @@ Employee list, payout rules and payroll-run history are **off-chain** (decision 
   remote needs `bun run db:migrate:remote`.**
 - **Payrolls (2026-10-07).** Run payroll now starts from a payroll: `components/app/payroll-picker.tsx` has `PayrollPicker` (choose, delete) and `AddPayroll` (a sheet:
   name, then rows of saved-address dropdown + amount, one submit). The page maps the chosen payroll's entries to the run engine's recipient list, so the engine is
-  unchanged; a run is saved with its `payrollId`. Demo wallets get the same flow from the mock store (seeded with one payroll). Verified against the running dev
+  unchanged; a run is saved with its `payrollId`. Verified against the running dev
   server + local D1 with throwaway wallets (valid create, same address in two payrolls, duplicate / foreign address / zero amount / no entries / extra field / no session
   rejected, address delete blocked then allowed, payroll delete keeps the run, other wallets can't see or touch them). **Not browser-run.** Remote D1 needs `bun run db:migrate:remote`.
 - **Verified** (devnet-forked surfpool + local D1, real UI): one wallet prompt to sign in, 401 before / 200 after, rows survive a reload with no
@@ -356,6 +356,15 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
 
 ## Known current state
 
+- **Demo mode removed (2026-10-10).** The "Or explore with sample data" wallets on the connect screen and everything behind them are gone:
+  `lib/mock/` (data, in-memory store, demo wallets), `connectDemo` / `isDemo` in `wallet-context.tsx`, `isLive` on `useVault()` / `useEmployee()`
+  and the store-backed actions (`initialize`, `fund`, `pay`, `activate`, `applyPending`, `withdraw`, `airdrop`), `useLiveGuard`, `useStepper`, the
+  "Simulate a failure" switch on Run payroll and Split, the mock `/auditor` page and the `auditor` nav role, the key provider's demo animation and
+  "import" mode (`KeyProvider` now requires a `deriver`), the `"demo"` status in `PayrollData`, and split-plan's `validateAddresses: false`. Every
+  connected wallet is a real wallet-standard account; the shell only renders once `useWallet().account` exists. Shared shapes (`Employee`, `Payroll`,
+  `Run`, `VaultState`, `PIPELINE_STAGES`, `shortToday`, `COMPANY_NAME`) moved to `lib/payroll/types.ts`. `useRunSimulation` stays: it now only
+  drives the landing-page pipeline illustration. Entries below that mention demo wallets or "verified in demo mode" describe the code as it was
+  then. Typecheck, lint (no new warnings), `bun test` (97 pass) and `next build` pass; **not clicked through in a browser.**
 - **Scaffolded 2026-10-04**: Next.js 16.3.8 (App Router, `src/`, Turbopack, Tailwind 4), shadcn/ui
   initialised (only `button` added), Cloudflare/OpenNext + D1/Drizzle wired and verified (lint,
   typecheck, OpenNext build, local D1 migration, 200 from `wrangler dev`). The home page is a

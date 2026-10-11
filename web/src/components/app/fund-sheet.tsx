@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { CheckIcon, LockIcon, PlusIcon, WalletIcon } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useChain } from "@/components/chain/chain-state";
@@ -10,13 +9,9 @@ import { USDC_FAUCET_URL, useFundTreasury } from "@/components/chain/use-fund-tr
 import { useKeys } from "@/components/crypto/key-context";
 import { ProgressButton, type ButtonProgress } from "@/components/app/progress-button";
 import { SolNotice } from "@/components/app/sol-notice";
-import { useVault } from "@/components/app/vault-context";
-import { useStepper } from "@/hooks/use-stepper";
 import { formatUsdc, parseUsdc } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-/** The demo engine walks four fake steps; the sheet only needs to know which stage that maps to. */
-const DEMO_STEP_COUNT = 4;
 const QUICK_AMOUNTS = ["10", "25", "50", "100"];
 
 type Stage = "idle" | "preparing" | "wallet" | "confirming" | "done";
@@ -42,22 +37,16 @@ export function FundSheet({
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("25");
   const keys = useKeys();
-  const v = useVault();
   const chain = useChain();
   const live = useFundTreasury();
   const parsed = parseUsdc(amount);
   const usdc = chain.wallet?.usdc ?? 0n;
   const invalid = parsed === null || parsed <= 0n;
-  const overBalance = v.isLive && !invalid && parsed > usdc;
+  const overBalance = !invalid && parsed > usdc;
   const maxAmount = formatUsdc(usdc).replace(/,/g, "");
 
-  const mock = useStepper(DEMO_STEP_COUNT, 950, () => {
-    if (parsed !== null) v.fund(parsed);
-    toast.success("Treasury funded", { description: `${formatUsdc(parsed ?? 0n)} USDC added to the encrypted balance.` });
-  });
-
-  const stage: Stage = v.isLive
-    ? live.phase === "preparing"
+  const stage: Stage =
+    live.phase === "preparing"
       ? "preparing"
       : live.phase === "signing"
         ? "wallet"
@@ -65,31 +54,22 @@ export function FundSheet({
           ? "confirming"
           : live.phase === "done"
             ? "done"
-            : "idle"
-    : mock.done
-      ? "done"
-      : mock.running
-        ? mock.completed === 0
-          ? "preparing"
-          : mock.completed === 1
-            ? "wallet"
-            : "confirming"
-        : "idle";
+            : "idle";
   const busy = stage !== "idle" && stage !== "done";
   const done = stage === "done";
   const locked = busy || done;
-  const error = v.isLive ? live.error : null;
+  const error = live.error;
 
   const progress: ButtonProgress | null = busy ? { label: STAGE[stage].label, fill: STAGE[stage].fill } : null;
   const hint = stage === "idle" ? IDLE_HINT : STAGE[stage].hint;
 
-  const reset = () => (v.isLive ? live.reset() : mock.reset());
+  const reset = () => live.reset();
 
   const amountNote = invalid ? (
     <span className="text-destructive">Enter an amount with up to 6 decimals.</span>
   ) : overBalance ? (
     <span className="text-destructive">More than the {formatUsdc(usdc)} USDC in your wallet.</span>
-  ) : v.isLive && usdc === 0n ? (
+  ) : usdc === 0n ? (
     <a href={USDC_FAUCET_URL} target="_blank" rel="noreferrer" className="text-primary underline-offset-4 hover:underline">
       No devnet USDC yet. Get some from Circle&apos;s faucet
     </a>
@@ -114,7 +94,7 @@ export function FundSheet({
         </SheetHeader>
 
         <div className="grid min-w-0 grid-cols-1 gap-4 px-4 pb-6">
-          {v.isLive ? <SolNotice /> : null}
+          <SolNotice />
 
           {/* Amount */}
           <div
@@ -128,11 +108,9 @@ export function FundSheet({
               <label htmlFor="fund-amount" className="font-semibold uppercase tracking-wider text-muted-foreground/80">
                 Amount
               </label>
-              {v.isLive ? (
-                <span className="text-muted-foreground">
-                  Wallet <span className="font-mono tnum font-medium text-foreground">{formatUsdc(usdc)}</span> USDC
-                </span>
-              ) : null}
+              <span className="text-muted-foreground">
+                Wallet <span className="font-mono tnum font-medium text-foreground">{formatUsdc(usdc)}</span> USDC
+              </span>
             </div>
 
             <div className="mt-2 flex items-baseline gap-2">
@@ -153,7 +131,7 @@ export function FundSheet({
             </div>
 
             <div className="mt-3 flex gap-1.5" role="group" aria-label="Quick amounts">
-              {[...QUICK_AMOUNTS, ...(v.isLive && usdc > 0n ? ["max"] : [])].map((q) => {
+              {[...QUICK_AMOUNTS, ...(usdc > 0n ? ["max"] : [])].map((q) => {
                 const value = q === "max" ? maxAmount : q;
                 const selected = amount === value;
                 return (
@@ -201,7 +179,7 @@ export function FundSheet({
             </p>
           ) : null}
 
-          {v.isLive && !live.canSign ? <p className="text-xs text-muted-foreground">{live.cannotSignReason}</p> : null}
+          {!live.canSign ? <p className="text-xs text-muted-foreground">{live.cannotSignReason}</p> : null}
 
           {done ? (
             <ProgressButton
@@ -218,12 +196,11 @@ export function FundSheet({
           ) : (
             <ProgressButton
               progress={progress}
-              disabled={invalid || overBalance || (v.isLive && !live.canSign)}
+              disabled={invalid || overBalance || !live.canSign}
               onClick={() => {
                 if (!keys.requireKeys()) return;
                 if (parsed === null) return;
-                if (v.isLive) void live.run(parsed);
-                else mock.run();
+                void live.run(parsed);
               }}
               className="h-11 w-full text-sm"
               idleClassName="bg-primary text-primary-foreground shadow-xs hover:bg-primary/90"

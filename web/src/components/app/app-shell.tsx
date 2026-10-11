@@ -5,11 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LogOutIcon, MenuIcon, RefreshCwIcon } from "lucide-react";
 import { toast } from "sonner";
+import type { UiWalletAccount } from "@wallet-standard/react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Address } from "@/components/crypto/fingerprint";
 import { KeyChip } from "@/components/crypto/key-chip";
-import { KeyProvider } from "@/components/crypto/key-context";
 import { SignInGate } from "@/components/data/sign-in-gate";
 import { WalletKeyProvider } from "@/components/crypto/wallet-key-provider";
 import { UnlockDialog } from "@/components/crypto/unlock-dialog";
@@ -17,14 +17,12 @@ import { ChainProvider, useChain } from "@/components/chain/chain-state";
 import { PayrollDataProvider } from "@/components/data/payroll-data";
 import { ConnectScreen } from "@/components/wallet/connect-screen";
 import { useWallet } from "@/components/wallet/wallet-context";
-import { useDemoStore } from "@/lib/mock/store";
-import { roleOf } from "@/lib/mock/wallets";
+import { COMPANY_NAME } from "@/lib/payroll/types";
 import { cn } from "@/lib/utils";
 import { Brand } from "./brand";
 import { useAccountStatus } from "./employee-context";
 import { useCompanyStatus } from "./vault-context";
-import { navFor, sectionFromPath, type NavGroup, type Role } from "./nav";
-import { StatusBadge } from "./status-badge";
+import { navFor, sectionFromPath, type NavGroup } from "./nav";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ConfirmDialog } from "./confirm-dialog";
 import { OperatorProvider } from "./operator-context";
@@ -88,12 +86,10 @@ function NavList({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathnam
 function SidebarBody({
   groups,
   pathname,
-  isDemo,
   onNavigate,
 }: {
   groups: NavGroup[];
   pathname: string;
-  isDemo: boolean;
   onNavigate?: () => void;
 }) {
   return (
@@ -110,10 +106,10 @@ function SidebarBody({
               <span className="size-2 rounded-full bg-verified [animation:dot-pulse_2s_ease-in-out_infinite]" aria-hidden />
               Solana Devnet
             </div>
-            <InfoTooltip content={isDemo ? "Running with mock devnet store. Proofs run client-side." : "Live connection to Solana devnet Token-2022 confidential transfer mint."} />
+            <InfoTooltip content="Live connection to Solana devnet Token-2022 confidential transfer mint." />
           </div>
           <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-            {isDemo ? "Demo session. Fast client-side proofs & mock balances." : "Balances synced live with devnet Token-2022 confidential accounts."}
+            Balances synced live with devnet Token-2022 confidential accounts.
           </p>
         </div>
       </div>
@@ -123,15 +119,13 @@ function SidebarBody({
 
 const solText = (lamports: bigint) => `${(Number(lamports) / 1e9).toFixed(2)} SOL`;
 
-function ConnectedShell({ address, children }: { address: string; children: React.ReactNode }) {
+function ConnectedShell({ address, account: walletAccount, children }: { address: string; account: UiWalletAccount; children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const wallet = useWallet();
-  const store = useDemoStore();
   const [menu, setMenu] = useState(false);
   const [disconnectModal, setDisconnectModal] = useState(false);
 
-  const role: Role = roleOf(address);
   const section = sectionFromPath(pathname);
   const company = useCompanyStatus();
   const account = useAccountStatus();
@@ -139,13 +133,11 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
   const companyReady = company.ready;
   // A fresh wallet (no activated account, no company started) is asked where to start. Only once the chain has
   // really answered: a failed read would otherwise look like an empty wallet.
-  const stateKnown = wallet.isDemo || chain.status === "ready";
-  const freshWallet = role === "member" && stateKnown && !account.loading && !company.loading && !account.activated && !company.created;
+  const stateKnown = chain.status === "ready";
+  const freshWallet = stateKnown && !account.loading && !company.loading && !account.activated && !company.created;
 
   let redirect: string | null = null;
-  if (role === "auditor") {
-    if (section !== "auditor") redirect = "/auditor";
-  } else if (section === "auditor" || section === null) {
+  if (section === null) {
     redirect = "/pay";
   } else if (section === "admin" && !companyReady && !company.loading && pathname !== "/admin") {
     redirect = "/admin";
@@ -155,9 +147,9 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
     if (redirect) router.replace(redirect);
   }, [redirect, router]);
 
-  const groups = navFor(role, { companyReady, payBadge: account.loading ? undefined : !account.activated ? "setup" : account.pendingBadge ? "pay" : undefined });
-  const crumb = section === "admin" && companyReady ? store.vaultOf(address).name : null;
-  const crumbPage = section === "admin" ? (companyReady ? "Payroll vault" : "Company setup") : section === "pay" ? "My pay" : "Compliance";
+  const groups = navFor({ companyReady, payBadge: account.loading ? undefined : !account.activated ? "setup" : account.pendingBadge ? "pay" : undefined });
+  const crumb = section === "admin" && companyReady ? COMPANY_NAME : null;
+  const crumbPage = section === "admin" ? (companyReady ? "Payroll vault" : "Company setup") : "My pay";
   const label = wallet.walletName;
 
   const handleDisconnect = async () => {
@@ -170,7 +162,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
     <OperatorProvider>
       <div className="min-h-dvh lg:grid lg:grid-cols-[244px_minmax(0,1fr)]">
         <aside className="sticky top-0 hidden h-dvh border-r bg-sidebar/80 backdrop-blur-md lg:block">
-          <SidebarBody groups={groups} pathname={pathname} isDemo={wallet.isDemo} />
+          <SidebarBody groups={groups} pathname={pathname} />
         </aside>
         <div className="min-w-0">
           <div className="sticky top-0 z-30 flex h-15 items-center justify-between gap-3 border-b border-border/70 bg-background/85 px-4 backdrop-blur-md sm:px-8">
@@ -184,7 +176,6 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
                   <SidebarBody
                     groups={groups}
                     pathname={pathname}
-                    isDemo={wallet.isDemo}
                     onNavigate={() => setMenu(false)}
                   />
                 </SheetContent>
@@ -205,21 +196,17 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
                 <span className="hidden text-xs font-semibold tracking-wide text-foreground/80 md:inline">{label ?? "Wallet"}</span>
                 <Address value={address} className="text-xs text-muted-foreground font-mono" />
                 {!account.loading ? <span className="font-mono text-xs tnum text-muted-foreground">{solText(account.sol)}</span> : null}
-                {wallet.isDemo ? <StatusBadge tone="pending">Demo</StatusBadge> : null}
-                {role === "auditor" ? <StatusBadge tone="neutral">Auditor</StatusBadge> : null}
               </div>
-              {!wallet.isDemo ? (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Refresh devnet state"
-                  title={chain.updatedAt ? `Live devnet data. Updated ${new Date(chain.updatedAt).toLocaleTimeString()}. Click to refresh.` : "Reading devnet…"}
-                  onClick={chain.refresh}
-                  className="rounded-full"
-                >
-                  <RefreshCwIcon className={cn("size-4", chain.loading && "animate-spin")} />
-                </Button>
-              ) : null}
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Refresh devnet state"
+                title={chain.updatedAt ? `Live devnet data. Updated ${new Date(chain.updatedAt).toLocaleTimeString()}. Click to refresh.` : "Reading devnet…"}
+                onClick={chain.refresh}
+                className="rounded-full"
+              >
+                <RefreshCwIcon className={cn("size-4", chain.loading && "animate-spin")} />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -252,11 +239,7 @@ function ConnectedShell({ address, children }: { address: string; children: Reac
     </OperatorProvider>
   );
 
-  return wallet.account ? (
-    <WalletKeyProvider key={address} account={wallet.account}>{body}</WalletKeyProvider>
-  ) : (
-    <KeyProvider key={address} mode={role === "auditor" ? "import" : "signature"}>{body}</KeyProvider>
-  );
+  return <WalletKeyProvider key={address} account={walletAccount}>{body}</WalletKeyProvider>;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -269,12 +252,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (loggedOut) router.replace("/app");
   }, [loggedOut, router]);
   if (wallet.status === "loading") return <div className="min-h-dvh" aria-busy="true" />;
-  if (wallet.status !== "connected" || !wallet.address) return <ConnectScreen />;
+  if (wallet.status !== "connected" || !wallet.address || !wallet.account) return <ConnectScreen />;
   return (
-    <PayrollDataProvider>
+    <PayrollDataProvider account={wallet.account}>
       <SignInGate key={wallet.address}>
         <ChainProvider>
-          <ConnectedShell address={wallet.address}>{children}</ConnectedShell>
+          <ConnectedShell address={wallet.address} account={wallet.account}>{children}</ConnectedShell>
         </ChainProvider>
       </SignInGate>
     </PayrollDataProvider>
