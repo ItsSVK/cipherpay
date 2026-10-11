@@ -27,11 +27,14 @@ describe("checkSigning", () => {
     expect(c.detail).toContain("expire part way");
   });
 
-  test("time check includes the expiry margin", () => {
-    const need = 2 * SECONDS_PER_PAYMENT + OPERATOR_MARGIN_SECONDS;
-    expect(secondsNeeded(2)).toBe(need);
-    expect(byId(checkSigning({ mode: "automatic", secondsLeft: need, paymentsLeft: 2 }, 2), "auto-time").ok).toBe(true);
-    expect(byId(checkSigning({ mode: "automatic", secondsLeft: need - 1, paymentsLeft: 2 }, 2), "auto-time").ok).toBe(false);
+  test("time check compares usable time (already net of the expiry margin) with the run, without counting the margin twice", () => {
+    const run = 2 * SECONDS_PER_PAYMENT;
+    expect(byId(checkSigning({ mode: "automatic", secondsLeft: run, paymentsLeft: 2 }, 2), "auto-time").ok).toBe(true);
+    expect(byId(checkSigning({ mode: "automatic", secondsLeft: run - 1, paymentsLeft: 2 }, 2), "auto-time").ok).toBe(false);
+  });
+
+  test("an authorization must last the run plus the expiry margin", () => {
+    expect(secondsNeeded(2)).toBe(2 * SECONDS_PER_PAYMENT + OPERATOR_MARGIN_SECONDS);
   });
 
   test("says when no offered window is long enough", () => {

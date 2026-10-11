@@ -356,6 +356,25 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
 
 ## Known current state
 
+- **Monotonic reads and the self-flipping Automatic payroll switch (2026-10-11).** Measured: our Helius devnet endpoint answers from nodes at
+  different slots (7 of 48 parallel `confirmed` reads came from an OLDER slot than one already received, up to 2 slots). Symptoms: the switch
+  turned itself on/off with toasts, `authorize_operator` failed with `AuthorizationSeqMismatch`, `pay_employee` failed with Token-2022
+  "Balance mismatch" (#27, proofs built against a stale treasury ciphertext). Fixes: `lib/chain/freshness.ts` keeps the newest known slot (every
+  confirmed transaction in `send.ts`, the poll's context slot) and `fresh()` pins reads to it with `minContextSlot`, retrying while a node is
+  behind (Helius verified to enforce it with -32016); used by `read.ts`, `operator.ts`, the helper balance. `supersedes()` (operator.ts) drops any
+  operator status older than the one shown (`seq` only increases; `paymentsLeft` only decreases within a `seq`). Switch logic bugs fixed in
+  `operator-context.tsx`: turning it off always produced a second "Automatic payroll ended" toast; locking the keys did too; an operator that is
+  not this browser's helper counted as live (`isHelper`); the countdown started from a stale clock. `payOne` re-reads the treasury before
+  `pay_employee` and re-proves once if it changed (also on a "Balance mismatch" preflight), so manual mode never shows the wallet a doomed
+  payment. `authorizeHelper` recovers from a seq mismatch (already applied, resend, or one re-sign). The countdown is now USABLE time
+  (`usableSecondsLeft` in operator.ts: expiry minus `OPERATOR_MARGIN_SECONDS`), the same definition `authorized` uses, so the UI no longer shows
+  "Automatic" during the last 10 s when `payOne` refuses; `checkSigning` compares it with `runSeconds` (no margin counted twice), while
+  `secondsNeeded` (TTL choice) still adds the margin. Unit tests added; **not yet run against devnet in a browser.**
+- **Landing page redesigned (2026-10-11).** `/` follows `../LANDING_DESIGN.md` around product fragments in the app's own style; see DESIGN.md
+  "Landing page". Files: `app/page.tsx`, `components/landing/{hero,assembly,sections,artifacts,scroll,lens-demo}.tsx`, `.landing` block in
+  `globals.css`, Source Serif 4 added in `app/layout.tsx`. Typecheck and lint pass; checked in headless Chrome against `next dev` at 1440px and
+  390px at several scroll positions. `next build` was not run (a dev server was using `.next`). The old landing pipeline demo was deleted
+  (`pipeline-demo.tsx`, `crypto/pipeline-track.tsx`, `lib/payroll/use-run-simulation.ts`); `RecipientRun` now lives in `lib/payroll/types.ts`.
 - **Demo mode removed (2026-10-10).** The "Or explore with sample data" wallets on the connect screen and everything behind them are gone:
   `lib/mock/` (data, in-memory store, demo wallets), `connectDemo` / `isDemo` in `wallet-context.tsx`, `isLive` on `useVault()` / `useEmployee()`
   and the store-backed actions (`initialize`, `fund`, `pay`, `activate`, `applyPending`, `withdraw`, `airdrop`), `useLiveGuard`, `useStepper`, the

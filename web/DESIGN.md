@@ -24,10 +24,10 @@ colors:
   cipher-ink: "oklch(0.44 0.15 274)"
 typography:
   page-title:
-    fontFamily: "Geist, system-ui, sans-serif"
-    fontSize: "1.875rem"
-    fontWeight: 600
-    letterSpacing: "-0.025em"
+    fontFamily: "Source Serif 4, ui-serif, Georgia, serif"
+    fontSize: "2.5rem"
+    fontWeight: 400
+    letterSpacing: "-0.015em"
   card-title:
     fontFamily: "Geist, system-ui, sans-serif"
     fontSize: "0.875rem"
@@ -167,12 +167,16 @@ One indigo accent on a neutral paper ground, plus three semantic colours that ea
 ## Typography
 
 **UI font:** Geist (`--font-sans`). **Data font:** Geist Mono (`--font-mono`), always with `.tnum`.
-Headings also use Geist (`--font-heading`); Bricolage Grotesque is loaded but not used for headings any more.
+**Title font (2026-10-11):** Source Serif 4 (`font-serif`, `--font-serif`), the landing page's serif, always as
+`font-serif font-normal tracking-[-0.015em]`: one weight, never bold, *italic* only for a single emphasised word. Only for titles:
+page titles (`PageHeader`), section titles over a list ("Recent payroll runs", "Payment history"), sheet / dialog / alert titles,
+empty-state titles, and the connect and sign-in screens. Card titles, panel labels, buttons, body and data stay Geist / Geist Mono.
 
-**Character:** a quiet grotesk for words, a precise mono for every figure, address, signature and ciphertext.
+**Character:** a quiet serif at the top of each screen, a quiet grotesk for words, a precise mono for every figure, address,
+signature and ciphertext.
 
 ### Hierarchy
-- **Page title** (`PageHeader`): 24/30px, 600, tracking -0.025em.
+- **Page title** (`PageHeader`): serif, 30/40px, 400, leading 1.1. **Section title**: serif 22px. **Sheet / dialog title**: serif 20-22px.
 - **Card title**: `text-sm font-semibold tracking-tight`, with a `text-[11px] text-muted-foreground` subline under it.
 - **Body**: 13-15px. Copy inside cards is `text-xs` (12px) with `leading-relaxed` for sentences.
 - **Caption / meta**: `text-[11px] text-muted-foreground`.
@@ -387,8 +391,25 @@ Easing `--ease-out` (cubic-bezier(.16,1,.3,1)); 150ms feedback, 260ms state chan
 - Don't nest shadowed cards, and don't build pages out of grids of identical icon+heading+text cards.
 - Don't use mono for non-data text, or green/amber/red as decoration.
 
+## Landing page (`/`, redesigned 2026-10-11)
+
+The marketing page is a **Persuade** surface with its own shell, following `../LANDING_DESIGN.md` (Steep-style editorial), and is the
+only place the rules above are relaxed. Everything is scoped under `.landing` in `globals.css`; nothing there leaks into the app.
+- **Page chrome (LANDING_DESIGN):** white paper, `--l-ink` text, Source Serif 4 (`--font-source-serif`, `.serif`) at one weight for
+  headings with *italic* emphasis (`.display` / `.heading-lg` / `.heading`), Geist for body. Black filled pill + ghost pill as a pair
+  (`.pill.pill-ink`, `.pill.pill-ghost`). Sections alternate white / `--l-fog` / `--l-mist`. **One** peach card (`--l-peach` with
+  `--l-sienna` ink) per page: the "Disclosure is your choice" section.
+- **Product fragments keep the app's language** (decided with the user: "hybrid"). `components/landing/artifacts.tsx` builds small
+  pieces of the real UI (`Cipher`, `Flow`, `StatusBadge`, indigo key, green decrypted) and floats them on `.artifact` (white, 20px radius,
+  the only shadowed surface on the page). Sample people, wallets and amounts only, and the page says so.
+- **Motion** (`components/landing/scroll.tsx`): `useScrollProgress` writes `--p` (0..1) to an element per frame and hands React only
+  quantised values; `ScrollReveal` (rise / `line` unmask / `scale`) arms only elements mounted below the fold, so content is visible
+  without JS; `RisingWords` for the hero headline. Hero fragments float in, bob, and drift at their own speed on scroll. **Signature:**
+  `Assembly` pins a board while the visitor scrolls and adds one piece per step of a real payment (treasury, keys, proofs, encrypted
+  transfer along a drawn rail, the recipient opening it); phones get the same steps in flow. The "what stays public" track draws as it
+  crosses the screen. Everything honours `prefers-reduced-motion` (loops stop, reveals don't arm).
+
 ## Open notes
 - "Cipherpay" and its mark (`components/app/brand.tsx`) are placeholders until the product name is decided.
 - Previous language still in use, to migrate to this system when those screens are next touched: a `Fingerprint` colour block
   on the auditor page. New work uses `Flow` and plain addresses.
-  (`PipelineTrack` is now only on the landing page demo.)

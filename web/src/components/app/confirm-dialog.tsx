@@ -55,7 +55,7 @@ export function ConfirmDialog({
       {trigger ? <AlertDialogTrigger render={trigger as React.ReactElement} /> : null}
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogTitle className="font-serif font-normal tracking-[-0.015em] text-xl">{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

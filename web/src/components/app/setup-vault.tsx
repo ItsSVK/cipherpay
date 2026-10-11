@@ -27,7 +27,7 @@ export function SetupVault() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Set Up Payroll Vault"
+        title="Set up your payroll vault"
         description="One-time on-chain deployment. Creates your company vault PDA and initializes encrypted Token-2022 treasury."
       />
       <section className="plate enter mx-auto max-w-xl p-6 sm:p-8" style={{ ["--i" as string]: 1 }}>

@@ -41,7 +41,7 @@ function AddAddress({ onAdd, company }: { onAdd: (a: { name: string; wallet: str
       </SheetTrigger>
       <SheetContent className="w-full sm:max-w-md">
         <SheetHeader>
-          <SheetTitle className="text-lg">Add Saved Address</SheetTitle>
+          <SheetTitle className="font-serif font-normal tracking-[-0.015em] text-[1.375rem]">Add saved address</SheetTitle>
           <SheetDescription>
             Saved to your company directory. Payout amounts are chosen when you create or execute payroll.
           </SheetDescription>

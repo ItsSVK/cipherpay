@@ -9,7 +9,7 @@ import { deriveHelperSigner, topUpHelperIfShort } from "@/lib/chain/helper-signe
 import type { OperatorTerms } from "@/lib/chain/operator";
 import { PaymentError, payOne, type PayStage } from "@/lib/chain/pay-run";
 import { rpc } from "@/lib/chain/rpc";
-import type { RecipientRun } from "./use-run-simulation";
+import type { RecipientRun } from "./types";
 
 export interface LiveItem {
   id: string;

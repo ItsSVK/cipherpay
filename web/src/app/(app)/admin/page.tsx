@@ -252,8 +252,8 @@ export default function AdminOverview() {
       <section className="enter space-y-3.5" style={{ ["--i" as string]: 3 }} aria-labelledby="runs-heading">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 id="runs-heading" className="text-lg font-semibold tracking-tight text-foreground">
-              Recent Payroll Runs
+            <h2 id="runs-heading" className="font-serif font-normal tracking-[-0.015em] text-[1.375rem] text-foreground">
+              Recent payroll runs
             </h2>
             <p className="text-xs text-muted-foreground">Batched confidential transfers executed through this vault.</p>
           </div>

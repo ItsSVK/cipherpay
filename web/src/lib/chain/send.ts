@@ -15,6 +15,7 @@ import {
   type Instruction,
   type TransactionSigner,
 } from "@solana/kit";
+import { noteSlot } from "./freshness";
 import type { AppRpc } from "./rpc";
 
 export type TxErrorKind = "rejected" | "preflight" | "expired" | "failed";
@@ -83,7 +84,11 @@ export async function waitForConfirmation(rpc: AppRpc, signature: Parameters<App
     const { value } = await rpc.getSignatureStatuses([signature]).send();
     const status = value[0];
     if (status?.err) throw new TxError(`The transaction was included but failed on-chain: ${JSON.stringify(status.err, (_, v) => (typeof v === "bigint" ? v.toString() : v))}`, "failed", [], false);
-    if (status && (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) return;
+    if (status && (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized")) {
+      // Every later read must see this transaction, even when it is answered by a node behind the one that confirmed it.
+      noteSlot(status.slot);
+      return;
+    }
     if ((await rpc.getBlockHeight({ commitment: "confirmed" }).send()) > lastValidBlockHeight) {
       throw new TxError("The transaction expired before the network confirmed it. Nothing was charged. Try again.", "expired", [], true);
     }

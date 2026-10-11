@@ -12,7 +12,7 @@ import {
   sweepHelper,
   topUpHelperIfShort,
 } from "@/lib/chain/helper-signer";
-import { OPERATOR_TTL_OPTIONS, readOperatorAndBalance, type OperatorStatus } from "@/lib/chain/operator";
+import { OPERATOR_TTL_OPTIONS, readOperatorAndBalance, supersedes, usableSecondsLeft, type OperatorStatus } from "@/lib/chain/operator";
 import { rpc } from "@/lib/chain/rpc";
 import { walletPromptOpen } from "@/lib/chain/send";
 import type { RunSettings } from "@/lib/payroll/use-live-run";
@@ -64,6 +64,19 @@ export function OperatorProvider({ children }: { children: React.ReactNode }) {
   const [modalOpen, setModalOpen] = useState(false);
   const helperRef = useRef<Awaited<ReturnType<typeof deriveHelperSigner>> | null>(null);
   const settingsRef = useRef(settings);
+  // Whose status `status` is. A different wallet starts from nothing, so the ordering check never compares two wallets' configs.
+  const owner = signer?.address ?? null;
+  const [statusOwner, setStatusOwner] = useState(owner);
+  if (statusOwner !== owner) {
+    setStatusOwner(owner);
+    setStatus(null);
+    setBalance(null);
+  }
+  const ownerRef = useRef(owner);
+  useEffect(() => {
+    ownerRef.current = owner;
+    helperRef.current = null;
+  }, [owner]);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -78,9 +91,15 @@ export function OperatorProvider({ children }: { children: React.ReactNode }) {
     try {
       helperRef.current ??= await deriveHelperSigner(k);
       const helper = helperRef.current;
-      const { status: op, balance: bal } = await readOperatorAndBalance(rpc, address(signer.address), helper.address, 1, BigInt(Math.floor(Date.now() / 1000)));
-      setStatus(op);
+      const asked = signer.address;
+      const { status: op, balance: bal } = await readOperatorAndBalance(rpc, address(asked), helper.address, 1, BigInt(Math.floor(Date.now() / 1000)));
+      // Several reads can be in flight (the poll, a refresh after an action) and the RPC's nodes are not at the same slot, so never let an
+      // older answer replace a newer one: that is what made the switch flip on and off by itself.
+      if (ownerRef.current !== asked) return;
+      setStatus((prev) => (supersedes(prev, op) ? op : prev));
       setBalance(bal);
+      // The clock only ticks while counting down; start it from now, not from whenever it last stopped.
+      setNow(Date.now());
     } catch {
       // Keep last known status
     }
@@ -104,11 +123,14 @@ export function OperatorProvider({ children }: { children: React.ReactNode }) {
   }, [counting]);
 
   const shown = ready ? status : null;
-  const secondsLeft = shown?.operator ? Math.max(0, Number(shown.expiresAt) - Math.floor(now / 1000)) : 0;
-  const live = !!shown && !!shown.operator && secondsLeft > 0 && shown.paymentsLeft > 0;
+  // Usable time: it reaches 0 OPERATOR_MARGIN_SECONDS before the on-chain expiry, exactly when payOne stops accepting the authorization.
+  const secondsLeft = shown?.operator ? usableSecondsLeft(shown.expiresAt, BigInt(Math.floor(now / 1000))) : 0;
+  // Only OUR helper counts: an operator authorized for some other key can't sign this browser's payments.
+  const live = !!shown && shown.isHelper && secondsLeft > 0 && shown.paymentsLeft > 0;
 
   useEffect(() => {
-    if (!status || busy) return;
+    // Locking the keys hides the status (`shown` is null) but changes nothing on chain, so it must not read as "ended".
+    if (!ready || !status || busy) return;
     if (settingsRef.current.enabled !== live) {
       if (settingsRef.current.enabled && !live) {
         toast("Automatic payroll ended", {
@@ -117,7 +139,12 @@ export function OperatorProvider({ children }: { children: React.ReactNode }) {
       }
       setSettings((prev) => ({ ...prev, enabled: live }));
     }
-  }, [status, live, busy]);
+  }, [status, live, busy, ready]);
+
+  const markEnabled = (enabled: boolean) => {
+    settingsRef.current = { ...settingsRef.current, enabled };
+    setSettings((prev) => ({ ...prev, enabled }));
+  };
 
   const turnOn = async () => {
     const k = keys.getKeys();
@@ -155,6 +182,7 @@ export function OperatorProvider({ children }: { children: React.ReactNode }) {
         terms: { ttlSeconds: settings.ttlSeconds, maxPayments: cap },
       });
 
+      markEnabled(true);
       await refresh();
       toast.success("Automatic payroll helper active", {
         description: "Payroll can now execute without repeated wallet approvals until the timer ends.",
@@ -174,6 +202,8 @@ export function OperatorProvider({ children }: { children: React.ReactNode }) {
     try {
       setWallet({ note: "Approve the revoke in your wallet to end helper authorization." });
       const back = await revokeAndReclaim({ rpc, admin: signer, helper, signMessage });
+      // The admin ended it, so the sync below must not announce it as having run out.
+      markEnabled(false);
       toast.success("Automatic payroll disabled", {
         description: back > 0n ? `${sol(back)} SOL returned from helper to your wallet.` : "Helper had no remaining SOL to return.",
       });

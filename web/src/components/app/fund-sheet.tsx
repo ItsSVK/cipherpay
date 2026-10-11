@@ -89,7 +89,7 @@ export function FundSheet({
       </SheetTrigger>
       <SheetContent className="w-full overflow-x-hidden overflow-y-auto sm:max-w-md">
         <SheetHeader>
-          <SheetTitle className="text-lg">Fund treasury</SheetTitle>
+          <SheetTitle className="font-serif font-normal tracking-[-0.015em] text-[1.375rem]">Fund treasury</SheetTitle>
           <SheetDescription>Move devnet USDC from your wallet into the encrypted payroll treasury.</SheetDescription>
         </SheetHeader>
 

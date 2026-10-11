@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Flow, type FlowStep } from "@/components/crypto/flow";
 import { mmss, useOperator } from "@/components/app/operator-context";
 import type { RunStatus } from "@/lib/payroll/types";
-import type { RecipientRun } from "@/lib/payroll/use-run-simulation";
+import type { RecipientRun } from "@/lib/payroll/types";
 import { cn } from "@/lib/utils";
 
 /** Where a run is on the page: choosing, checking, waiting for approval, sending, finished. Shared by Run payroll and Split payout. */

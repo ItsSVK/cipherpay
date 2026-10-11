@@ -28,7 +28,7 @@ export function EmptyState({
       <div className="grid size-12 place-items-center rounded-xl bg-secondary text-muted-foreground ring-1 ring-border">
         {icon}
       </div>
-      <h3 className="mt-4 text-base font-semibold tracking-tight text-foreground">
+      <h3 className="mt-4 font-serif font-normal tracking-[-0.015em] text-xl text-foreground">
         {title}
       </h3>
       <p className="mt-1.5 max-w-sm text-xs leading-relaxed text-muted-foreground sm:text-sm">

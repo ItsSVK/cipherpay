@@ -194,7 +194,7 @@ export default function MyPay() {
       <section className="enter space-y-3" style={{ ["--i" as string]: 3 }}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-foreground">Payment History</h2>
+            <h2 className="font-serif font-normal tracking-[-0.015em] text-[1.375rem] text-foreground">Payment history</h2>
             <p className="text-xs text-muted-foreground">All confidential transfers recorded for this wallet.</p>
           </div>
           {!shown && !emp.balanceError && emp.payments.length > 0 ? (

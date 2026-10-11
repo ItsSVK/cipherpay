@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { useInView } from "./scroll";
 import { Address } from "@/components/crypto/fingerprint";
 import { Cipher } from "@/components/crypto/cipher";
 import { Segmented } from "@/components/app/segmented";
@@ -23,21 +25,37 @@ const COPY: Record<Lens, { title: string; body: string }> = {
   auditor: { title: "The auditor, with the mint's auditor key", body: "Decrypts every payment, so compliance has a full picture." },
 };
 
+const ORDER: Lens[] = ["public", "employee", "auditor"];
+
+/** Cycles through the three viewers while on screen, until the visitor picks one themselves. */
 export function LensDemo() {
   const [lens, setLens] = useState<Lens>("public");
+  const [touched, setTouched] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const visible = useInView(ref, { amount: 0.4, once: false });
+  const reduced = useReducedMotion();
   const keyHeld = lens !== "public";
 
+  useEffect(() => {
+    if (!visible || touched || reduced) return;
+    const id = window.setInterval(() => setLens((l) => ORDER[(ORDER.indexOf(l) + 1) % ORDER.length]), 3400);
+    return () => window.clearInterval(id);
+  }, [visible, touched, reduced]);
+
   return (
-    <div className="plate overflow-hidden">
+    <div ref={ref} className="artifact overflow-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
         <div>
           <p className="text-sm font-medium">October payroll</p>
-          <p className="text-xs text-muted-foreground">Same four payments, three viewers</p>
+          <p className="text-xs text-muted-foreground">Same four payments, three viewers · sample data</p>
         </div>
         <Segmented
           label="Viewer"
           value={lens}
-          onChange={setLens}
+          onChange={(l) => {
+            setTouched(true);
+            setLens(l);
+          }}
           options={[
             { value: "public", label: "Public" },
             { value: "employee", label: "Employee" },
@@ -61,7 +79,7 @@ export function LensDemo() {
           );
         })}
       </ul>
-      <div className="flex items-start gap-3 border-t bg-muted/50 px-4 py-3.5">
+      <div className="flex items-start gap-3 border-t bg-[var(--l-fog)] px-4 py-3.5">
         <span className={cn("mt-0.5 grid size-7 shrink-0 place-items-center rounded-md transition-colors duration-300", keyHeld ? "bg-verified-soft text-verified" : "bg-secondary text-muted-foreground")}>
           <LockIcon open={keyHeld} className="size-4" />
         </span>

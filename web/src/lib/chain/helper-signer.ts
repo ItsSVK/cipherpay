@@ -12,15 +12,16 @@
 // The helper is derived from the wallet's own confidential keys (so the same wallet always gets the same helper, and any SOL left
 // in it is recoverable), holds only a few thousandths of a SOL, and is never persisted or sent anywhere.
 import { address, createKeyPairSignerFromPrivateKeyBytes, type Address, type KeyPairSigner, type TransactionSigner } from "@solana/kit";
-import { findVaultPda } from "@/generated/vault/src/generated";
+import { findVaultPda, VAULT_ERROR__AUTHORIZATION_SEQ_MISMATCH } from "@/generated/vault/src/generated";
 import { DEVNET_WUSDC_MINT } from "./constants";
 import type { WalletSignMessage } from "@/lib/crypto/keys";
 import { getTransferSolInstruction } from "@solana-program/system";
 import type { DerivedKeys } from "@/lib/crypto/keys";
+import { fresh } from "./freshness";
 import type { AppRpc } from "./rpc";
-import { buildAuthorization, NO_OPERATOR } from "./authorization";
-import { readOperator, type OperatorTerms } from "./operator";
-import { signAndSend, type SignAndSendOptions } from "./send";
+import { buildAuthorization, NO_OPERATOR, type AuthorizationTerms } from "./authorization";
+import { readOperator, type OperatorStatus, type OperatorTerms } from "./operator";
+import { signAndSend, TxError, type SignAndSendOptions } from "./send";
 
 /**
  * What the helper needs on hand: rent for the three proof accounts per payment (about 0.0063 SOL on devnet, 0.0086 on a
@@ -50,7 +51,7 @@ export async function deriveHelperSigner(keys: DerivedKeys): Promise<KeyPairSign
 }
 
 async function balanceOf(rpc: AppRpc, helper: KeyPairSigner): Promise<bigint> {
-  return (await rpc.getBalance(helper.address, { commitment: "confirmed" }).send()).value;
+  return (await fresh((minContextSlot) => rpc.getBalance(helper.address, { commitment: "confirmed", minContextSlot }).send())).value;
 }
 
 /**
@@ -75,17 +76,51 @@ export async function topUpHelperIfShort(input: { rpc: AppRpc; admin: Transactio
 export async function authorizeHelper(input: { rpc: AppRpc; admin: Address; helper: KeyPairSigner; signMessage: WalletSignMessage; terms?: OperatorTerms }): Promise<void> {
   const { rpc, admin, helper, signMessage, terms } = input;
   const [vault] = await findVaultPda({ admin, mint: address(DEVNET_WUSDC_MINT) });
-  // The sequence must be the config's current one, so read it as late as possible.
-  const { seq } = await readOperator(rpc, admin, helper.address);
-  const instructions = await buildAuthorization({
-    admin,
-    payer: helper,
-    signMessage,
-    terms: terms
+  const termsFor = (seq: bigint): AuthorizationTerms =>
+    terms
       ? { vault, operator: helper.address, expiresAt: BigInt(Math.floor(Date.now() / 1000) + terms.ttlSeconds), maxPayments: terms.maxPayments, seq }
-      : { vault, operator: NO_OPERATOR, expiresAt: 0n, maxPayments: 0, seq },
-  });
-  await signAndSend({ rpc, signer: helper, instructions });
+      : { vault, operator: NO_OPERATOR, expiresAt: 0n, maxPayments: 0, seq };
+
+  // The sequence must be the config's current one, so read it as late as possible.
+  let signed = termsFor((await readOperator(rpc, admin, helper.address)).seq);
+  let instructions = await buildAuthorization({ admin, payer: helper, signMessage, terms: signed });
+  let resigned = false;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await signAndSend({ rpc, signer: helper, instructions });
+      return;
+    } catch (e) {
+      if (!isSeqMismatch(e) || attempt >= SEQ_RETRIES) throw e;
+      // The counter the admin signed is not the one the network checked. Either an earlier attempt already landed (then we are
+      // done), or our RPC is several nodes behind a load balancer and the read and the preflight disagreed about the latest state.
+      await sleep(SEQ_RETRY_MS);
+      const now = await readOperator(rpc, admin, helper.address);
+      if (alreadyApplied(now, signed, helper.address)) return;
+      if (now.seq === signed.seq) continue; // the node that checked the send was behind: resend the same signed message
+      if (resigned) throw e;
+      // The counter really moved on, so the signed message can never be used. Ask once more with the current one.
+      resigned = true;
+      signed = termsFor(now.seq);
+      instructions = await buildAuthorization({ admin, payer: helper, signMessage, terms: signed });
+    }
+  }
+}
+
+const SEQ_RETRIES = 4;
+const SEQ_RETRY_MS = 1500;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** The program's `AuthorizationSeqMismatch` (6009), as a rejected preflight reports it. */
+export function isSeqMismatch(e: unknown): boolean {
+  if (!(e instanceof TxError) || e.kind !== "preflight") return false;
+  const text = [e.message, ...e.logs].join("\n");
+  return text.includes("AuthorizationSeqMismatch") || text.includes(`#${VAULT_ERROR__AUTHORIZATION_SEQ_MISMATCH}`);
+}
+
+/** Whether the chain already holds the outcome `signed` asked for, e.g. because an earlier send of it landed. Pure. */
+export function alreadyApplied(now: OperatorStatus, signed: AuthorizationTerms, helper: Address): boolean {
+  if (signed.operator === NO_OPERATOR) return now.operator === null;
+  return now.operator === helper && now.expiresAt === signed.expiresAt && now.seq === signed.seq + 1n;
 }
 
 /** What the helper holds now, in lamports. */

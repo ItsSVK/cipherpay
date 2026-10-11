@@ -73,3 +73,26 @@ export const TRANSFER_STAGE = 3;
 export function shortToday(): string {
   return new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit" });
 }
+
+/** Where one recipient is in a payroll run. */
+export type RecipientStatus = "pending" | "running" | "done" | "failed";
+
+export interface RecipientRun {
+  id: string;
+  /** Stages finished so far. A retry resumes from here, never from zero. */
+  completed: number;
+  status: RecipientStatus;
+  /** Signature of the pay_employee transaction, set the moment the transfer lands. */
+  signature?: string;
+  error?: string;
+  /** True while this recipient is ready to transfer but another transfer is still in flight. */
+  waiting?: boolean;
+  /** A short status line, e.g. "Approve in your wallet". */
+  note?: string;
+  /** When the wallet request currently waiting for approval expires (ms since epoch). Drives a countdown. */
+  deadline?: number;
+  /** The payment was submitted but not confirmed either way. Check the explorer before retrying. */
+  uncertain?: boolean;
+  /** The amount encrypted to the recipient, from the payment's proofs (lib/received-amount.ts). Saved with the run. */
+  receivedAmount?: string;
+}

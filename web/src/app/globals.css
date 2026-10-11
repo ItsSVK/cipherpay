@@ -10,6 +10,8 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-heading: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-display: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Titles only (page titles, sheet and dialog titles, empty states): the landing page's serif, one weight. */
+  --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
   --color-verified: var(--verified);
   --color-verified-soft: var(--verified-soft);
   --color-pending: var(--pending);
@@ -217,6 +219,84 @@
   from { transform: translateY(-100%); }
   to { transform: translateY(100%); }
 }
+
+/*
+ * Landing page (`/`) only. LANDING_DESIGN.md: white paper, ink pills, serif display at one weight, one peach callout.
+ * Product fragments on the page keep the app tokens above (indigo key, green decrypted), like screenshots of the app.
+ */
+.landing {
+  --l-ink: #17191c;
+  --l-paper: #ffffff;
+  --l-mist: #f2f2f3;
+  --l-fog: #fafafb;
+  --l-slate: #6b6f7a;
+  --l-ash: #8e8f93;
+  --l-peach: #fbe1d1;
+  --l-sienna: #5d2a1a;
+  --l-artifact: 0 0 0 1px rgb(4 23 43 / 0.05), 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+  background: var(--l-paper);
+  color: var(--l-ink);
+}
+.landing ::selection { background: var(--l-peach); color: var(--l-sienna); }
+.landing .serif {
+  font-family: var(--font-source-serif), ui-serif, Georgia, serif;
+  font-weight: 400;
+  font-optical-sizing: auto;
+}
+.landing .display { font-size: clamp(2.9rem, 7.4vw, 5.625rem); line-height: 1.04; letter-spacing: -0.025em; }
+.landing .heading-lg { font-size: clamp(2.25rem, 4.6vw, 4rem); line-height: 1.1; letter-spacing: -0.015em; }
+.landing .heading { font-size: clamp(1.9rem, 3.2vw, 2.75rem); line-height: 1.15; letter-spacing: -0.015em; }
+
+/* Pill buttons: filled ink and ghost ink, always as a pair. */
+.landing .pill {
+  display: inline-flex; align-items: center; gap: 0.5rem; height: 2.75rem; padding: 0 1.25rem;
+  border-radius: 9999px; font-size: 15px; font-weight: 450; white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.landing .pill:active { transform: scale(0.98); }
+.landing .pill-ink { background: var(--l-ink); color: #fff; }
+.landing .pill-ink:hover { background: #2c2f34; }
+.landing .pill-ghost { box-shadow: inset 0 0 0 1px var(--l-ink); color: var(--l-ink); }
+.landing .pill-ghost:hover { background: var(--l-mist); }
+.landing .pill svg { transition: transform var(--dur-base) var(--ease-out); }
+.landing .pill:hover svg { transform: translateX(2px); }
+.landing .arrow-link { text-underline-offset: 4px; }
+.landing .arrow-link:hover { text-decoration: underline; }
+
+/* Floating product artifact: the only surface on the page that earns a shadow. */
+.landing .artifact { background: #fff; border-radius: 20px; box-shadow: var(--l-artifact); }
+
+/*
+ * Scroll reveal. Content is visible by default; `ScrollReveal` arms an element (data-reveal="armed") only when it
+ * mounts below the fold, then sets data-reveal="in" when it scrolls into view.
+ */
+.landing [data-reveal] { transition: opacity 900ms var(--ease-out), transform 900ms var(--ease-out), filter 900ms var(--ease-out), clip-path 1100ms var(--ease-out); transition-delay: var(--rd, 0ms); }
+.landing [data-reveal="armed"] { opacity: 0; transform: translateY(28px); filter: blur(6px); }
+.landing [data-reveal="armed"][data-variant="scale"] { transform: translateY(24px) scale(0.96); }
+/* Headings unmask from the bottom. The mask sits on the child so the observed element keeps its box. */
+.landing [data-reveal="armed"][data-variant="line"] { opacity: 1; filter: none; transform: none; }
+.landing [data-reveal][data-variant="line"] > * { transition: clip-path 1100ms var(--ease-out), transform 1100ms var(--ease-out); transition-delay: var(--rd, 0ms); }
+.landing [data-reveal="armed"][data-variant="line"] > * { transform: translateY(0.4em); clip-path: inset(0 0 100% 0); }
+
+/* Hero entrance: words rise out of a mask, artifacts float in from their side. */
+.landing .word { display: inline-block; overflow: clip; overflow-clip-margin: 0.12em; vertical-align: top; padding-bottom: 0.08em; }
+.landing .word > span { display: inline-block; animation: word-rise 1100ms var(--ease-out) both; animation-delay: calc(120ms + var(--w, 0) * 70ms); }
+.landing .float-in { animation: float-in 1300ms var(--ease-out) both; animation-delay: var(--fd, 0ms); }
+.landing .bob { animation: bob 7s var(--ease-in-out) infinite alternate; }
+.landing .cursor-drift { animation: cursor-drift var(--cd, 9s) var(--ease-in-out) infinite alternate; }
+
+@keyframes word-rise { from { transform: translateY(105%); } to { transform: none; } }
+@keyframes float-in {
+  from { opacity: 0; transform: translate3d(var(--fx, 0), var(--fy, 28px), 0) scale(0.97); filter: blur(8px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes bob { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+@keyframes cursor-drift {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(var(--cx1, 14px), var(--cy1, -10px)); }
+  100% { transform: translate(var(--cx2, -6px), var(--cy2, 8px)); }
+}
+@keyframes rail-packet { from { offset-distance: 0%; } to { offset-distance: 100%; } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

@@ -130,12 +130,8 @@ export function ConnectScreen() {
         />
 
         <div className="enter" style={{ ["--i" as string]: 0 }}>
-          <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-card px-3 py-1 text-xs font-medium text-foreground shadow-2xs mb-4">
-            <span className="size-1.5 rounded-full bg-primary" aria-hidden />
-            <span>Confidential Payroll</span>
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-            Connect your wallet
+          <h1 className="font-serif font-normal tracking-[-0.015em] text-[2.5rem] leading-[1.05] text-foreground sm:text-[3.25rem]">
+            Connect <em className="italic">your</em> wallet
           </h1>
           <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground sm:text-base">
             One wallet can run a company, receive private compensation, or both. Connect yours to verify authorization and access your ledger.

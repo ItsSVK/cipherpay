@@ -79,7 +79,7 @@ export function StartChooser({ eligible }: { eligible: boolean }) {
             <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary shadow-2xs">
               <CompassIcon className="size-4" />
             </div>
-            <DialogTitle className="text-sm font-semibold tracking-tight">Where would you like to start?</DialogTitle>
+            <DialogTitle className="font-serif font-normal tracking-[-0.015em] text-xl">Where would you like to start?</DialogTitle>
           </div>
           <DialogDescription className="mt-3 text-xs leading-relaxed text-muted-foreground">
             This wallet has nothing set up yet. Pick what you came to do; the other side stays one click away in the sidebar.

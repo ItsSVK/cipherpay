@@ -114,7 +114,7 @@ export function AddPayroll({ onCreated, trigger, children }: { onCreated: (p: Pa
               <UsersIcon className="size-4" />
             </div>
             <div className="min-w-0">
-              <SheetTitle className="text-base font-semibold tracking-tight">New payroll</SheetTitle>
+              <SheetTitle className="font-serif font-normal tracking-[-0.015em] text-xl">New payroll</SheetTitle>
               <SheetDescription className="text-xs">Who you pay and how much. Run it whenever payday comes around.</SheetDescription>
             </div>
           </div>

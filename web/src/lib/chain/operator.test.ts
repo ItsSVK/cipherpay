@@ -3,7 +3,7 @@ import { address, generateKeyPairSigner, getAddressDecoder } from "@solana/kit";
 import { findOperatorConfigPda, findVaultPda, getAuthorizeOperatorInstructionDataDecoder, VAULT_PROGRAM_ADDRESS } from "@/generated/vault/src/generated";
 import { DEVNET_WUSDC_MINT } from "./constants";
 import { authorizationMessage, buildAuthorization, ed25519VerifyInstruction, NO_OPERATOR } from "./authorization";
-import { DEFAULT_OPERATOR_TTL_SECONDS } from "./operator";
+import { DEFAULT_OPERATOR_TTL_SECONDS, OPERATOR_MARGIN_SECONDS, supersedes, usableSecondsLeft, type OperatorStatus } from "./operator";
 
 const WUSDC = address(DEVNET_WUSDC_MINT);
 const ED25519_PROGRAM = address("Ed25519SigVerify111111111111111111111111111");
@@ -120,5 +120,36 @@ describe("buildAuthorization", () => {
 
   test("the default TTL is one of the offered windows and well inside the program's 24 hour cap", () => {
     expect(DEFAULT_OPERATOR_TTL_SECONDS).toBeLessThanOrEqual(24 * 60 * 60);
+  });
+});
+
+describe("operator status never goes backwards", () => {
+  const helper = address("9tbZBdds8EuGX2Yb1yBYWtnA9UyhgxjfVCmgmfV5LPwV");
+  const live: OperatorStatus = { operator: helper, isHelper: true, expiresAt: 1_000n, paymentsLeft: 3, seq: 5n, authorized: true };
+  const revoked: OperatorStatus = { operator: null, isHelper: false, expiresAt: 0n, paymentsLeft: 0, seq: 6n, authorized: false };
+
+  test("the first answer is always taken", () => expect(supersedes(null, live)).toBe(true));
+  test("a revoke (next seq) replaces a live authorization", () => expect(supersedes(live, revoked)).toBe(true));
+  test("a stale answer from before the revoke does not bring the authorization back", () => expect(supersedes(revoked, live)).toBe(false));
+  test("a stale answer from before the authorization does not turn it off", () => {
+    const before: OperatorStatus = { ...revoked, seq: 4n };
+    expect(supersedes(live, before)).toBe(false);
+  });
+  test("a payment (same seq, one fewer left) is taken; an answer from before it is not", () => {
+    const afterPay = { ...live, paymentsLeft: 2 };
+    expect(supersedes(live, afterPay)).toBe(true);
+    expect(supersedes(afterPay, live)).toBe(false);
+  });
+  test("the same state again is taken (so the clock-based fields refresh)", () => expect(supersedes(live, { ...live })).toBe(true));
+});
+
+describe("usable time left", () => {
+  const m = BigInt(OPERATOR_MARGIN_SECONDS);
+  test("is the time to expiry minus the margin", () => expect(usableSecondsLeft(1_000n, 900n)).toBe(100 - OPERATOR_MARGIN_SECONDS));
+  test("reaches 0 exactly when a payment would be refused, and never goes negative", () => {
+    expect(usableSecondsLeft(1_000n, 1_000n - m - 1n)).toBe(1);
+    expect(usableSecondsLeft(1_000n, 1_000n - m)).toBe(0);
+    expect(usableSecondsLeft(1_000n, 1_000n - 5n)).toBe(0);
+    expect(usableSecondsLeft(1_000n, 2_000n)).toBe(0);
   });
 });

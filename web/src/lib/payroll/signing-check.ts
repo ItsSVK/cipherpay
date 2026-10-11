@@ -24,9 +24,14 @@ export interface SigningSuggestion {
 
 const mmss = (secs: number) => `${Math.floor(secs / 60)}:${String(Math.max(0, secs) % 60).padStart(2, "0")}`;
 
-/** Seconds a run of `recipients` needs from an automatic authorization, including the margin the engine keeps before expiry. */
+/** Usable seconds a run of `recipients` needs. Compared with the operator's `secondsLeft`, which already excludes the expiry margin. */
+export function runSeconds(recipients: number): number {
+  return Math.max(1, recipients) * SECONDS_PER_PAYMENT;
+}
+
+/** How long an authorization must last to cover a run of `recipients`: the run plus the margin the engine keeps before expiry. */
 export function secondsNeeded(recipients: number): number {
-  return Math.max(1, recipients) * SECONDS_PER_PAYMENT + OPERATOR_MARGIN_SECONDS;
+  return runSeconds(recipients) + OPERATOR_MARGIN_SECONDS;
 }
 
 /** The smallest settings that would cover this run. */
@@ -54,11 +59,11 @@ export function checkSigning(state: SigningState, recipients: number): SigningCh
       },
     ];
   }
-  const need = secondsNeeded(recipients);
+  const need = runSeconds(recipients);
   const countOk = state.paymentsLeft >= recipients;
   const timeOk = state.secondsLeft >= need;
   const longest = OPERATOR_TTL_OPTIONS[OPERATOR_TTL_OPTIONS.length - 1];
-  const fitsLongest = need <= longest.seconds;
+  const fitsLongest = secondsNeeded(recipients) <= longest.seconds;
   return [
     {
       id: "auto-count",

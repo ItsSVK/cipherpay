@@ -40,8 +40,8 @@ export function UnlockDialog() {
             </div>
 
             <div>
-              <DialogTitle className="text-base font-semibold tracking-tight text-foreground">
-                Authorize Encryption Keys
+              <DialogTitle className="font-serif font-normal tracking-[-0.015em] text-xl text-foreground">
+                Unlock your keys
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {ready

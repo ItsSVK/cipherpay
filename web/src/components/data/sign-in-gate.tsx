@@ -79,13 +79,13 @@ export function SignInGate({ children }: { children: React.ReactNode }) {
           </span>
           {d.status === "error" ? (
             <>
-              <h1 className="mt-4 text-xl font-semibold tracking-tight text-foreground">Couldn&apos;t reach your account</h1>
+              <h1 className="mt-4 font-serif font-normal tracking-[-0.015em] text-[1.75rem] leading-tight text-foreground">Couldn&apos;t reach your account</h1>
               <p role="alert" className="mt-2 text-sm text-destructive">{d.error}</p>
               <Button variant="outline" className="mt-6 h-10 px-5 rounded-xl font-medium" onClick={() => void d.refresh()}>Try again</Button>
             </>
           ) : (
             <>
-              <h1 className="mt-4 text-xl font-semibold tracking-tight text-foreground">Sign in with your wallet</h1>
+              <h1 className="mt-4 font-serif font-normal tracking-[-0.015em] text-[1.75rem] leading-tight text-foreground">Sign in with <em className="italic">your</em> wallet</h1>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                 Approve one message in your wallet to open your dashboard. It&apos;s free, it isn&apos;t a transaction, it can&apos;t move funds and it doesn&apos;t touch your encryption keys.
               </p>

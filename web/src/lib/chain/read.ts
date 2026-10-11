@@ -4,6 +4,7 @@ import { address, fetchEncodedAccounts, unwrapOption, type Address, type MaybeEn
 import { TOKEN_2022_PROGRAM_ADDRESS, decodeToken, fetchAllMaybeToken, fetchMaybeMint, fetchMaybeToken, findAssociatedTokenPda, type Token } from "@solana-program/token-2022";
 import { decodeVault, fetchMaybeVault, findVaultPda } from "@/generated/vault/src/generated";
 import { DEVNET_USDC_MINT, DEVNET_WUSDC_MINT } from "./constants";
+import { fresh } from "./freshness";
 import type { AppRpc } from "./rpc";
 
 /** The classic SPL Token program, which owns real devnet USDC. */
@@ -68,7 +69,7 @@ function viewOf(addr: Address, token: Token): ConfidentialAccountView {
 /** Fetches a token account that may not exist, or may not decode (something else lives at that address). */
 async function readToken(rpc: AppRpc, addr: Address): Promise<Token | null> {
   try {
-    const acct = await fetchMaybeToken(rpc, addr, { commitment: "confirmed" });
+    const acct = await fresh((minContextSlot) => fetchMaybeToken(rpc, addr, { commitment: "confirmed", minContextSlot }));
     return acct.exists ? acct.data : null;
   } catch {
     return null;
@@ -98,7 +99,9 @@ export async function readChainState(rpc: AppRpc, owner: Address, employees: Add
     findVaultPda({ admin: owner, mint: WUSDC }),
     Promise.all(employees.map((e) => ataFor(e, WUSDC, TOKEN_2022_PROGRAM_ADDRESS))),
   ]);
-  const [ownerAcct, wusdcAcct, usdcAcct, vaultAcct, ...employeeAccts] = await fetchEncodedAccounts(rpc, [owner, wusdcAta, usdcAta, vaultAddress, ...employeeAtas], { commitment: "confirmed" });
+  const [ownerAcct, wusdcAcct, usdcAcct, vaultAcct, ...employeeAccts] = await fresh((minContextSlot) =>
+    fetchEncodedAccounts(rpc, [owner, wusdcAta, usdcAta, vaultAddress, ...employeeAtas], { commitment: "confirmed", minContextSlot }),
+  );
 
   const wusdc = tokenFrom(wusdcAcct);
   const usdc = tokenFrom(usdcAcct);
@@ -137,7 +140,7 @@ export async function readWalletState(rpc: AppRpc, owner: Address): Promise<Wall
 
 export async function readVaultState(rpc: AppRpc, admin: Address): Promise<VaultChainState> {
   const [vaultAddress] = await findVaultPda({ admin, mint: WUSDC });
-  const maybe = await fetchMaybeVault(rpc, vaultAddress, { commitment: "confirmed" });
+  const maybe = await fresh((minContextSlot) => fetchMaybeVault(rpc, vaultAddress, { commitment: "confirmed", minContextSlot }));
   if (!maybe.exists) return { address: vaultAddress, exists: false, paused: false, treasuryConfigured: false, treasuryElgamalPubkey: null, treasury: null };
   const v = maybe.data;
   const treasuryToken = v.treasuryConfigured ? await readToken(rpc, v.treasuryTokenAccount) : null;

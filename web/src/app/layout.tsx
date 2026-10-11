@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Bricolage_Grotesque, Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist, Geist_Mono, Source_Serif_4 } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,6 +8,8 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 const bricolage = Bricolage_Grotesque({ variable: "--font-bricolage", subsets: ["latin"], axes: ["opsz"] });
+// Landing page display serif only (LANDING_DESIGN.md: one regular weight at every size, italic for emphasis).
+const serif = Source_Serif_4({ variable: "--font-source-serif", subsets: ["latin"], style: ["normal", "italic"], axes: ["opsz"] });
 
 export const metadata: Metadata = {
   title: "Cipherpay: confidential payroll on Solana",
@@ -27,7 +29,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} h-full antialiased`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${serif.variable} h-full antialiased`}>
       <body className="min-h-full">
         <div hidden dangerouslySetInnerHTML={{ __html: `<!--${CONTRACT.replace(/--/g, "- -")}-->` }} />
         <TooltipProvider delay={250}>

@@ -50,7 +50,7 @@ export function OperatorModal() {
             <div className={cn("grid size-8 shrink-0 place-items-center rounded-xl shadow-2xs transition-colors duration-300", live ? "bg-verified text-white" : "bg-primary/10 text-primary")}>
               <ZapIcon className={cn("size-4", live && "fill-current")} />
             </div>
-            <DialogTitle className="text-sm font-semibold tracking-tight">Automatic payroll</DialogTitle>
+            <DialogTitle className="font-serif font-normal tracking-[-0.015em] text-xl">Automatic payroll</DialogTitle>
             {badge}
           </div>
           <DialogDescription className="mt-3 text-xs leading-relaxed text-muted-foreground">

@@ -104,7 +104,7 @@ export function WithdrawSheet() {
       </SheetTrigger>
       <SheetContent className="w-full overflow-y-auto sm:max-w-md">
         <SheetHeader>
-          <SheetTitle className="text-lg">Withdraw to Wallet</SheetTitle>
+          <SheetTitle className="font-serif font-normal tracking-[-0.015em] text-[1.375rem]">Withdraw to wallet</SheetTitle>
           <SheetDescription>
             Choose how much to withdraw. Partial withdrawal is encouraged to keep the remainder confidential.
           </SheetDescription>
