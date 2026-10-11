@@ -157,16 +157,6 @@ async function sendWithBlockhashRetry(rpc: AppRpc, wireBase64: Parameters<AppRpc
   }
 }
 
-/** Sends an already-signed transaction (base64 wire format) and waits for it to confirm. */
-export async function sendWireAndConfirm(rpc: AppRpc, wireBase64: Parameters<AppRpc["sendTransaction"]>[0], signature: Parameters<AppRpc["getSignatureStatuses"]>[0][number], lastValidBlockHeight: bigint): Promise<void> {
-  try {
-    await sendWithBlockhashRetry(rpc, wireBase64, lastValidBlockHeight);
-    await waitForConfirmation(rpc, signature, lastValidBlockHeight);
-  } catch (e) {
-    throw toTxError(e);
-  }
-}
-
 /** Devnet makes roughly 3.8 blocks a second, so this turns a blockhash's remaining blocks into seconds for display. */
 export const BLOCKS_PER_SECOND = 3.8;
 

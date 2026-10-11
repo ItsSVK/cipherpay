@@ -188,22 +188,3 @@ export function KeyDerivation({
     </div>
   );
 }
-
-export function StageMark({ done, running }: { done: boolean; running: boolean }) {
-  return (
-    <span
-      className={cn(
-        "grid size-6 shrink-0 place-items-center rounded-full border text-[10px] transition-[background-color,border-color,color] duration-300 ease-out-expo",
-        done ? "border-verified bg-verified text-white [animation:pop_420ms_var(--ease-out)]" : running ? "border-primary text-primary" : "border-input text-muted-foreground",
-      )}
-    >
-      {done ? (
-        <CheckIcon className="size-3.5" strokeWidth={3} />
-      ) : running ? (
-        <span className="size-2 rounded-full bg-primary [animation:dot-pulse_900ms_ease-in-out_infinite]" />
-      ) : (
-        <span className="size-1.5 rounded-full bg-input" />
-      )}
-    </span>
-  );
-}

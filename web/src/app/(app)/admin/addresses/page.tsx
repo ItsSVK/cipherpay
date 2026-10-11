@@ -15,7 +15,6 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { PayrollGate } from "@/components/data/payroll-gate";
 import { useVault } from "@/components/app/vault-context";
 import { copyInvite } from "@/lib/payroll/invite";
-import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { EmptyState } from "@/components/app/empty-state";
 import { DisclosureCard } from "@/components/app/disclosure-card";

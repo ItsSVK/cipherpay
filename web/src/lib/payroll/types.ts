@@ -67,8 +67,6 @@ export interface VaultState {
 }
 
 export const PIPELINE_STAGES = ["Prove", "Create context", "Verify", "Transfer", "Close"] as const;
-/** The stage that actually moves funds. Transfers from one treasury must land one at a time (D3). */
-export const TRANSFER_STAGE = 3;
 
 export function shortToday(): string {
   return new Date().toLocaleDateString("en-US", { month: "short", day: "2-digit" });

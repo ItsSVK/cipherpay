@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Check, Globe, KeyRound, Lock, ShieldCheck, Unlock } from "lucide-react";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { Address } from "@/components/crypto/fingerprint";

@@ -21,7 +21,7 @@ import {
 import { findOperatorConfigPda, findVaultPda, getPayEmployeeInstruction } from "@/generated/vault/src/generated";
 import type { DerivedKeys } from "@/lib/crypto/keys";
 import { DEVNET_WUSDC_MINT } from "./constants";
-import { ataFor, type ConfidentialAccountView } from "./read";
+import type { ConfidentialAccountView } from "./read";
 import type { AppRpc } from "./rpc";
 import { proveTransfer } from "@/lib/crypto/proof-client";
 import { encodeReceivedAmount } from "@/lib/received-amount";
@@ -145,6 +145,3 @@ export async function buildPaymentPlan(input: PaymentInput): Promise<PaymentPlan
     receivedAmount: encodeReceivedAmount(proofs.destinationCiphertextLo, proofs.destinationCiphertextHi),
   };
 }
-
-/** The employee's ATA for the vault's mint (where pay_employee delivers). */
-export const employeeTokenAccountFor = (employee: Address) => ataFor(employee, WUSDC, TOKEN_2022_PROGRAM_ADDRESS);

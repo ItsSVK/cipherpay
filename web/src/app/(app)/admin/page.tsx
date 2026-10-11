@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowRightIcon, EyeIcon, EyeOffIcon, KeyIcon, LockIcon, PlusIcon, ShieldCheckIcon, SlidersHorizontalIcon, WalletCardsIcon } from "lucide-react";
+import { ArrowRightIcon, EyeIcon, EyeOffIcon, KeyIcon, LockIcon, ShieldCheckIcon, SlidersHorizontalIcon, WalletCardsIcon } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Address } from "@/components/crypto/fingerprint";
 import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
 import { CopyButton } from "@/components/app/copy-button";
@@ -17,7 +16,6 @@ import { SetupVault } from "@/components/app/setup-vault";
 import { SealedAmount } from "@/components/app/sealed-amount";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useVault } from "@/components/app/vault-context";
-import { MetricCard } from "@/components/app/metric-card";
 import { DisclosureCard } from "@/components/app/disclosure-card";
 import { EmptyState } from "@/components/app/empty-state";
 import { DispatchControl } from "@/components/app/dispatch-control";

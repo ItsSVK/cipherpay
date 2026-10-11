@@ -123,9 +123,6 @@ export function alreadyApplied(now: OperatorStatus, signed: AuthorizationTerms, 
   return now.operator === helper && now.expiresAt === signed.expiresAt && now.seq === signed.seq + 1n;
 }
 
-/** What the helper holds now, in lamports. */
-export const helperBalance = balanceOf;
-
 /** Returns whatever the helper holds to the admin. Needs no wallet approval. Best-effort: a failure just leaves the SOL for next time. */
 export async function sweepHelper(input: { rpc: AppRpc; admin: TransactionSigner; helper: KeyPairSigner }): Promise<bigint> {
   const { rpc, admin, helper } = input;

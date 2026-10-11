@@ -1,6 +1,6 @@
 "use client";
 
-import { EyeIcon, ExternalLinkIcon, ShieldIcon, SparklesIcon, WalletIcon } from "lucide-react";
+import { EyeIcon, ExternalLinkIcon, ShieldIcon, WalletIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Cipher } from "@/components/crypto/cipher";
 import { useKeys } from "@/components/crypto/key-context";
@@ -16,9 +16,7 @@ import { WithdrawSheet } from "@/components/app/withdraw-sheet";
 import { MetricCard } from "@/components/app/metric-card";
 import { DisclosureCard } from "@/components/app/disclosure-card";
 import { EmptyState } from "@/components/app/empty-state";
-import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { formatUsdc, shortAddress } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 const ACTIVATE_STEPS: Step[] = [
   { label: "Prove you hold the key", detail: "A short proof, built in your browser, verifying your confidential key.", visibility: "encrypted" },

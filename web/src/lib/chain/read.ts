@@ -1,7 +1,7 @@
 // Read-only chain state for the connected wallet. No keys are used here: decryption happens separately
 // (lib/chain/decrypt.ts) and only while the user's keys are unlocked.
 import { address, fetchEncodedAccounts, unwrapOption, type Address, type MaybeEncodedAccount } from "@solana/kit";
-import { TOKEN_2022_PROGRAM_ADDRESS, decodeToken, fetchAllMaybeToken, fetchMaybeMint, fetchMaybeToken, findAssociatedTokenPda, type Token } from "@solana-program/token-2022";
+import { TOKEN_2022_PROGRAM_ADDRESS, decodeToken, fetchMaybeMint, fetchMaybeToken, findAssociatedTokenPda, type Token } from "@solana-program/token-2022";
 import { decodeVault, fetchMaybeVault, findVaultPda } from "@/generated/vault/src/generated";
 import { DEVNET_USDC_MINT, DEVNET_WUSDC_MINT } from "./constants";
 import { fresh } from "./freshness";
@@ -89,8 +89,8 @@ function tokenFrom(encoded: MaybeEncodedAccount): Token | null {
 /**
  * Everything the app polls for a wallet, in ONE getMultipleAccounts call (plus one more for the treasury once a vault has it configured):
  * SOL (the owner account's lamports), the WUSDC and USDC accounts, the vault, and the activation of every saved address. It used to be
- * five or six separate calls per poll, each with its own browser preflight. Same results as readWalletState + readVaultState +
- * readActivation, which stay for one-off reads.
+ * five or six separate calls per poll, each with its own browser preflight. Same results as readWalletState + readVaultState,
+ * which stay for one-off reads.
  */
 export async function readChainState(rpc: AppRpc, owner: Address, employees: Address[]): Promise<{ wallet: WalletChainState; vault: VaultChainState; activation: Record<string, boolean> }> {
   const [wusdcAta, usdcAta, [vaultAddress], employeeAtas] = await Promise.all([
@@ -152,14 +152,6 @@ export async function readVaultState(rpc: AppRpc, admin: Address): Promise<Vault
     treasuryElgamalPubkey: v.treasuryConfigured ? v.treasuryElgamalPubkey : null,
     treasury: treasuryToken ? viewOf(v.treasuryTokenAccount, treasuryToken) : null,
   };
-}
-
-/** Which of these wallets can already receive confidential pay (account exists with the extension configured). One batched call. */
-export async function readActivation(rpc: AppRpc, owners: Address[]): Promise<Record<string, boolean>> {
-  if (owners.length === 0) return {};
-  const atas = await Promise.all(owners.map((o) => ataFor(o, WUSDC, TOKEN_2022_PROGRAM_ADDRESS)));
-  const accounts = await fetchAllMaybeToken(rpc, atas, { commitment: "confirmed" }).catch(() => null);
-  return Object.fromEntries(owners.map((o, i) => [o, !!accounts?.[i]?.exists && viewOf(atas[i], accounts[i].data as Token).confidential]));
 }
 
 /** A wallet's WUSDC account as it is on-chain right now, or null if it has none. */

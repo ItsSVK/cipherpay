@@ -193,10 +193,10 @@ function ConnectedShell({ address, account: walletAccount, children }: { address
             </div>
             <div className="flex items-center gap-2 sm:gap-2.5">
               <KeyChip seed={address} />
-              <div className="hidden items-center gap-2 rounded-full border border-border/80 bg-card px-3 py-1 shadow-2xs sm:inline-flex">
-                <span className="hidden text-xs font-semibold tracking-wide text-foreground/80 md:inline">{label ?? "Wallet"}</span>
-                <Address value={address} className="text-xs text-muted-foreground font-mono" />
-                {!account.loading ? <span className="font-mono text-xs tnum text-muted-foreground">{solText(account.sol)}</span> : null}
+              <div className="hidden h-8 items-center gap-2 rounded-full border border-border bg-card px-3 text-[13px] shadow-2xs sm:inline-flex">
+                <span className="hidden font-medium text-foreground md:inline">{label ?? "Wallet"}</span>
+                <Address value={address} className="font-mono text-[13px] text-muted-foreground" />
+                {!account.loading ? <span className="font-mono text-[13px] tnum text-muted-foreground">{solText(account.sol)}</span> : null}
               </div>
               <ThemeToggle size="sm" />
               <Button

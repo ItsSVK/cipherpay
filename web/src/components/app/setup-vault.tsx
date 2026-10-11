@@ -7,7 +7,6 @@ import { useKeys } from "@/components/crypto/key-context";
 import { StepList, type Step } from "@/components/crypto/step-list";
 import { useEmployee } from "@/components/app/employee-context";
 import { SolNotice } from "@/components/app/sol-notice";
-import { InfoTooltip } from "@/components/ui/info-tooltip";
 import { PageHeader } from "./page-header";
 import { useVault } from "./vault-context";
 

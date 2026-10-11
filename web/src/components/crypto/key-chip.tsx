@@ -2,7 +2,6 @@
 
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Fingerprint } from "./fingerprint";
 import { useKeys } from "./key-context";
 import { LockIcon } from "./lock-icon";
 
