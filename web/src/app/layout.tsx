@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Geist, Geist_Mono, Source_Serif_4 } from "next/fon
 import { Providers } from "@/components/providers";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { THEME_INIT_SCRIPT } from "@/lib/theme/theme";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
   description: "Payroll where the public can't see salaries, but the auditor can.",
 };
 
-export const viewport: Viewport = { themeColor: "#f6f6f3", colorScheme: "light" };
+export const viewport: Viewport = { themeColor: "#f6f6f3", colorScheme: "light dark" };
 
 const CONTRACT = `
 THESIS: Confidential values are physical-feeling ciphertext. Every secret is a block of glyphs that resolves digit by digit when its owner holds the key. Refuses the dark neon crypto dashboard.
@@ -29,7 +30,10 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${serif.variable} h-full antialiased`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} ${serif.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className="min-h-full">
         <div hidden dangerouslySetInnerHTML={{ __html: `<!--${CONTRACT.replace(/--/g, "- -")}-->` }} />
         <TooltipProvider delay={250}>

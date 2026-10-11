@@ -356,6 +356,19 @@ Goal: later, the auditor reads payments quickly from D1 instead of scanning the 
 
 ## Known current state
 
+- **Dark mode + animated theme switch (2026-10-11).** Toggle in `SiteHeader` and the app shell top bar; class-based (`html.dark`), no flash. See DESIGN.md
+  "Dark theme". Files: `lib/theme/theme.ts`, `components/app/theme-toggle.tsx`, `.dark` + "Theme switch" blocks in `globals.css`; landing/ui hard-coded
+  whites moved to tokens; `Toaster` follows the theme. Checked in headless Chrome over CDP against `next dev` (landing at several scroll positions, connect
+  screen, mid-wave frame, toggle morph) at 1440px. **Not checked:** the signed-in app shell and its pages in dark (needs a wallet), the audit page unlocked,
+  mobile width, Safari/Firefox (the wave uses `@property` + a mask on `::view-transition-new`; without support it just switches). Typecheck passes.
+
+- **Shared site header with view transitions + back-to-top (2026-10-11).** The landing, connect screen, sign-in gate and `/app/auditor`
+  now use one `SiteHeader` (DESIGN.md "Motion"), which morphs between pages via React `<ViewTransition>` (works in the App Router with no
+  config). Gotcha: Next 16 keeps the previous route mounted and hidden, so `enter`/`exit` on a `<ViewTransition>` never fire across a route
+  change; only same-name `share` pairs do. The audit page's content width went from 1160px to 1200px to line up with the header. Landing
+  got `BackToTop`. Checked in headless Chrome over CDP against `next dev` (every hop runs the named transitions; screenshots mid-transition;
+  1440px and 390px); typecheck and lint pass. Safari/Firefox not checked.
+
 - **Monotonic reads and the self-flipping Automatic payroll switch (2026-10-11).** Measured: our Helius devnet endpoint answers from nodes at
   different slots (7 of 48 parallel `confirmed` reads came from an OLDER slot than one already received, up to 2 slots). Symptoms: the switch
   turned itself on/off with toasts, `authorize_operator` failed with `AuthorizationSeqMismatch`, `pay_employee` failed with Token-2022

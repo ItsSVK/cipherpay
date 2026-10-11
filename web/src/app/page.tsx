@@ -1,7 +1,7 @@
 import { Assembly } from "@/components/landing/assembly";
 import { Hero } from "@/components/landing/hero";
 import { LensDemo } from "@/components/landing/lens-demo";
-import { ClosingSection, DisclosureSection, FactsSection, JourneySection, LandingFooter, LandingNav, ViewersSection } from "@/components/landing/sections";
+import { BackToTop, ClosingSection, DisclosureSection, FactsSection, JourneySection, LandingFooter, LandingNav, ViewersSection } from "@/components/landing/sections";
 
 /*
  * THESIS: a confidential payment, shown being built. The page assembles one real payroll payment piece by piece as
@@ -27,6 +27,7 @@ export default function Home() {
         <ClosingSection />
       </main>
       <LandingFooter />
+      <BackToTop />
     </div>
   );
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { cloneElement, isValidElement, type ReactElement, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRightIcon, EyeIcon, LandmarkIcon, SendIcon, WalletIcon } from "lucide-react";
+import { ArrowRightIcon, ArrowUpIcon, EyeIcon, LandmarkIcon, SendIcon, WalletIcon } from "lucide-react";
 import { Brand } from "@/components/app/brand";
+import { SiteHeader } from "@/components/app/site-header";
 import { Cipher } from "@/components/crypto/cipher";
 import { StatusBadge } from "@/components/app/status-badge";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
@@ -11,74 +12,252 @@ import { formatUsdc } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ArtifactHeader, SAMPLE } from "./artifacts";
 import { ScrollReveal, useInView, useScrollProgress } from "./scroll";
+import { LensDemo } from "./lens-demo";
 
 /* ------------------------------------------------------------------ Nav */
 
 export function LandingNav() {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const on = () => setScrolled(window.scrollY > 8);
-    on();
-    window.addEventListener("scroll", on, { passive: true });
-    return () => window.removeEventListener("scroll", on);
-  }, []);
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-50 transition-[background-color,box-shadow] duration-300",
-        scrolled ? "bg-white shadow-[0_1px_0_rgb(0_0_0/0.06)]" : "bg-transparent",
-      )}
-    >
-      <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-6">
-        <Brand />
+    <SiteHeader
+      surface="landing"
+      center={
         <nav aria-label="Sections" className="hidden items-center gap-8 text-[15px] md:flex">
           <a href="#how" className="text-[var(--l-ink)] transition-opacity hover:opacity-60">How it works</a>
           <a href="#viewers" className="text-[var(--l-ink)] transition-opacity hover:opacity-60">Who sees what</a>
           <a href="#hidden" className="text-[var(--l-ink)] transition-opacity hover:opacity-60">What stays public</a>
         </nav>
+      }
+      actions={
         <div className="flex items-center gap-5">
           <Link href="/app/auditor" className="arrow-link hidden text-[15px] sm:inline">Auditor view</Link>
           <Link href="/app" className="pill pill-ink !h-10 !px-4 text-[14px]">
             Launch app
           </Link>
         </div>
-      </div>
-    </header>
+      }
+    />
+  );
+}
+
+/* ------------------------------------------------------------------ Back to top */
+
+/** Bottom-right ink button, shown once the visitor is past the first viewport. Its ring fills with how far down the page they are. */
+export function BackToTop() {
+  const reduced = useReducedMotion();
+  const ring = useRef<SVGCircleElement>(null);
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const p = max > 0 ? Math.min(1, window.scrollY / max) : 0;
+      ring.current?.style.setProperty("stroke-dashoffset", String(1 - p));
+      setShown(window.scrollY > window.innerHeight * 0.9);
+    };
+    const on = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", on);
+      window.removeEventListener("resize", on);
+    };
+  }, []);
+  return (
+    <button
+      type="button"
+      aria-label="Back to top"
+      aria-hidden={!shown}
+      tabIndex={shown ? 0 : -1}
+      onClick={() => window.scrollTo({ top: 0, behavior: reduced ? "auto" : "smooth" })}
+      className={cn(
+        "group fixed bottom-5 right-5 z-40 grid size-12 place-items-center rounded-full bg-[var(--l-fill)] text-[var(--l-on-ink)] shadow-[0_8px_24px_-8px_rgb(0_0_0/0.35)] sm:bottom-8 sm:right-8",
+        "transition-[opacity,transform,background-color] duration-500 ease-out-expo hover:bg-[var(--l-fill-hover)] active:scale-95",
+        "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--l-ink)]",
+        shown ? "translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-4 scale-90 opacity-0",
+      )}
+    >
+      <svg viewBox="0 0 48 48" aria-hidden className="absolute inset-0 size-full -rotate-90">
+        <circle cx="24" cy="24" r="22.5" fill="none" stroke="var(--l-on-ink-soft)" strokeWidth="1.5" />
+        <circle ref={ring} cx="24" cy="24" r="22.5" fill="none" stroke="var(--l-on-ink)" strokeWidth="1.5" strokeLinecap="round" pathLength={1} strokeDasharray="1" strokeDashoffset="1" />
+      </svg>
+      <ArrowUpIcon className="relative size-[18px] transition-transform duration-300 ease-out-expo group-hover:-translate-y-0.5" />
+    </button>
   );
 }
 
 /* ------------------------------------------------------------------ Who sees what */
 
-export function ViewersSection({ demo }: { demo: React.ReactNode }) {
+const VIEWERS = [
+  {
+    lens: "public" as const,
+    who: "The public",
+    what: "Sees wallets and ciphertext on Solana. Never an amount.",
+    detail: "Zero salary leakage on-chain. Anyone on an explorer can verify transactions occurred, but values are zero-knowledge ciphertexts.",
+  },
+  {
+    lens: "employee" as const,
+    who: "Each employee",
+    what: "Opens their own payments with their own wallet's key.",
+    detail: "Sam's browser decrypts only Sam's row using his client-side derived key. Colleagues' compensation remains strictly confidential.",
+  },
+  {
+    lens: "auditor" as const,
+    who: "Your auditor",
+    what: "Opens every payment with the mint's auditor key.",
+    detail: "The mint auditor holds the compliance key, decrypting all payments for tax and regulatory filings without making any record public.",
+  },
+] as const;
+
+export function ViewersSection({ demo }: { demo?: React.ReactNode }) {
+  const desktopRef = useRef<HTMLDivElement>(null);
+  const [lens, setLens] = useState<"public" | "employee" | "auditor">("public");
+  const [scrollP, setScrollP] = useState(0);
+
+  useScrollProgress(desktopRef, {
+    mode: "through",
+    steps: 60,
+    onChange: (p) => {
+      setScrollP(p);
+      const nextLens = p < 0.33 ? "public" : p < 0.67 ? "employee" : "auditor";
+      setLens(nextLens);
+    },
+  });
+
+  const activeIndex = VIEWERS.findIndex((v) => v.lens === lens);
+
+  const renderDemo = (l: "public" | "employee" | "auditor", p: number) => {
+    if (isValidElement(demo)) {
+      return cloneElement(demo as ReactElement<{ lens?: "public" | "employee" | "auditor"; progress?: number; onLensChange?: (next: "public" | "employee" | "auditor") => void }>, {
+        lens: l,
+        progress: p,
+        onLensChange: setLens,
+      });
+    }
+    return <LensDemo lens={l} progress={p} onLensChange={setLens} />;
+  };
+
   return (
-    <section id="viewers" aria-labelledby="viewers-title" className="mx-auto grid w-full max-w-[1200px] items-center gap-12 px-4 py-24 sm:px-6 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20 lg:py-36">
-      <div>
-        <ScrollReveal variant="line">
-          <h2 id="viewers-title" className="serif heading">
-            Same payroll. <em className="italic">Three</em> different views.
-          </h2>
-        </ScrollReveal>
-        <ScrollReveal delay={120}>
-          <p className="mt-6 max-w-[30rem] text-[17px] leading-[1.55] text-[var(--l-slate)]">
-            Addresses stay public, so anyone can check that payroll happened. The amounts are ciphertext, and only the right key opens each one.
-          </p>
-        </ScrollReveal>
-        <ScrollReveal delay={200} as="dl" className="mt-8 divide-y divide-black/[0.07] border-y border-black/[0.07]">
-          {[
-            { who: "The public", what: "Sees wallets and ciphertext. Never an amount." },
-            { who: "Each employee", what: "Opens their own payments with their own wallet's key." },
-            { who: "Your auditor", what: "Opens every payment with the mint's auditor key." },
-          ].map((r) => (
-            <div key={r.who} className="grid grid-cols-[9rem_1fr] gap-4 py-3.5 text-[15px]">
-              <dt className="font-[480]">{r.who}</dt>
-              <dd className="text-[var(--l-slate)]">{r.what}</dd>
+    <section id="viewers" aria-labelledby="viewers-title" className="relative">
+      {/* Desktop: Pinned scroll section */}
+      <div ref={desktopRef} className="relative hidden lg:block" style={{ height: "230vh" }}>
+        <div className="sticky top-0 flex h-svh items-center">
+          <div className="mx-auto grid w-full max-w-[1200px] grid-cols-[0.88fr_1.12fr] items-center gap-16 px-6">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-l-ink/[0.08] bg-[var(--l-mist)] px-3 py-1 text-xs font-medium text-[var(--l-slate)]">
+                <span className="size-1.5 rounded-full bg-[var(--l-ink)]" />
+                <span>Multi-Party Visibility</span>
+              </div>
+              <h2 id="viewers-title" className="serif heading mt-4">
+                Same payroll. <em className="italic">Three</em> different views.
+              </h2>
+              <p className="mt-5 max-w-[30rem] text-[17px] leading-[1.55] text-[var(--l-slate)]">
+                Addresses stay public, so anyone can check that payroll happened. The amounts are ciphertext, and only the right key opens each one.
+              </p>
+
+              {/* Synchronized viewer steps list */}
+              <ol className="relative mt-10 space-y-2 pl-7" aria-label="Viewer perspectives">
+                {/* Vertical scroll progress rail */}
+                <span aria-hidden className="absolute top-3 bottom-3 left-[7px] w-px bg-l-ink/10" />
+                <span
+                  aria-hidden
+                  className="absolute top-3 bottom-3 left-[7px] w-px origin-top bg-[var(--l-ink)] transition-transform duration-300 ease-out-expo"
+                  style={{ transform: `scaleY(${Math.min(1, Math.max(0, scrollP * 1.1))})` }}
+                />
+
+                {VIEWERS.map((v, i) => {
+                  const isActive = activeIndex === i;
+                  return (
+                    <li
+                      key={v.who}
+                      className={cn(
+                        "group relative cursor-pointer rounded-xl p-3 -ml-3 transition-all duration-400",
+                        isActive ? "bg-l-ink/[0.035]" : "hover:bg-l-ink/[0.015]",
+                      )}
+                      onClick={() => setLens(v.lens)}
+                    >
+                      {/* Step bullet */}
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "absolute top-[18px] -left-4 size-3.5 rounded-full border-2 bg-[var(--l-raised)] transition-all duration-400",
+                          isActive
+                            ? "border-[var(--l-ink)] bg-[var(--l-ink)] scale-110 shadow-xs"
+                            : "border-l-ink/20 bg-[var(--l-raised)]",
+                        )}
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <p
+                          className={cn(
+                            "text-[17px] font-[500] tracking-tight transition-colors duration-300",
+                            isActive ? "text-[var(--l-ink)] font-semibold" : "text-[var(--l-ash)] group-hover:text-[var(--l-slate)]",
+                          )}
+                        >
+                          {v.who}
+                        </p>
+                        {isActive && (
+                          <span className="rounded-full bg-[var(--l-fill)] px-2 py-0.5 text-[10px] font-semibold tracking-wide text-[var(--l-on-ink)] uppercase">
+                            Active View
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        className={cn(
+                          "mt-1 text-[14px] leading-relaxed transition-colors duration-300",
+                          isActive ? "text-[var(--l-slate)]" : "text-[var(--l-ash)]",
+                        )}
+                      >
+                        {v.what}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ol>
+
+              <div className="mt-8 flex items-center gap-2 text-xs text-[var(--l-ash)]">
+                <span className="size-1.5 rounded-full bg-l-ink/30 animate-pulse" />
+                <span>Scroll down to advance through cryptographic views</span>
+              </div>
             </div>
-          ))}
+
+            {/* Desktop Pinned Card */}
+            <div className="relative">
+              {renderDemo(lens, scrollP)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile & Tablet: Standard flow */}
+      <div className="mx-auto grid w-full max-w-[1200px] items-center gap-12 px-4 py-20 sm:px-6 lg:hidden">
+        <div>
+          <ScrollReveal variant="line">
+            <h2 className="serif heading">
+              Same payroll. <em className="italic">Three</em> different views.
+            </h2>
+          </ScrollReveal>
+          <ScrollReveal delay={120}>
+            <p className="mt-6 max-w-[30rem] text-[17px] leading-[1.55] text-[var(--l-slate)]">
+              Addresses stay public, so anyone can check that payroll happened. The amounts are ciphertext, and only the right key opens each one.
+            </p>
+          </ScrollReveal>
+          <ScrollReveal delay={200} as="dl" className="mt-8 divide-y divide-l-ink/[0.07] border-y border-l-ink/[0.07]">
+            {VIEWERS.map((r) => (
+              <div key={r.who} className="grid grid-cols-[9rem_1fr] gap-4 py-3.5 text-[15px]">
+                <dt className="font-[480]">{r.who}</dt>
+                <dd className="text-[var(--l-slate)]">{r.what}</dd>
+              </div>
+            ))}
+          </ScrollReveal>
+        </div>
+        <ScrollReveal variant="scale" delay={150}>
+          {renderDemo(lens, scrollP)}
         </ScrollReveal>
       </div>
-      <ScrollReveal variant="scale" delay={150}>
-        {demo}
-      </ScrollReveal>
     </section>
   );
 }
@@ -119,13 +298,13 @@ export function JourneySection() {
 
         <ol className="relative mt-16 grid gap-10 md:grid-cols-4 md:gap-6" aria-label="The money's path">
           {/* Track: horizontal on wide screens, vertical on phones */}
-          <span aria-hidden className="absolute top-5 right-[12.5%] left-[12.5%] hidden h-px bg-black/10 md:block" />
+          <span aria-hidden className="absolute top-5 right-[12.5%] left-[12.5%] hidden h-px bg-l-ink/10 md:block" />
           <span
             aria-hidden
             className="absolute top-5 left-[12.5%] hidden h-px origin-left bg-[var(--l-ink)] transition-transform duration-500 ease-out-expo md:block"
             style={{ width: "75%", transform: `scaleX(${drawn})` }}
           />
-          <span aria-hidden className="absolute top-5 bottom-5 left-5 w-px bg-black/10 md:hidden" />
+          <span aria-hidden className="absolute top-5 bottom-5 left-5 w-px bg-l-ink/10 md:hidden" />
           <span
             aria-hidden
             className="absolute top-5 bottom-5 left-5 w-px origin-top bg-[var(--l-ink)] transition-transform duration-500 ease-out-expo md:hidden"
@@ -139,7 +318,7 @@ export function JourneySection() {
                 <span
                   className={cn(
                     "relative z-10 grid size-10 place-items-center rounded-full border transition-[background-color,border-color,color,transform] duration-500",
-                    on ? (j.public ? "border-[var(--l-ink)] bg-[var(--l-ink)] text-white" : "border-primary bg-primary text-white") : "border-black/15 bg-white text-[var(--l-ash)]",
+                    on ? (j.public ? "border-[var(--l-fill)] bg-[var(--l-fill)] text-[var(--l-on-ink)]" : "border-primary bg-primary text-white") : "border-l-ink/15 bg-[var(--l-raised)] text-[var(--l-ash)]",
                     on && "scale-105",
                   )}
                 >
@@ -221,10 +400,10 @@ export function DisclosureSection() {
               </div>
               <div className="relative mt-2.5 h-2 rounded-full bg-cipher" aria-hidden>
                 <div className="absolute inset-y-0 left-0 rounded-full bg-[var(--l-ink)]" style={{ width: `${pct}%` }} />
-                <div className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--l-ink)] bg-white shadow-sm" style={{ left: `${pct}%` }} />
+                <div className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--l-ink)] bg-[var(--l-raised)] shadow-sm" style={{ left: `${pct}%` }} />
               </div>
             </div>
-            <dl className="mt-5 divide-y divide-black/[0.06] text-[13px]">
+            <dl className="mt-5 divide-y divide-l-ink/[0.06] text-[13px]">
               <div className="flex items-center justify-between gap-3 py-2.5">
                 <dt className="flex items-center gap-2">
                   Becomes public <StatusBadge tone="pending" className="hidden sm:inline-flex">Public</StatusBadge>
@@ -267,7 +446,7 @@ export function FactsSection() {
         </ScrollReveal>
         <dl className="grid gap-x-10 sm:grid-cols-2">
           {FACTS.map((f, i) => (
-            <ScrollReveal key={f.term} delay={(i % 2) * 90} className="border-t border-black/[0.08] py-6">
+            <ScrollReveal key={f.term} delay={(i % 2) * 90} className="border-t border-l-ink/[0.08] py-6">
               <dt className="text-[17px] font-[480] tracking-[-0.005em]">{f.term}</dt>
               <dd className="mt-2 text-[15px] leading-[1.55] text-[var(--l-slate)]">{f.desc}</dd>
             </ScrollReveal>
@@ -282,7 +461,7 @@ export function FactsSection() {
 
 export function ClosingSection() {
   return (
-    <section aria-labelledby="close-title" className="border-t border-black/[0.06] bg-[var(--l-mist)]">
+    <section aria-labelledby="close-title" className="border-t border-l-ink/[0.06] bg-[var(--l-mist)]">
       <div className="mx-auto flex w-full max-w-[1200px] flex-col items-center px-4 py-24 text-center sm:px-6 lg:py-32">
         <ScrollReveal variant="line">
           <h2 id="close-title" className="serif heading-lg max-w-[16ch]">

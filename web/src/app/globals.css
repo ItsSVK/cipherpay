@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Dark mode is a class on <html> (set before first paint by the script in layout.tsx), not the OS media query. */
+@custom-variant dark (&:is(.dark, .dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -12,6 +14,7 @@
   --font-display: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   /* Titles only (page titles, sheet and dialog titles, empty states): the landing page's serif, one weight. */
   --font-serif: var(--font-source-serif), ui-serif, Georgia, serif;
+  --color-l-ink: var(--l-ink);
   --color-verified: var(--verified);
   --color-verified-soft: var(--verified-soft);
   --color-pending: var(--pending);
@@ -105,12 +108,110 @@
   --cipher-ink: oklch(0.44 0.15 274);
   --ink-strong: oklch(0.12 0.01 265);
 
+  /* Landing + shared-header tokens (LANDING_DESIGN.md); the dark values are in .dark above */
+  --l-ink: #17191c;
+  --l-paper: #ffffff;
+  --l-mist: #f2f2f3;
+  --l-fog: #fafafb;
+  --l-slate: #6b6f7a;
+  --l-ash: #8e8f93;
+  --l-peach: #fbe1d1;
+  --l-sienna: #5d2a1a;
+  --l-raised: #ffffff;
+  --l-on-ink: #ffffff;
+  --l-on-ink-soft: rgb(255 255 255 / 0.14);
+  --l-ink-hover: #2c2f34;
+  --l-hairline: rgb(0 0 0 / 0.06);
+  --l-artifact: 0 0 0 1px rgb(4 23 43 / 0.05), 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.08);
+
+  --primary-ink: var(--primary);
+  --l-fill: #17191c;
+  --l-fill-hover: #2c2f34;
+  --surface-lift: oklch(0.985 0.002 95);
+  --shadow-rgb: 0 0 0;
+  --shadow-a: 0.03;
+  --scrollbar: oklch(0.85 0.005 260);
+
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --dur-fast: 150ms;
   --dur-base: 260ms;
   --dur-slow: 520ms;
+}
+
+/*
+ * Dark theme: "Midnight Ledger". The same ledger, lights off: a blue-black ground (not neutral grey, so the indigo key colour keeps its
+ * temperature), plates one step lighter than the ground, hairlines instead of shadows for depth, and the semantic colours lifted
+ * so green / amber / red still read as state on a dark plate.
+ */
+.dark {
+  color-scheme: dark;
+  --background: oklch(0.15 0.02 270);
+  --foreground: oklch(0.955 0.006 265);
+  --card: oklch(0.2 0.024 270);
+  --card-foreground: oklch(0.955 0.006 265);
+  --popover: oklch(0.225 0.026 270);
+  --popover-foreground: oklch(0.955 0.006 265);
+  --primary: oklch(0.54 0.22 274);
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.26 0.026 270);
+  --secondary-foreground: oklch(0.9 0.008 265);
+  --muted: oklch(0.26 0.026 270);
+  --muted-foreground: oklch(0.7 0.014 265);
+  --accent: oklch(0.3 0.09 274);
+  --accent-foreground: oklch(0.87 0.1 274);
+  --destructive: oklch(0.68 0.19 22);
+  --border: oklch(1 0 0 / 0.1);
+  --input: oklch(1 0 0 / 0.14);
+  --ring: oklch(0.64 0.2 274);
+  --chart-1: oklch(0.6 0.22 274);
+  --chart-2: oklch(0.72 0.15 155);
+  --chart-3: oklch(0.78 0.13 75);
+  --chart-4: oklch(0.72 0.13 220);
+  --chart-5: oklch(0.7 0.18 20);
+  --sidebar: oklch(0.175 0.022 270);
+  --sidebar-foreground: oklch(0.955 0.006 265);
+  --sidebar-primary: oklch(0.54 0.22 274);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: oklch(0.3 0.09 274);
+  --sidebar-accent-foreground: oklch(0.87 0.1 274);
+  --sidebar-border: oklch(1 0 0 / 0.09);
+  --sidebar-ring: oklch(0.64 0.2 274);
+
+  --verified: oklch(0.62 0.18 155);
+  --verified-soft: oklch(0.29 0.075 155);
+  --pending: oklch(0.78 0.16 75);
+  --pending-soft: oklch(0.31 0.075 80);
+  --failed-soft: oklch(0.3 0.08 25);
+  --cipher: oklch(0.27 0.06 274);
+  --cipher-ink: oklch(0.82 0.12 274);
+  --ink-strong: oklch(0.985 0.004 265);
+
+  /* Text-sized blue: the fill blue above is too deep to read as text on a dark plate */
+  --primary-ink: oklch(0.76 0.15 274);
+  --l-fill: oklch(0.54 0.22 274);
+  --l-fill-hover: oklch(0.6 0.22 274);
+  --surface-lift: oklch(0.3 0.016 268);
+  --shadow-rgb: 0 0 0;
+  --shadow-a: 0.35;
+  --scrollbar: oklch(0.4 0.01 265);
+
+  /* Landing page */
+  --l-ink: #ecedf0;
+  --l-on-ink: #ffffff;
+  --l-on-ink-soft: rgb(255 255 255 / 0.22);
+  --l-ink-hover: #ffffff;
+  --l-paper: #0f1115;
+  --l-raised: #1a1d23;
+  --l-mist: #181b20;
+  --l-fog: #14171c;
+  --l-slate: #a2a6b0;
+  --l-ash: #7c808a;
+  --l-peach: #4a2a1c;
+  --l-sienna: #fbd9c6;
+  --l-hairline: rgb(255 255 255 / 0.08);
+  --l-artifact: 0 0 0 1px rgb(255 255 255 / 0.07), 0 24px 40px -12px rgb(0 0 0 / 0.6), 0 8px 12px -6px rgb(0 0 0 / 0.5);
 }
 
 @layer base {
@@ -134,7 +235,7 @@
     letter-spacing: -0.025em;
   }
   ::selection {
-    background: color-mix(in oklch, var(--primary) 18%, white);
+    background: color-mix(in oklch, var(--primary) 18%, var(--background));
     color: var(--ink-strong);
   }
   input, textarea { caret-color: var(--primary); }
@@ -145,11 +246,14 @@
   }
   [data-slot="button"]:active:not(:disabled) { transform: scale(0.98); }
   a, button, [role="tab"], [role="switch"] { -webkit-tap-highlight-color: transparent; }
-  * { scrollbar-width: thin; scrollbar-color: oklch(0.85 0.005 260) transparent; }
+  * { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
   :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 }
 
 @layer utilities {
+  /* Blue used as TEXT or an icon: lighter in dark so it stays readable on a dark plate (the fill blue is deeper). */
+  .dark .text-primary, .dark .text-accent-foreground { color: var(--primary-ink); }
+  .dark .text-primary\/80, .dark .text-primary\/70 { color: color-mix(in oklch, var(--primary-ink) 80%, transparent); }
   .tnum { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
   .ease-out-expo { transition-timing-function: var(--ease-out); }
   .hairline { box-shadow: 0 0 0 1px var(--border); }
@@ -157,14 +261,14 @@
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 1rem;
-    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.03), 0 4px 12px -2px rgb(0 0 0 / 0.03);
+    box-shadow: 0 1px 2px 0 rgb(var(--shadow-rgb) / var(--shadow-a)), 0 4px 12px -2px rgb(var(--shadow-rgb) / var(--shadow-a));
     transition: box-shadow var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out);
   }
   .plate:hover {
-    box-shadow: 0 2px 4px 0 rgb(0 0 0 / 0.03), 0 8px 20px -4px rgb(0 0 0 / 0.05);
+    box-shadow: 0 2px 4px 0 rgb(var(--shadow-rgb) / var(--shadow-a)), 0 8px 20px -4px rgb(var(--shadow-rgb) / calc(var(--shadow-a) * 1.6));
   }
   .row-hover { transition: background-color var(--dur-fast) var(--ease-out); }
-  .row-hover:hover { background: color-mix(in oklch, var(--accent) 40%, white); }
+  .row-hover:hover { background: color-mix(in oklch, var(--accent) 40%, var(--card)); }
   .enter { animation: enter var(--dur-slow) var(--ease-out) both; animation-delay: calc(var(--i, 0) * 55ms); }
   .enter-fade { animation: fade var(--dur-base) var(--ease-out) both; }
 }
@@ -225,15 +329,6 @@
  * Product fragments on the page keep the app tokens above (indigo key, green decrypted), like screenshots of the app.
  */
 .landing {
-  --l-ink: #17191c;
-  --l-paper: #ffffff;
-  --l-mist: #f2f2f3;
-  --l-fog: #fafafb;
-  --l-slate: #6b6f7a;
-  --l-ash: #8e8f93;
-  --l-peach: #fbe1d1;
-  --l-sienna: #5d2a1a;
-  --l-artifact: 0 0 0 1px rgb(4 23 43 / 0.05), 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.08);
   background: var(--l-paper);
   color: var(--l-ink);
 }
@@ -254,8 +349,8 @@
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .landing .pill:active { transform: scale(0.98); }
-.landing .pill-ink { background: var(--l-ink); color: #fff; }
-.landing .pill-ink:hover { background: #2c2f34; }
+.landing .pill-ink { background: var(--l-fill); color: var(--l-on-ink); }
+.landing .pill-ink:hover { background: var(--l-fill-hover); }
 .landing .pill-ghost { box-shadow: inset 0 0 0 1px var(--l-ink); color: var(--l-ink); }
 .landing .pill-ghost:hover { background: var(--l-mist); }
 .landing .pill svg { transition: transform var(--dur-base) var(--ease-out); }
@@ -264,7 +359,7 @@
 .landing .arrow-link:hover { text-decoration: underline; }
 
 /* Floating product artifact: the only surface on the page that earns a shadow. */
-.landing .artifact { background: #fff; border-radius: 20px; box-shadow: var(--l-artifact); }
+.landing .artifact { background: var(--l-raised); border-radius: 20px; box-shadow: var(--l-artifact); }
 
 /*
  * Scroll reveal. Content is visible by default; `ScrollReveal` arms an element (data-reveal="armed") only when it
@@ -298,6 +393,51 @@
 }
 @keyframes rail-packet { from { offset-distance: 0%; } to { offset-distance: 100%; } }
 
+/* ------------------------------------------------------------------ Site header (components/app/site-header.tsx)
+ * Route changes between the landing, the wallet front door and the audit log run as a view transition. The header's named parts
+ * morph; the page underneath (root) crossfades, old out fast, new in slower. */
+::view-transition { pointer-events: none; }
+::view-transition-old(root) { animation-duration: 240ms; animation-timing-function: var(--ease-out); }
+
+/* Brand and background: same box on both sides, so this is a held position plus a soft crossfade of the surface. */
+::view-transition-group(.site-morph) { animation-duration: 520ms; animation-timing-function: var(--ease-out); }
+::view-transition-old(.site-morph) { animation-duration: 260ms; animation-timing-function: var(--ease-out); }
+::view-transition-new(.site-morph) { animation-duration: 520ms; animation-timing-function: var(--ease-out); }
+
+/* Right-hand actions change size, so never stretch the snapshots: pin both to the right edge at their natural size and pass
+ * them through a short blur while the box resizes around them. */
+::view-transition-group(.site-actions) { animation-duration: 560ms; animation-timing-function: var(--ease-out); }
+::view-transition-old(.site-actions),
+::view-transition-new(.site-actions) {
+  inset: 50% 0 auto auto;
+  inline-size: auto;
+  block-size: auto;
+  translate: 0 -50%;
+}
+::view-transition-old(.site-actions) { animation: 220ms var(--ease-out) both site-out; }
+::view-transition-new(.site-actions) { animation: 460ms var(--ease-out) 80ms both site-in; }
+
+/* Landing section links, paired with an empty centre anchor on the other headers: they unmask from the centre on the way in and
+ * fold back into it on the way out (exits faster). Snapshots stay at natural size, centred on the group. */
+::view-transition-group(.site-center) { animation-duration: 560ms; animation-timing-function: var(--ease-out); }
+::view-transition-old(.site-center),
+::view-transition-new(.site-center) {
+  inset: 50% auto auto 50%;
+  inline-size: auto;
+  block-size: auto;
+  translate: -50% -50%;
+}
+::view-transition-new(.site-center) { animation: 640ms var(--ease-out) 90ms both site-unmask; }
+::view-transition-old(.site-center) { animation: 260ms var(--ease-out) both site-mask; }
+
+@keyframes site-out { to { opacity: 0; filter: blur(4px); transform: translateY(-3px); } }
+@keyframes site-in { from { opacity: 0; filter: blur(4px); transform: translateY(3px); } }
+@keyframes site-unmask {
+  from { opacity: 0; clip-path: inset(0 50% 0 50%); filter: blur(5px); transform: scale(0.96); }
+  to { opacity: 1; clip-path: inset(0 0 0 0); filter: none; transform: none; }
+}
+@keyframes site-mask { to { opacity: 0; clip-path: inset(0 50% 0 50%); filter: blur(5px); transform: scale(0.96); } }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -305,4 +445,103 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
+
+/* ------------------------------------------------------------------ Theme toggle (components/app/theme-toggle.tsx)
+ * Keyed on html.dark, so the first paint is right without JS. Light = sun: small core, rays out. Dark = moon: big core with a circle
+ * sliding in to cut the crescent, rays folded away, the whole icon turned. The spring ease overshoots a little on purpose. */
+.theme-toggle {
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative; display: inline-grid; place-items: center; flex: none;
+  width: 2.5rem; height: 2.5rem; border-radius: 9999px;
+  border: 1px solid color-mix(in oklch, var(--border) 85%, transparent);
+  background: var(--card); color: var(--foreground);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.05), inset 0 1px 0.5px rgb(255 255 255 / 0.7);
+  overflow: hidden; cursor: pointer; outline: none;
+  transition: background-color 300ms var(--ease-out), border-color 250ms var(--ease-out), box-shadow 250ms var(--ease-out), transform 160ms var(--ease-out), color 300ms var(--ease-out);
+}
+.theme-toggle--sm {
+  width: 2rem; height: 2rem;
+}
+.theme-toggle:focus { outline: none; }
+.theme-toggle:focus-visible {
+  outline: none;
+  border-color: color-mix(in oklch, var(--primary) 55%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 24%, transparent);
+}
+.theme-toggle:hover {
+  background: color-mix(in oklch, var(--card) 85%, var(--accent));
+  border-color: color-mix(in oklch, var(--foreground) 22%, var(--border));
+  box-shadow: 0 2px 5px rgb(0 0 0 / 0.07), inset 0 1px 0.5px rgb(255 255 255 / 0.9);
+}
+.theme-toggle:active { transform: scale(0.92); }
+.theme-toggle-icon {
+  position: relative; width: 1.25rem; height: 1.25rem; overflow: visible;
+  transition: transform 700ms var(--spring), color 300ms var(--ease-out);
+  color: oklch(0.72 0.17 65);
+}
+.theme-toggle--sm .theme-toggle-icon {
+  width: 1.125rem; height: 1.125rem;
+}
+.theme-toggle-core { transition: r 600ms var(--spring); }
+.theme-toggle-cut { transition: cx 600ms var(--spring), cy 600ms var(--spring); }
+.theme-toggle-rays { transform-origin: 12px 12px; transition: transform 700ms var(--spring), opacity 300ms var(--ease-out); }
+.theme-toggle:hover .theme-toggle-rays { transform: rotate(26deg) scale(1.06); }
+.theme-toggle:hover .theme-toggle-icon { color: oklch(0.66 0.19 55); }
+
+/* A soft light that blooms behind the icon each time it changes hands or hovers */
+.theme-toggle-halo {
+  position: absolute; inset: 0; border-radius: inherit; opacity: 0; transform: scale(0.4);
+  background: radial-gradient(circle, oklch(0.85 0.15 75 / 0.45), transparent 70%);
+  pointer-events: none;
+}
+.theme-toggle:hover .theme-toggle-halo {
+  opacity: 0.35; transform: scale(1);
+  transition: opacity 300ms var(--ease-out), transform 300ms var(--ease-out);
+}
+
+.dark .theme-toggle {
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.35), inset 0 1px 0.5px rgb(255 255 255 / 0.08);
+}
+.dark .theme-toggle:hover {
+  background: color-mix(in oklch, var(--card) 80%, var(--accent));
+  border-color: color-mix(in oklch, var(--foreground) 30%, var(--border));
+  box-shadow: 0 2px 7px rgb(0 0 0 / 0.45), inset 0 1px 0.5px rgb(255 255 255 / 0.12);
+}
+.dark .theme-toggle-icon { transform: rotate(-30deg); color: oklch(0.86 0.08 265); }
+.dark .theme-toggle:hover .theme-toggle-icon { color: oklch(0.92 0.1 265); }
+.dark .theme-toggle-core { r: 8.5px; }
+.dark .theme-toggle-cut { cx: 16.5px; cy: 7.5px; }
+.dark .theme-toggle-rays { transform: rotate(85deg) scale(0.2); opacity: 0; }
+.dark .theme-toggle-halo { background: radial-gradient(circle, oklch(0.72 0.17 274 / 0.45), transparent 70%); }
+html[data-theme-switch] .theme-toggle-halo { animation: theme-halo 900ms var(--ease-out) both; }
+@keyframes theme-halo { 0% { opacity: 0.9; transform: scale(0.4); } 100% { opacity: 0; transform: scale(2.2); } }
+
+/* ------------------------------------------------------------------ Theme switch (lib/theme/theme.ts)
+ * The new theme is revealed through a circle growing out of the toggle. The toggle is lifted out as its own layer so its icon morph
+ * stays visible under the wave. */
+/* The wave itself is a clip-path circle animated from JS (lib/theme/theme.ts) on the new snapshot: no filters, no mask, no registered
+ * property, so the browser can keep it cheap. CSS only sets up the layers. While a switch runs, colour transitions elsewhere on the
+ * page are switched off: the new snapshot is live, and each running transition would repaint the whole page every frame. */
+html[data-theme-switch]::view-transition-old(root),
+html[data-theme-switch]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html[data-theme-switch]::view-transition-old(root) { z-index: 1; }
+html[data-theme-switch]::view-transition-new(root) { z-index: 2; will-change: clip-path; }
+html[data-theme-switch] *:not(.theme-toggle, .theme-toggle *) { transition: none !important; }
+
+/* The toggle rides above the wave, unmasked. Its old image is dropped; the new one is live so the morph plays. */
+html[data-theme-switch] .theme-toggle { view-transition-name: theme-toggle; }
+html[data-theme-switch]::view-transition-group(theme-toggle) { animation: none; z-index: 3; }
+html[data-theme-switch]::view-transition-old(theme-toggle) { display: none; }
+html[data-theme-switch]::view-transition-new(theme-toggle) { animation: none; }
+
+/* Fallback when View Transitions are unavailable: fade colours for a moment. */
+html.theme-fade *, html.theme-fade *::before, html.theme-fade *::after {
+  transition: background-color 400ms ease, color 400ms ease, border-color 400ms ease, fill 400ms ease, stroke 400ms ease, box-shadow 400ms ease !important;
 }

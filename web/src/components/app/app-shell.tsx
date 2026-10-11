@@ -28,6 +28,7 @@ import { ConfirmDialog } from "./confirm-dialog";
 import { OperatorProvider } from "./operator-context";
 import { OperatorModal } from "./operator-modal";
 import { StartChooser } from "./start-chooser";
+import { ThemeToggle } from "./theme-toggle";
 
 function NavList({ groups, pathname, onNavigate }: { groups: NavGroup[]; pathname: string; onNavigate?: () => void }) {
   return (
@@ -197,6 +198,7 @@ function ConnectedShell({ address, account: walletAccount, children }: { address
                 <Address value={address} className="text-xs text-muted-foreground font-mono" />
                 {!account.loading ? <span className="font-mono text-xs tnum text-muted-foreground">{solText(account.sol)}</span> : null}
               </div>
+              <ThemeToggle size="sm" />
               <Button
                 variant="ghost"
                 size="icon"

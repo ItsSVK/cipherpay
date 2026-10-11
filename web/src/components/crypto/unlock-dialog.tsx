@@ -16,7 +16,7 @@ export function UnlockDialog() {
 
   return (
     <Dialog open={dialogOpen} onOpenChange={(open) => !busy && setDialogOpen(open)}>
-      <DialogContent className="bg-white text-foreground border border-border/80 shadow-2xl sm:max-w-[500px] w-full p-6 space-y-4 rounded-2xl overflow-hidden min-w-0">
+      <DialogContent className="bg-popover text-foreground border border-border/80 shadow-2xl sm:max-w-[500px] w-full p-6 space-y-4 rounded-2xl overflow-hidden min-w-0">
         <DialogHeader className="space-y-3">
           <div className="flex items-center gap-3">
             {/* Orbital Cryptographic Chamber */}

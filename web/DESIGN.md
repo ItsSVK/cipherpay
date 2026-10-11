@@ -372,6 +372,12 @@ Easing `--ease-out` (cubic-bezier(.16,1,.3,1)); 150ms feedback, 260ms state chan
 `flow-packet`, `flow-packet-y`, `orb-ripple`, `sweep`.
 - Open/close in place with `Reveal` (grid rows 0fr→1fr) or a grid-column transition; never swap whole sections.
 - Exits faster than entrances. No bounce/elastic.
+- **Site header** (`components/app/site-header.tsx`): the landing, the wallet front door (connect + sign-in) and the audit log share
+  one `SiteHeader` (`surface="landing" | "app"`, optional `center`, one `actions` element; `NetworkActions` for the app side). Its parts
+  are named React `<ViewTransition>`s, so navigating between those pages morphs one header: brand held, surface crossfades, actions
+  blur through a resize, landing links unmask from / fold into the centre. The app surfaces render an empty centre anchor on purpose:
+  Next keeps the previous route mounted (hidden), so enter/exit never fire across routes; only same-name pairs animate. CSS in the
+  "Site header" block of `globals.css`. Any new public page should use `SiteHeader`, not its own `<header>`.
 - Everything is covered by the global `prefers-reduced-motion` rule; `HexTicker` and `Flow` packets also stop themselves. State must
   still be readable without motion (colour + icon + text).
 
@@ -408,8 +414,18 @@ only place the rules above are relaxed. Everything is scoped under `.landing` in
   `Assembly` pins a board while the visitor scrolls and adds one piece per step of a real payment (treasury, keys, proofs, encrypted
   transfer along a drawn rail, the recipient opening it); phones get the same steps in flow. The "what stays public" track draws as it
   crosses the screen. Everything honours `prefers-reduced-motion` (loops stop, reveals don't arm).
+- **Back to top** (`BackToTop` in `sections.tsx`): ink circle bottom-right, appears past the first viewport, its ring fills with page
+  progress (written per frame through a ref, not React state). Smooth scroll unless reduced motion.
 
 ## Open notes
 - "Cipherpay" and its mark (`components/app/brand.tsx`) are placeholders until the product name is decided.
 - Previous language still in use, to migrate to this system when those screens are next touched: a `Fingerprint` colour block
   on the auditor page. New work uses `Flow` and plain addresses.
+
+## Dark theme ("Midnight Ledger") and the theme switch
+
+- **Class-based:** `html.dark` (Tailwind `@custom-variant dark`), set before first paint by `THEME_INIT_SCRIPT` (`lib/theme/theme.ts`, inlined in `layout.tsx`). Stored choice: `localStorage["cipherpay:theme"]` (not a secret); with none, the OS preference decides.
+- **Tokens only.** Every colour comes from the variables in `:root` / `.dark` in `globals.css` (app tokens plus the landing's `--l-*`, which also feed the shared header). Never hard-code `white`, `black` or hex in a component: use `bg-card`, `bg-popover`, `bg-[var(--l-raised)]`, `border-l-ink/10` (landing ink at 10%), `text-[var(--l-on-ink)]` on ink fills. White text on solid `verified` / `destructive` / `pending` fills is fine (those stay mid-tone in both themes).
+- **Dark rules:** blue-black ground (not neutral grey), plates one step lighter, hairlines (`--border` is white at 9%) instead of shadows for depth, semantic colours lifted so green / amber / red still read on a dark plate. Still flat colour, no glow or gradient surfaces.
+- **Toggle:** `components/app/theme-toggle.tsx`, in `SiteHeader` and the app shell's top bar. Sun core grows while a mask circle slides in to cut a crescent, rays fold and spin away (spring ease); a halo blooms behind it. Icon states are CSS on `html.dark`, so no JS state is needed for first paint.
+- **Switch effect:** a View Transition. The new theme is revealed through a feathered circle growing out of the toggle (`--theme-x/-y/-reach`, registered `--theme-r` driving a radial mask, 1000 ms) while the old theme dims and softens; going dark the arrival blooms from bright, going light it settles from a dim. The toggle is lifted onto its own layer so its morph shows above the wave. Fallbacks: no View Transitions API -> 450 ms colour fade (`html.theme-fade`); `prefers-reduced-motion` -> instant.

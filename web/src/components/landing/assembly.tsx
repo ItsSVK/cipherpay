@@ -60,7 +60,7 @@ function Slot({ at, on, children }: { at: { x: number; y: number; w: number; h: 
     <div className="absolute" style={{ left: at.x, top: at.y, width: at.w }}>
       <div
         aria-hidden
-        className={cn("absolute inset-x-0 top-0 rounded-[20px] border border-dashed border-black/15 transition-opacity duration-500", on ? "opacity-0" : "opacity-100")}
+        className={cn("absolute inset-x-0 top-0 rounded-[20px] border border-dashed border-l-ink/15 transition-opacity duration-500", on ? "opacity-0" : "opacity-100")}
         style={{ height: at.h }}
       />
       <div
@@ -77,7 +77,7 @@ function Slot({ at, on, children }: { at: { x: number; y: number; w: number; h: 
 function DrawnPath({ d, progress, className, dashed }: { d: string; progress: number; className: string; dashed?: boolean }) {
   return (
     <>
-      <path d={d} fill="none" className="stroke-black/12" strokeWidth={1.5} strokeDasharray="3 5" />
+      <path d={d} fill="none" className="stroke-l-ink/12" strokeWidth={1.5} strokeDasharray="3 5" />
       <path
         d={d}
         fill="none"
@@ -216,7 +216,7 @@ export function Assembly() {
                 One payment, <em className="italic">assembled</em> as you scroll.
               </h2>
               <ol className="relative mt-10 space-y-1 pl-7">
-                <span aria-hidden className="absolute top-2 bottom-2 left-[7px] w-px bg-black/10" />
+                <span aria-hidden className="absolute top-2 bottom-2 left-[7px] w-px bg-l-ink/10" />
                 <span aria-hidden className="absolute top-2 bottom-2 left-[7px] w-px origin-top bg-[var(--l-ink)]" style={{ transform: "scaleY(var(--p, 0))" }} />
                 {STEPS.map((s, i) => {
                   const state = step > i ? "done" : step === i ? "now" : "next";
@@ -228,8 +228,8 @@ export function Assembly() {
                       <span
                         aria-hidden
                         className={cn(
-                          "absolute top-[15px] -left-7 size-[15px] rounded-full border-2 bg-white transition-[border-color,background-color,transform] duration-500",
-                          state === "next" ? "border-black/15" : "border-[var(--l-ink)]",
+                          "absolute top-[15px] -left-7 size-[15px] rounded-full border-2 bg-[var(--l-raised)] transition-[border-color,background-color,transform] duration-500",
+                          state === "next" ? "border-l-ink/15" : "border-[var(--l-ink)]",
                           filled && "bg-[var(--l-ink)]",
                           state === "now" && !filled && "scale-110",
                         )}

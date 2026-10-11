@@ -119,7 +119,7 @@ export function ProofListArtifact({ t, className }: { t: number; className?: str
               <span
                 className={cn(
                   "relative grid size-7 shrink-0 place-items-center rounded-full border transition-colors duration-300 [&_svg]:size-3.5",
-                  s === "idle" && "border-border bg-white text-muted-foreground",
+                  s === "idle" && "border-border bg-[var(--l-raised)] text-muted-foreground",
                   s === "active" && "border-primary/50 bg-primary/10 text-primary",
                   s === "done" && "border-verified bg-verified text-white [animation:pop_420ms_var(--ease-out)_both]",
                 )}
@@ -205,12 +205,12 @@ export function RecipientArtifact({ arrived, revealed, className }: { arrived: b
 export function RunComposerArtifact({ className }: { className?: string }) {
   return (
     <div className={cn("artifact w-[340px] p-2.5", className)}>
-      <div className="flex items-center gap-3 rounded-2xl border border-[#ececec] bg-white py-2 pr-2 pl-3.5">
+      <div className="flex items-center gap-3 rounded-2xl border border-border bg-[var(--l-raised)] py-2 pr-2 pl-3.5">
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13.5px] font-medium">Approve & run October payroll</p>
           <p className="truncate text-[11px] text-[var(--l-slate)]">3 people · simulated · nothing moves before this</p>
         </div>
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--l-ink)] text-white" aria-hidden>
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--l-fill)] text-[var(--l-on-ink)]" aria-hidden>
           <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
@@ -227,7 +227,7 @@ export function Cursor({ initials, label, tone, className, style }: { initials: 
       <svg viewBox="0 0 16 16" className={cn("mt-0.5 size-4 drop-shadow-sm", tone === "key" ? "text-primary" : "text-verified")}>
         <path d="M2 1.5 13.5 7 8 8.5 6 14Z" fill="currentColor" stroke="white" strokeWidth="1.2" strokeLinejoin="round" />
       </svg>
-      <span className={cn("mt-3 flex items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1 text-[11px] font-medium shadow-sm ring-1 ring-black/5", tone === "key" ? "bg-accent text-accent-foreground" : "bg-verified-soft text-verified")}>
+      <span className={cn("mt-3 flex items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1 text-[11px] font-medium shadow-sm ring-1 ring-l-ink/5", tone === "key" ? "bg-accent text-accent-foreground" : "bg-verified-soft text-verified")}>
         <span className={cn("grid size-6 place-items-center rounded-full text-[10px] font-semibold text-white", tone === "key" ? "bg-primary" : "bg-verified")}>{initials}</span>
         {label}
       </span>
